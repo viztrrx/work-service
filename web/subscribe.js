@@ -5,12 +5,22 @@
 // the name to Allowed users as a monthly subscriber (worker.js, /subscribe/*).
 //
 // Worker secrets (Cloudflare, never in the code):
-//   STRIPE_SECRET_KEY      sk_live_… (or sk_test_… to try it)
+//   STRIPE_SECRET_KEY      a restricted key (rk_…) with Checkout Sessions:
+//                          Write, Subscriptions: Read, Prices: Read
 //   STRIPE_WEBHOOK_SECRET  whsec_… from the webhook endpoint
-// Optional vars: SUB_PRICE_CENTS (default 1380 = $13.80/month, so $13.00 is
-// left after Stripe's 2.9% + 30¢ card fee and 0.7% Billing fee),
-// STRIPE_PORTAL_URL (Stripe's no-code customer portal link, for "Manage or
-// cancel"), STRIPE_API (tests).
+// Optional vars: STRIPE_PRICE_ID (price_… of a monthly Price made in the
+// Stripe Dashboard; the page shows its amount), else SUB_PRICE_CENTS (default
+// 1380 = $13.80/month, so $13.00 is left after Stripe's 2.9% + 30¢ card fee
+// and 0.7% Billing fee); STRIPE_PORTAL_URL (Stripe's no-code customer portal
+// link, for "Manage or cancel"); STRIPE_API (tests).
+//
+// Every call is pinned to one Stripe API version, so a change on Stripe's
+// side can't change what the Worker reads. Webhook endpoints have their own
+// version (set when the endpoint is made); the handlers read both the old and
+// the new shapes of subscriptions and invoices.
+export const STRIPE_API_VERSION = '2026-08-26.dahlia';
+// Tags these Checkout Sessions in the Stripe Dashboard (8 random letters).
+export const INTEGRATION_ID = 'agent-console-subscribe-qhxmtwbr';
 
 export const SUB_PRICE_DEFAULT = 1380;
 export const SUB_NAME_RE = /^[A-Za-z0-9_.-]{1,40}$/;
@@ -21,6 +31,8 @@ export const priceCents = (env) => {
 };
 export const money = (cents) => '$' + (cents / 100).toFixed(2);
 export const subscribeReady = (env) => !!(env && env.STRIPE_SECRET_KEY);
+export const priceId = (env) => (/^price_[A-Za-z0-9]{4,80}$/.test(String((env && env.STRIPE_PRICE_ID) || '').trim()) ? String(env.STRIPE_PRICE_ID).trim() : '');
+export const ATTEMPT_RE = /^[a-z0-9]{16,40}$/;
 
 // ---- Stripe API (form-encoded) ------------------------------------------------
 function formEncode(obj, prefix, out = []) {
@@ -32,13 +44,19 @@ function formEncode(obj, prefix, out = []) {
   }
   return out.join('&');
 }
-export async function stripe(env, method, path, params) {
+// opts.idempotencyKey: a retried or double-tapped request returns the same
+// object instead of making a second one.
+export async function stripe(env, method, path, params, opts = {}) {
   const base = (env && env.STRIPE_API) || 'https://api.stripe.com';
   let r;
   try {
     r = await fetch(base + '/v1/' + path, {
       method,
-      headers: { Authorization: 'Bearer ' + env.STRIPE_SECRET_KEY, ...(params ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}) },
+      headers: {
+        Authorization: 'Bearer ' + env.STRIPE_SECRET_KEY, 'Stripe-Version': STRIPE_API_VERSION,
+        ...(params ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}),
+        ...(opts.idempotencyKey ? { 'Idempotency-Key': opts.idempotencyKey } : {})
+      },
       body: params ? formEncode(params) : undefined
     });
   } catch (e) { throw Object.assign(new Error('Couldn’t reach Stripe. Try again in a minute.'), { status: 502 }); }
@@ -47,18 +65,39 @@ export async function stripe(env, method, path, params) {
   return d;
 }
 
-// Stripe Checkout for one monthly subscription, the username attached.
+// Stripe Checkout for one monthly subscription, the username attached. The
+// Dashboard Price (STRIPE_PRICE_ID) when set, else an inline monthly price.
+// No payment_method_types: the Dashboard decides which methods show.
 export function checkoutParams(env, origin, user) {
+  const pid = priceId(env);
   return {
     mode: 'subscription',
     client_reference_id: user,
     metadata: { user },
     subscription_data: { metadata: { user } },
-    line_items: { 0: { quantity: 1, price_data: { currency: 'usd', unit_amount: priceCents(env), recurring: { interval: 'month' }, product_data: { name: 'Agent Console subscription', description: 'Monthly access for ' + user } } } },
+    line_items: { 0: pid ? { quantity: 1, price: pid } : { quantity: 1, price_data: { currency: 'usd', unit_amount: priceCents(env), recurring: { interval: 'month' }, product_data: { name: 'Agent Console subscription', description: 'Monthly access for ' + user } } } },
+    integration_identifier: INTEGRATION_ID,
     success_url: origin + '/subscribe/?done={CHECKOUT_SESSION_ID}',
     cancel_url: origin + '/subscribe/?canceled=1',
     allow_promotion_codes: 'false'
   };
+}
+
+// The monthly amount the page shows: the Dashboard Price's (cached an hour
+// in KV), or SUB_PRICE_CENTS.
+export async function displayCents(env, kv) {
+  const pid = priceId(env);
+  if (!pid || !subscribeReady(env)) return priceCents(env);
+  const ck = 'stripe:price:' + pid;
+  try {
+    const hit = kv && await kv.get(ck, 'json');
+    if (hit && hit.cents) return hit.cents;
+    const p = await stripe(env, 'GET', 'prices/' + encodeURIComponent(pid));
+    const cents = Number(p.unit_amount);
+    if (!(cents > 0)) return priceCents(env);
+    if (kv) await kv.put(ck, JSON.stringify({ cents }), { expirationTtl: 3600 });
+    return cents;
+  } catch (e) { return priceCents(env); }
 }
 
 // The end of the period Stripe just billed (seconds → ms), from a
@@ -105,8 +144,8 @@ export async function stripeSignatureOk(secret, header, payload, nowMs = Date.no
 
 // ---- The page ---------------------------------------------------------------
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-export function subscribePage(env, { ready }) {
-  const price = money(priceCents(env));
+export function subscribePage(env, { ready, cents }) {
+  const price = money(cents || priceCents(env));
   const portal = /^https:\/\/[^\s"'<>]{1,300}$/.test(String((env && env.STRIPE_PORTAL_URL) || '')) ? env.STRIPE_PORTAL_URL : '';
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -200,6 +239,15 @@ export function subscribePage(env, { ready }) {
   var show = function (id) { ['closed', 'form', 'wait', 'done', 'cancel'].forEach(function (x) { $(x).hidden = x !== id; }); };
   var q = new URLSearchParams(location.search);
   var hint = $('hint'), input = $('user'), pay = $('pay'), timer = null, okName = '';
+  // One id per visit: tapping twice, or coming back from checkout, reuses the
+  // same checkout instead of locking the name.
+  var attempt = '';
+  try { attempt = sessionStorage.getItem('sub_attempt') || ''; } catch (e) { attempt = ''; }
+  if (!/^[a-z0-9]{16,40}$/.test(attempt)) {
+    var b = new Uint8Array(12); crypto.getRandomValues(b);
+    attempt = Array.prototype.map.call(b, function (x) { return ('0' + x.toString(36)).slice(-2); }).join('').replace(/[^a-z0-9]/g, 'a').slice(0, 24);
+    try { sessionStorage.setItem('sub_attempt', attempt); } catch (e) { /* private mode */ }
+  }
   function setHint(text, cls) { hint.textContent = text; hint.className = 'hint' + (cls ? ' ' + cls : ''); }
   function check() {
     var u = input.value.trim().replace(/^@/, '');
@@ -207,7 +255,7 @@ export function subscribePage(env, { ready }) {
     if (!u) { setHint('Letters, numbers, dot, dash or underscore.'); return; }
     if (!/^[A-Za-z0-9_.-]{1,40}$/.test(u)) { setHint('Use only letters, numbers, dot, dash or underscore.', 'bad'); return; }
     setHint('Checking…');
-    fetch('/subscribe/check?user=' + encodeURIComponent(u), { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
+    fetch('/subscribe/check?user=' + encodeURIComponent(u) + '&attempt=' + attempt, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
       if (input.value.trim().replace(/^@/, '') !== u) return;
       if (d.ok) { okName = u; pay.disabled = false; setHint(d.note || ('“' + u + '” is available.'), 'ok'); }
       else setHint(d.error || 'That name can’t be used.', 'bad');
@@ -219,7 +267,7 @@ export function subscribePage(env, { ready }) {
     pay.addEventListener('click', function () {
       if (!okName) return;
       pay.disabled = true; pay.textContent = 'Opening secure checkout…';
-      fetch('/subscribe/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: okName }) })
+      fetch('/subscribe/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: okName, attempt: attempt }) })
         .then(function (r) { return r.json(); }).then(function (d) {
           if (d.url) { location.href = d.url; return; }
           setHint(d.error || 'Couldn’t start the payment. Try again.', 'bad'); pay.disabled = false; pay.textContent = 'Continue to payment';

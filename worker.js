@@ -1,6 +1,6 @@
 import { webApp } from './web/handler.js';
 import { consoleApp } from './web/console/handler.js';
-import { subscribePage, subscribeReady, priceCents, stripe, checkoutParams, periodEndMs, invoiceSubscription, stripeSignatureOk, SUB_NAME_RE, SESSION_RE } from './web/subscribe.js';
+import { subscribePage, subscribeReady, priceCents, displayCents, stripe, checkoutParams, periodEndMs, invoiceSubscription, stripeSignatureOk, SUB_NAME_RE, SESSION_RE, ATTEMPT_RE } from './web/subscribe.js';
 import { readPlaylist, readLists, writeLists, newList, listSummary, publicList, searchYouTube, matchCacheKey, LISTS_MAX, MATCH_BATCH, MATCH_SCAN } from './web/playlists.js';
 import { audiusSearch, audiusStream, listLibrary, addToLibrary, removeFromLibrary, serveLibraryFile, audioKind, listMine, mineUsage, addToMine, removeFromMine, MINE_DAILY_UPLOADS } from './web/music.js';
 import { PUSH_CATEGORIES, vapidKeys, validSubscription, addSubscription, updateSubscription, removeSubscription, getSubscription, sendPush, notifyOwner, ownerTime, cleanCategories, anySubscriberWants,
@@ -3097,7 +3097,9 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       const kv = env && env.TELEMETRY;
       const ready = subscribeReady(env) && !!kv;
       const GRACE_MS = 864e5;   // a day's slack after each paid period
-      const nameStatus = async (raw, session) => {
+      // attempt: the buyer's own id for this visit (see the page), so their
+      // double tap or a second try isn't blocked by their own checkout.
+      const nameStatus = async (raw, attempt) => {
         const name = String(raw || '').trim().replace(/^@/, '');
         if (!SUB_NAME_RE.test(name)) return { error: 'Use 1–40 letters, numbers, dot, dash or underscore.' };
         const key = name.toLowerCase();
@@ -3107,7 +3109,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         if (cur && !cur.ended && cur.expiresAt > Date.now()) return { error: '“' + name + '” is already subscribed.' };
         if (cfg.allowlist && cfg.allowlist.on && (cfg.allowlist.users || []).includes(key)) return { error: '“' + name + '” already has access. No need to subscribe.' };
         const hold = await kv.get('subhold:' + key, 'json');
-        if (hold && hold.session !== session && hold.until > Date.now()) return { error: 'Someone is paying for “' + name + '” right now. Pick another name or try again in 30 minutes.' };
+        if (hold && !(attempt && hold.attempt === attempt) && hold.until > Date.now()) return { error: 'Someone is paying for “' + name + '” right now. Pick another name or try again in 30 minutes.' };
         const acct = await getAcct(kv, key);
         return { ok: true, user: name, key, note: acct ? '“' + name + '” already has an account. Only use it if it’s yours: you’ll sign in with its PIN.' : '' };
       };
@@ -3168,14 +3170,15 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       };
       try {
         if (url.pathname === '/subscribe/' && (req.method === 'GET' || req.method === 'HEAD')) {
-          return new Response(req.method === 'HEAD' ? null : subscribePage(env, { ready }), { headers: {
+          return new Response(req.method === 'HEAD' ? null : subscribePage(env, { ready, cents: ready ? await displayCents(env, kv) : 0 }), { headers: {
             'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
             'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
           } });
         }
         if (!ready) return json({ ok: false, error: 'Subscriptions aren’t open yet.' }, 503);
         if (url.pathname === '/subscribe/check' && req.method === 'GET') {
-          const st = await nameStatus(url.searchParams.get('user'));
+          const at = String(url.searchParams.get('attempt') || '');
+          const st = await nameStatus(url.searchParams.get('user'), ATTEMPT_RE.test(at) ? at : '');
           return json(st.ok ? { ok: true, note: st.note } : { ok: false, error: st.error });
         }
         if (url.pathname === '/subscribe/checkout' && req.method === 'POST') {
@@ -3186,10 +3189,14 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           const n = parseInt(await kv.get(rk), 10) || 0;
           if (n >= 10) return json({ ok: false, error: 'Too many tries. Wait a bit and try again.' }, 429);
           await kv.put(rk, String(n + 1), { expirationTtl: 2 * 3600 });
-          const st = await nameStatus(body.user);
+          const attempt = ATTEMPT_RE.test(String(body.attempt || '')) ? String(body.attempt) : '';
+          const st = await nameStatus(body.user, attempt);
           if (!st.ok) return json({ ok: false, error: st.error }, 409);
-          const sess = await stripe(env, 'POST', 'checkout/sessions', checkoutParams(env, url.origin, st.user));
-          await kv.put('subhold:' + st.key, JSON.stringify({ session: sess.id, until: Date.now() + 30 * 60e3 }), { expirationTtl: 3600 });
+          // Same visit + same name = same Stripe request: a double tap or a
+          // retry gets the same checkout back instead of a second one.
+          const idem = attempt ? 'subscribe-' + (await sha256hex(attempt + '|' + st.key)).slice(0, 40) : undefined;
+          const sess = await stripe(env, 'POST', 'checkout/sessions', checkoutParams(env, url.origin, st.user), { idempotencyKey: idem });
+          await kv.put('subhold:' + st.key, JSON.stringify({ attempt, session: sess.id, until: Date.now() + 30 * 60e3 }), { expirationTtl: 3600 });
           return json({ ok: true, url: sess.url });
         }
         if (url.pathname === '/subscribe/status' && req.method === 'GET') {
@@ -3224,6 +3231,17 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
               const s = invoiceSubscription(o);
               const user = await userForSub(s.id, s.user);
               if (user) await approveSub(user, { renew: true, periodEnd: periodEndMs(o), amount: (Number(o.amount_paid) || 0) / 100, customer: typeof o.customer === 'string' ? o.customer : '', subscription: s.id, ref: o.id });
+            }
+          } else if (ev.type === 'invoice.payment_failed') {
+            // A renewal didn't go through. Stripe retries for a while; if it
+            // never succeeds the subscription is deleted (handled below).
+            const s = invoiceSubscription(o);
+            const user = await userForSub(s.id, s.user);
+            if (user) {
+              const cfg = await getConfig(kv);
+              const cur = cfg.subscriptions && cfg.subscriptions[user.toLowerCase()];
+              if (cur) { cur.paymentFailedAt = Date.now(); cur.history = [...(cur.history || []), { at: Date.now(), action: 'payment_failed', note: 'Stripe' }].slice(-24); await kv.put('config', JSON.stringify(cfg)); }
+              await notifyOwner(env, { cat: 'subs', title: user + '’s payment failed', body: 'Stripe couldn’t charge their ' + (o.billing_reason === 'subscription_create' ? 'first' : 'monthly') + ' payment and will retry. If it keeps failing their access ends.', url: adminLink('security', { focus: 'subs', user }) }, url.origin).catch(() => {});
             }
           } else if (ev.type === 'customer.subscription.updated' || ev.type === 'customer.subscription.deleted') {
             const user = await userForSub(o.id, o.metadata && o.metadata.user);

@@ -168,32 +168,52 @@ phone's home screen too).
    console with that name, a PIN and the code (so nobody else can register
    the name they paid for).
 4. It renews every month by itself (each payment extends their access; the
-   console shows "Subscribed · renews monthly"). If they cancel or a payment
-   fails for good, Stripe tells the Worker and their access ends; you're
-   notified.
+   console shows "Subscribed · renews monthly"). If a renewal payment fails
+   you're notified while Stripe retries; if they cancel or it fails for
+   good, their access ends and you're notified.
 
-**Price:** $13.80/month by default, so you keep $13.00 after Stripe's fees
-(2.9% + 30¢ per US card payment plus 0.7% for subscriptions; check
-stripe.com/pricing, they can change). It's shown as one plain price. Cards
-from outside the US cost an extra 1.5%. To change it, set the Worker
-variable `SUB_PRICE_CENTS` (e.g. `1500` for $15.00).
+**Price:** $13.80/month, so you keep $13.00 after Stripe's fees (2.9% + 30¢
+per US card payment plus 0.7% for subscriptions; check stripe.com/pricing,
+they can change). It's shown as one plain price. Cards from outside the US
+cost an extra 1.5%. Best: make the price in Stripe (setup step 3) and put its
+ID in `STRIPE_PRICE_ID`; the page shows whatever that price is, and you can
+change it in Stripe. Without it the Worker uses `SUB_PRICE_CENTS` (default
+`1380`).
 
 **Setup (once):**
-1. Make a Stripe account at stripe.com and finish activating it.
-2. Stripe → Developers → **API keys** → copy the **Secret key** (`sk_live_…`).
-   Cloudflare → Workers & Pages → `donnajbe` → Settings → Variables and
-   Secrets → **Add** → Secret, name `STRIPE_SECRET_KEY`.
-3. Stripe → Developers → **Webhooks** → Add endpoint:
-   `https://donnajbe.viztrrx.workers.dev/subscribe/webhook`, events
-   `checkout.session.completed`, `invoice.paid`,
-   `customer.subscription.updated`, `customer.subscription.deleted`. Copy its
-   **Signing secret** (`whsec_…`) into a Cloudflare secret named
+1. Make a Stripe account at stripe.com and finish activating it (business
+   details, bank account for payouts). Turn on two-step login with an
+   authenticator app or passkey.
+2. Stay in **test mode** (the "Test mode" switch, top right) for steps 3–7,
+   try it, then repeat them in live mode.
+3. **Product catalog → Add product**: name "Agent Console subscription",
+   price **$13.80**, **Recurring**, **Monthly** → Save. Open the price and
+   copy its ID (`price_…`). Cloudflare → Workers & Pages → `donnajbe` →
+   Settings → Variables and Secrets → **Add** → Type **Text**, name
+   `STRIPE_PRICE_ID`, value the ID.
+4. **Developers → API keys → Create restricted key** (safer than the full
+   secret key): name "Agent Console Worker"; permissions **Checkout
+   Sessions: Write**, **Subscriptions: Read**, **Prices: Read**; everything
+   else None → Create, copy the `rk_…` key. Cloudflare → **Add** → Type
+   **Secret**, name `STRIPE_SECRET_KEY`.
+5. **Developers → Webhooks → Add destination**: Account events, API version
+   **2026-08-26.dahlia** (the one the Worker uses), events
+   `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+   `invoice.paid`, `invoice.payment_failed`,
+   `customer.subscription.updated`, `customer.subscription.deleted`;
+   endpoint `https://donnajbe.viztrrx.workers.dev/subscribe/webhook`. Copy
+   its **Signing secret** (`whsec_…`) into a Cloudflare **Secret** named
    `STRIPE_WEBHOOK_SECRET`.
-4. Stripe → Settings → **Payment methods**: turn on Apple Pay, Google Pay,
-   Cash App Pay and Link if you want them.
-5. Optional: Stripe → Settings → Billing → **Customer portal** → turn on
-   the link and put it in a Worker variable `STRIPE_PORTAL_URL`; the page then
+6. **Settings → Payment methods**: turn on Apple Pay, Google Pay, Cash App
+   Pay and Link if you want them (the page shows whatever is on here).
+7. Optional: **Settings → Billing → Customer portal** → turn on the link and
+   put it in a Cloudflare **Text** variable `STRIPE_PORTAL_URL`; the page then
    shows "Manage or cancel".
+
+**Sales tax:** if you'll charge US customers, some states tax digital
+subscriptions. Stripe Tax can collect it (about 0.5% more per payment), but
+only after you register in those states; ask an accountant first. It isn't
+turned on.
 
 Until `STRIPE_SECRET_KEY` is set the page says "Subscriptions aren't open
 yet". Try it first with Stripe's test mode keys (`sk_test_…`, test card

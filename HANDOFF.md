@@ -153,8 +153,8 @@ after Proxy, before Games.
 KV `push:vapid`), `CONSOLE_SCRIPT_URL`, `AUDIUS_API`,
 `APNS_RELAY_URL`/`APNS_RELAY_SECRET`, optional `YOUTUBE_API_KEY`,
 `SPOTIFY_CLIENT_ID`/`SPOTIFY_CLIENT_SECRET` (Playlists), `STRIPE_SECRET_KEY`,
-`STRIPE_WEBHOOK_SECRET`, optional `STRIPE_PORTAL_URL`, `SUB_PRICE_CENTS`
-(Subscribe page).
+`STRIPE_WEBHOOK_SECRET`, optional `STRIPE_PRICE_ID`, `STRIPE_PORTAL_URL`,
+`SUB_PRICE_CENTS` (Subscribe page).
 
 ### KV keys (TELEMETRY)
 `config` (allowlist, subscriptions, subLedger, chatQuiet, fun, flair,
@@ -281,6 +281,20 @@ day, 14 days; not system notices), `trivia` (#public only). Memory only:
   strip says "Subscribed · renews monthly". **Never tested against real
   Stripe** (blocked from the dev container): tests use a stand-in that signs
   webhooks like Stripe. Tests: `subscribe.test.mjs`, `subscribe.mjs`.
+  Hardening (owner said yes to it, following the Stripe plugin's
+  best-practices skill): every call sends `Stripe-Version:
+  2026-08-26.dahlia` (`STRIPE_API_VERSION`); sessions carry
+  `integration_identifier` (`INTEGRATION_ID`); `STRIPE_PRICE_ID` (a Dashboard
+  Price) replaces inline `price_data` when set, and the page shows its amount
+  (`displayCents`, cached 1 h in `stripe:price:<id>`); checkout POSTs send an
+  `Idempotency-Key` from the page's per-visit `attempt` id, and the name hold
+  (`subhold`) belongs to that attempt, so a double tap or a retry after
+  backing out isn't blocked; `invoice.payment_failed` notifies the owner and
+  records `paymentFailedAt`. Recommended key: a restricted `rk_` key
+  (Checkout Sessions: Write, Subscriptions: Read, Prices: Read). Stripe Tax
+  is not on (needs registrations; owner to decide). The Stripe plugin is
+  installed in this environment but its MCP server (mcp.stripe.com) and
+  api.stripe.com are blocked by the network policy.
 - **Invite codes** (round 1): names added to the list *after* this shipped
   get a one-time code (`invite:<name>`, `/admin/invites`); registering that
   name needs it (`body.invite`; wrong code counts toward the lockout).
@@ -411,7 +425,8 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 
 | Commit | What |
 |---|---|
-| (this) | Subscribe page: pay monthly with Stripe, approved automatically |
+| (this) | Subscribe page hardening: API version, price ID, idempotency, failed payments |
+| `96545d4` | Subscribe page: pay monthly with Stripe, approved automatically |
 | `b7a3eba` | Playlists: app only, Worker YouTube key, shared lookup cache |
 | `a11eeaa` | Playlists → YouTube links (owner + admins) |
 | `c073296` | Admins: phone app for owner + admins, no admin token, two devices |
@@ -444,7 +459,7 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 ## 6. Testing
 
 ```bash
-npm test                                   # node --test tests/*.test.mjs (110 tests)
+npm test                                   # node --test tests/*.test.mjs (111 tests)
 npx wrangler deploy --dry-run --outdir /tmp/x   # bundle/config check, deploys nothing
 # Browser suites (Playwright vs local workerd), each takes an output dir for screenshots:
 node tests/browser/eaglercraft.e2e.mjs     # 83
@@ -469,7 +484,7 @@ node tests/browser/music.mjs               # 15
 node tests/browser/my-music.mjs            # 15
 node tests/browser/admin-app.mjs           # 20
 node tests/browser/playlists.mjs           # 21
-node tests/browser/subscribe.mjs           # 15
+node tests/browser/subscribe.mjs           # 16
 node tests/browser/usage-meter.mjs         # 16
 node tests/browser/usage-meter-sizes.mjs   # 25
 node tests/browser/ask-photo-size.mjs      # 6

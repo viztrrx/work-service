@@ -771,7 +771,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     { at: '2026-10-18T01:30:00-04:00', commit: '', title: 'Playlists: app only, Worker YouTube key', parts: {
       music: ['fix', 'Playlists use the YouTube key stored on the Worker (a Cloudflare secret) and work only in the app; each song is looked up once'] } },
     { at: '2026-10-18T02:30:00-04:00', commit: '', title: 'Subscribe page: pay monthly with Stripe, approved automatically', parts: {
-      console: ['feature', 'A payment page (/subscribe/) where someone picks their username and pays monthly; the name is approved as a subscriber when Stripe confirms the payment'] } }
+      console: ['feature', 'A payment page (/subscribe/) where someone picks their username and pays monthly; the name is approved as a subscriber when Stripe confirms the payment'] } },
+    { at: '2026-10-18T03:30:00-04:00', commit: '', title: 'Subscribe page: safer Stripe setup', parts: {
+      console: ['fix', 'Subscribe page: price from Stripe, failed-renewal alerts for the owner, and trying again after backing out of checkout no longer locks the name'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',

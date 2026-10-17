@@ -19,19 +19,25 @@ const DAY = 864e5;
 function stubStripe() {
   const real = globalThis.fetch;
   const sessions = new Map();
+  const idem = new Map();
   const calls = [];
   let n = 0;
   globalThis.fetch = async (input, init = {}) => {
     const u = String(input && input.url || input);
     if (!u.startsWith('https://api.stripe.com/')) return real(input, init);
-    calls.push({ url: u, method: init.method, body: init.body ? String(init.body) : '' , auth: (init.headers || {}).Authorization });
+    const hd = init.headers || {};
+    calls.push({ url: u, method: init.method, body: init.body ? String(init.body) : '', auth: hd.Authorization, version: hd['Stripe-Version'], idem: hd['Idempotency-Key'] });
     const path = new URL(u).pathname;
+    if (path === '/v1/prices/price_monthly15' && init.method === 'GET') return Response.json({ id: 'price_monthly15', object: 'price', unit_amount: 1500, currency: 'usd', recurring: { interval: 'month' } });
     if (path === '/v1/checkout/sessions' && init.method === 'POST') {
+      // Idempotency: the same key gives back the same session.
+      if (hd['Idempotency-Key'] && idem.has(hd['Idempotency-Key'])) return Response.json(sessions.get(idem.get(hd['Idempotency-Key'])));
       const p = new URLSearchParams(String(init.body));
       const id = 'cs_test_' + 'a'.repeat(20) + (++n);
       const s = { id, object: 'checkout.session', url: 'https://checkout.stripe.com/c/pay/' + id, mode: p.get('mode'), client_reference_id: p.get('client_reference_id'), metadata: { user: p.get('metadata[user]') },
         amount_total: Number(p.get('line_items[0][price_data][unit_amount]')), status: 'open', payment_status: 'unpaid', customer: null, subscription: null };
       sessions.set(id, s);
+      if (hd['Idempotency-Key']) idem.set(hd['Idempotency-Key'], id);
       return Response.json(s);
     }
     let m = /^\/v1\/checkout\/sessions\/(cs_test_\w+)$/.exec(path);
@@ -183,5 +189,40 @@ test('subscribe: the status page can approve on its own if the webhook is late; 
     const off = setup({ STRIPE_SECRET_KEY: '', STRIPE_WEBHOOK_SECRET: '' });
     assert.match((await off.call('/subscribe/')).text, /Subscriptions aren’t open yet/);
     assert.equal((await off.call('/subscribe/checkout', { method: 'POST', body: { user: 'sam' } })).status, 503);
+  } finally { st.restore(); }
+});
+
+test('subscribe: API version pinned, sessions tagged, double taps reuse the checkout, Dashboard price, failed renewals', async () => {
+  const st = stubStripe();
+  try {
+    const t = setup({ STRIPE_PRICE_ID: 'price_monthly15' });
+    await t.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: [] } } });
+    // The page shows the Dashboard Price's amount.
+    assert.match((await t.call('/subscribe/')).text, /\$15\.00 <small>\/ month<\/small>/);
+    // Same visit, double tap: one checkout, and the name isn't locked against its own buyer.
+    const attempt = 'abcdefghijklmnop1234';
+    const a = await t.call('/subscribe/checkout', { method: 'POST', body: { user: 'tapper', attempt } });
+    assert.equal((await t.call('/subscribe/check?user=tapper&attempt=' + attempt)).data.ok, true, 'their own checkout doesn’t block them');
+    assert.equal((await t.call('/subscribe/check?user=tapper&attempt=zzzzzzzzzzzzzzzzzzzz')).data.ok, false, 'someone else is still blocked');
+    const b = await t.call('/subscribe/checkout', { method: 'POST', body: { user: 'tapper', attempt } });
+    assert.equal(a.data.url, b.data.url, 'same checkout back');
+    assert.equal(st.sessions.size, 1);
+    const posts = st.calls.filter((c) => c.url.endsWith('/v1/checkout/sessions'));
+    assert.equal(posts.length, 2);
+    assert.ok(posts[0].idem && posts[0].idem === posts[1].idem, 'same Idempotency-Key');
+    assert.ok(st.calls.every((c) => c.version === '2026-08-26.dahlia'), 'every call pinned to one API version');
+    const p = new URLSearchParams(posts[0].body);
+    assert.equal(p.get('line_items[0][price]'), 'price_monthly15', 'the Dashboard Price');
+    assert.equal(p.get('line_items[0][price_data][unit_amount]'), null);
+    assert.equal(p.get('integration_identifier'), 'agent-console-subscribe-qhxmtwbr');
+    assert.equal(p.get('payment_method_types[0]'), null, 'the Dashboard decides payment methods');
+    // Paid, then a renewal fails: recorded on the subscription (and the owner is told).
+    const sid = [...st.sessions.keys()][0];
+    await t.hook({ id: 'evt_p1', type: 'checkout.session.completed', data: { object: st.pay(sid) } });
+    await t.hook({ id: 'evt_f1', type: 'invoice.payment_failed', data: { object: { id: 'in_f', object: 'invoice', billing_reason: 'subscription_cycle', parent: { subscription_details: { subscription: 'sub_123', metadata: { user: 'tapper' } } } } } });
+    const sub = (await t.cfg()).subscriptions[0];
+    assert.ok(sub.paymentFailedAt > 0);
+    assert.equal(sub.history.at(-1).action, 'payment_failed');
+    assert.equal(sub.active, true, 'still active while Stripe retries');
   } finally { st.restore(); }
 });

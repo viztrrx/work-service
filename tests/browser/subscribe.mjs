@@ -8,7 +8,8 @@
 //   3  the new subscriber creates their account in the console with that
 //      code and gets in; the console says "Subscribed · renews monthly"
 //   4  the owner sees them in Subscribers with the payment in the ledger
-//   5  canceling at checkout: "Nothing was charged"
+//   5  canceling at checkout: "Nothing was charged", and trying again with
+//      the same name isn't blocked by their own unfinished checkout
 //   node tests/browser/subscribe.mjs [outDir]
 import fs from 'node:fs';
 import path from 'node:path';
@@ -142,7 +143,8 @@ try {
   check('The same name can’t be bought twice', /already subscribed/.test(await page.textContent('#hint')), await page.textContent('#hint'));
 
   // 5: cancel at checkout.
-  await page.fill('#user', 'second' + Date.now().toString(36).slice(-3));
+  const SECOND = 'second' + Date.now().toString(36).slice(-3);
+  await page.fill('#user', SECOND);
   await page.waitForFunction(() => /is available/.test(document.getElementById('hint').textContent), null, { timeout: 8000 }).catch(() => {});
   await page.click('#pay');
   await page.waitForURL(/\/pay\/cs_test_/, { timeout: 10000 });
@@ -150,6 +152,13 @@ try {
   await page.waitForURL(/canceled=1/, { timeout: 10000 });
   check('Going back from checkout: “Payment canceled · Nothing was charged”', await page.isVisible('#cancel') && /Nothing was charged/.test(await page.textContent('#cancel')));
   await page.screenshot({ path: path.join(OUT, '04-canceled.png') });
+  // Trying again with the same name isn't blocked by their own unfinished checkout.
+  const again = await page.evaluate(() => sessionStorage.getItem('sub_attempt'));
+  await page.click('#cancel a');
+  await page.waitForSelector('#user');
+  await page.fill('#user', SECOND);
+  await page.waitForFunction(() => /is available|paying/.test(document.getElementById('hint').textContent), null, { timeout: 8000 }).catch(() => {});
+  check('Try again with the same name: still available to them (not “someone is paying”)', /is available/.test(await page.textContent('#hint')) && !!again, await page.textContent('#hint'));
 
   for (const [n, p] of [['subscribe page', page], ['console', cp]]) check(`No page errors (${n})`, p._errors.length === 0, p._errors.slice(0, 2).join(' | '));
   await ctx.close(); await pc.close();
