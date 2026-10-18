@@ -83,7 +83,8 @@ list (rounds 1–3) was finished and pushed.
   feature shipped (e.g. invite codes only for names added later). Anything
   that posts into chat for everyone gets an owner on/off switch.
 - **Work in rounds, one tested push each.** For a list of features: build a
-  round, run the whole test routine (§6), **update this HANDOFF.md** with
+  round, run the test routine (§6: unit tests + only the affected browser
+  suites), **update this HANDOFF.md** with
   what was built, the context and what's next, **then push to `main`**, then
   start the next round. Their words: "after every round update the
   handoff.md file every time with your next task and your context and
@@ -670,10 +671,29 @@ node tests/browser/usage-meter-sizes.mjs   # 25
 node tests/browser/ask-photo-size.mjs      # 6
 ```
 
-**The routine before every push:** `npm test`; then every browser suite one
-at a time from a clean state (`rm -rf .wrangler/state`, ~5 min timeout
-each, ~25 min total, so run the loop in the background and wait for a
-"done" marker); the dry run; look at the screenshots; then commit and push.
+**The routine before every push (owner's rule since 2026-10-19, to save
+usage):** "don't test the suites that weren't coded or changed at all, only
+those that are related or affected to the files you changed or the
+files/suites you think would be affected". So:
+1. `npm test` (all unit tests: fast and cheap, always).
+2. **Only the browser suites the change can affect**, one at a time from a
+   clean state (`rm -rf .wrangler/state`, ~5 min timeout each; run in the
+   background and wait for a "done" marker). Pick them from what you
+   touched: a suite you edited; suites that exercise the screens, routes or
+   shared helpers you changed (e.g. Admin → Security cards → `subscribers`,
+   `admin-app`, `notification-links`, `owner-tools`, `one-session`;
+   subscribe page → `subscribe`; Music → `music`, `my-music`, `playlists`,
+   `mp3`; chat → the `chat-*`, `staff-chat`, `read-receipts`; sign-in /
+   sessions → `one-session`, `same-computer`, `allowlist`,
+   `access-requests`, `console-app`). When unsure whether something shared
+   (e.g. a selector class, the login flow, `allowedUser`) reaches a suite,
+   include it. Don't run unrelated suites (e.g. `eaglercraft.e2e`,
+   `usage-meter*`, `ask-photo-size` for a subscriptions change).
+3. Look at the screenshots, say in the report which suites ran and which
+   were skipped as unaffected, then commit and push.
+The whole list of 27 suites is still the right call only for a change that
+touches everything (e.g. script.js start-up, the Worker's request
+pipeline, shared CSS tokens).
 
 - The local workerd keeps KV/R2/DO state in `.wrangler/` between runs
   (git-ignored), and suites in one loop share it: tests use unique names
