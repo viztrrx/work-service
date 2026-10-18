@@ -89,8 +89,11 @@ try {
   }, KJ.toLowerCase());
   await B.page.reload();
   await B.page.waitForFunction(() => !!document.getElementById('gpa-root-host'), null, { timeout: 30000 });
-  const kicked = await signedOutWith(B.page, /sign in again with your PIN/);
-  check('Impostor who skips the sign-in screen is signed out by the Worker', kicked, (await state(B.page)).msg);
+  // The console never opens: a saved sign-in only comes back after the Worker
+  // accepts the session, and this one has none.
+  const kicked = await signedOutWith(B.page, /[Ss]ign in again with your PIN/);
+  const neverIn = await B.page.evaluate(() => document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-login').style.display !== 'none');
+  check('Impostor who skips the sign-in screen never gets in (the Worker has to accept the session first)', kicked && neverIn, (await state(B.page)).msg);
   await shot(B.page, '04-impostor-bypass-signed-out.png');
   await B.ctx.close();
 
