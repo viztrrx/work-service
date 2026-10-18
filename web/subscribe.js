@@ -38,8 +38,8 @@ export const money = (cents) => '$' + (cents / 100).toFixed(2);
 export const subscribeReady = (env) => !!(env && env.STRIPE_SECRET_KEY);
 export const priceId = (env) => (/^price_[A-Za-z0-9]{4,80}$/.test(String((env && env.STRIPE_PRICE_ID) || '').trim()) ? String(env.STRIPE_PRICE_ID).trim() : '');
 export const ATTEMPT_RE = /^[a-z0-9]{16,40}$/;
-// One-time contributions from members who already subscribe: $8 to $500.
-export const CONTRIB_MIN_CENTS = 800;
+// One-time contributions from members who already subscribe: $6 to $500.
+export const CONTRIB_MIN_CENTS = 600;
 export const CONTRIB_MAX_CENTS = 50000;
 export const contribCents = (v) => {
   const n = Number(v);
@@ -278,7 +278,7 @@ export function subscribePage(env, { ready, cents }) {
     <div id="hint" class="hint" role="status" aria-live="polite">Letters, numbers, dot, dash or underscore.</div>
     <div id="contrib" class="contrib" hidden>
       <p class="contrib-t"><b>You’re already a member.</b> Want to support Saints Service? Add a one-time contribution of ${esc(money(CONTRIB_MIN_CENTS))} or more.</p>
-      <div class="chips" role="group" aria-label="Amount">${[8, 10, 20, 50].map((d) => `<button type="button" data-amt="${d}" aria-pressed="${d === 8}">$${d}</button>`).join('')}</div>
+      <div class="chips" role="group" aria-label="Amount">${[CONTRIB_MIN_CENTS / 100, 10, 20, 50].map((d) => `<button type="button" data-amt="${d}" aria-pressed="${d * 100 === CONTRIB_MIN_CENTS}">$${d}</button>`).join('')}</div>
       <label for="amt">Amount (USD)</label>
       <div class="amt"><span>$</span><input id="amt" type="number" inputmode="decimal" min="${CONTRIB_MIN_CENTS / 100}" max="${CONTRIB_MAX_CENTS / 100}" step="0.01" value="${CONTRIB_MIN_CENTS / 100}"></div>
       <div id="amt-hint" class="hint">From ${esc(money(CONTRIB_MIN_CENTS))} to ${esc(money(CONTRIB_MAX_CENTS))}.</div>

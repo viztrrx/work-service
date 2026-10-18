@@ -4,15 +4,16 @@
 // SPOTIFY_WEB / APPLE_MUSIC_WEB / YOUTUBE_API point at them); the real
 // services can't be reached from the test machine. The YouTube key is the
 // Worker's YOUTUBE_API_KEY secret only. Steps, with screenshots:
-//   1  kj (regular user) doesn't see Playlists
+//   1  kj (regular user) has Playlists too (everyone signed in, owner's
+//      call) and gets an Apple Music playlist's links
 //   2  ana (admin, iPhone app) pastes a Spotify playlist link: the official
 //      videos are found with the Worker's key (one song has no clear video
 //      and keeps its search link); the key never reaches the browser
-//   3  an Apple Music playlist: a second list under "Your playlists"
+//   3  the same Apple Music playlist kj did: a second list under "Your
+//      playlists", from the shared cache (no new YouTube searches)
 //   4  the web app on her computer: both playlists and their links, with no
 //      new YouTube searches; Copy all links; ▶ plays a video in the console
-//   5  the console injected into a website: no Playlists, and the Worker
-//      refuses Playlists requests from there
+//   5  the console injected into a website: Playlists works there too
 //   node tests/browser/playlists.mjs [outDir]
 import fs from 'node:fs';
 import path from 'node:path';
@@ -114,12 +115,20 @@ const rows = (page) => R(page, (r) => [...r.querySelectorAll('#gpa-lists-view .g
 try {
   await admin('/admin/config', { allowlist: { on: true, users: [ANA, KJ] } });
 
-  // 1: a regular user doesn't see Playlists.
+  // 1: a regular user has Playlists too.
   const kj = await phone();
   let s = await signIn(kj.page, KJ, 'create');
   await tab(kj.page, 'music');
   await kj.page.waitForTimeout(600);
-  check('kj (regular user) signs in; Music has no Playlists button', s.inside && await R(kj.page, (r) => r.querySelector('.gpx-src[data-src="lists"]').hidden), JSON.stringify(s));
+  check('kj (regular user) signs in; Music has the Playlists button', s.inside && await R(kj.page, (r) => !r.querySelector('.gpx-src[data-src="lists"]').hidden), JSON.stringify(s));
+  await R(kj.page, (r) => r.querySelector('.gpx-src[data-src="lists"]').click());
+  await kj.page.waitForTimeout(600);
+  check('…the card says everyone can use it, 40 new songs a day', /40 new songs a day/.test(await R(kj.page, (r) => r.querySelector('[data-src-panel="lists"] .gpa-sub').textContent)));
+  await kj.page.fill(sr('#gpa-lists-url'), 'https://music.apple.com/us/playlist/chill-mix/pl.u-abcdefgh123');
+  await kj.page.click(sr('#gpa-lists-go'));
+  const kjApple = await waitFor(kj.page, (r) => /Chill Mix/.test(r.querySelector('#gpa-lists-view .gpa-yl-name') ? r.querySelector('#gpa-lists-view .gpa-yl-name').textContent : '') && /Found 2 of 2/.test(r.querySelector('#gpa-lists-status').textContent), null, 20000);
+  check('kj pastes an Apple Music link → “Chill Mix”, both songs found (2 YouTube searches)', kjApple && ytSearches === 2, JSON.stringify(await rows(kj.page)) + ' searches ' + ytSearches);
+  await shot(kj.page, '00-regular-user-playlists.png');
 
   // ana: account, then admin, then signs in again.
   const ana = await phone();
@@ -142,14 +151,14 @@ try {
   let list = await rows(ana.page);
   check('Spotify link → the official videos, found with the Worker’s key (no key asked for)', found && list[0].href === 'https://youtu.be/4NRXx6U8ABQ' && list[1].href === 'https://youtu.be/TUVcZfQe-Kw' && await R(ana.page, (r) => r.querySelector('#gpa-lists-key').hidden), JSON.stringify(list.map((x) => x.t + ': ' + x.href)));
   check('…a song with no clear official video keeps its search link', /Search YouTube/.test(list[2].link) && /search_query=Unknown%20Band/.test(list[2].href));
-  check('…3 YouTube searches, one per song', ytSearches === 3, String(ytSearches));
+  check('…3 YouTube searches, one per song', ytSearches === 5, String(ytSearches - 2));
   await shot(ana.page, '01-app-links-found.png');
 
   // 3: an Apple Music playlist.
   await ana.page.fill(sr('#gpa-lists-url'), 'https://music.apple.com/us/playlist/chill-mix/pl.u-abcdefgh123');
   await ana.page.click(sr('#gpa-lists-go'));
   const apple = await waitFor(ana.page, (r) => /Chill Mix/.test(r.querySelector('#gpa-lists-view .gpa-yl-name') ? r.querySelector('#gpa-lists-view .gpa-yl-name').textContent : '') && /Found 2 of 2/.test(r.querySelector('#gpa-lists-status').textContent), null, 20000);
-  check('Apple Music link → “Chill Mix”, both songs found', apple, JSON.stringify(await rows(ana.page)));
+  check('Apple Music link → “Chill Mix”, both songs found, from the cache (kj looked them up): no new searches', apple && ytSearches === 5, JSON.stringify(await rows(ana.page)) + ' searches ' + ytSearches);
   const saved = await waitFor(ana.page, (r) => r.querySelectorAll('#gpa-lists-saved .gpa-yl-saved li').length === 2, null, 10000);
   check('“Your playlists” lists both, organized by playlist', saved, await R(ana.page, (r) => r.querySelector('#gpa-lists-saved').textContent.replace(/\s+/g, ' ')));
   await R(ana.page, (r) => r.querySelector('#gpa-lists-saved').scrollIntoView({ block: 'center' }));
@@ -180,20 +189,22 @@ try {
   await shot(pcApp.page, '03-web-app-on-computer.png');
   check('The YouTube key never reached the browser', received.length > 5 && !received.some((t) => t.includes(YT_KEY)), received.length + ' responses checked');
 
-  // 5: the console injected into a website: no Playlists.
+  // 5: the console injected into a website: Playlists works there too.
   const pc = await computer();
   s = await signIn(pc.page, ANA, 'signin');
   await tab(pc.page, 'music');
   await pc.page.waitForTimeout(800);
-  check('In the console on a website, ana has no Playlists button', s.inside && await R(pc.page, (r) => r.querySelector('.gpx-src[data-src="lists"]').hidden), JSON.stringify(s));
+  check('In the console on a website, ana has the Playlists button', s.inside && await R(pc.page, (r) => !r.querySelector('.gpx-src[data-src="lists"]').hidden), JSON.stringify(s));
   // With ana's own sign-in from that website (her real session token).
   const fromSite = await pc.page.evaluate(async ([u, k, who]) => {
     const tok = (JSON.parse(localStorage.getItem(k) || '{}') || {}).token || '';
     const r = await fetch(u + '/music/lists?user=' + encodeURIComponent(who), { headers: { 'X-GPA-Session': tok } });
     return { signedIn: !!tok, status: r.status, body: await r.json() };
   }, [env.workerUrl, 'gpa_session_token', ANA]);
-  check('…and the Worker refuses her Playlists requests from a website, even signed in', fromSite.signedIn && fromSite.status === 403 && fromSite.body.appOnly === true, JSON.stringify(fromSite));
-  await shot(pc.page, '04-website-console-no-playlists.png');
+  check('…and the Worker answers her Playlists requests from a website: both lists', fromSite.signedIn && fromSite.status === 200 && fromSite.body.lists.length === 2, JSON.stringify(fromSite).slice(0, 200));
+  await R(pc.page, (r) => r.querySelector('.gpx-src[data-src="lists"]').click());
+  await waitFor(pc.page, (r) => r.querySelectorAll('#gpa-lists-saved .gpa-yl-saved li').length === 2, null, 10000);
+  await shot(pc.page, '04-website-console-playlists.png');
 
   for (const [n, p] of [['kj', kj], ['ana phone', ana], ['ana web app on computer', pcApp], ['ana website console', pc]]) check(`No page errors (${n})`, p.page._errors.length === 0, p.page._errors.slice(0, 2).join(' | '));
   for (const p of [kj, ana, pcApp, pc]) await p.ctx.close();

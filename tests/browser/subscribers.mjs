@@ -9,6 +9,9 @@
 //   6  owner renews; renzo gets back in
 //   7  a name put on Allowed users without being made a subscriber gets the
 //      automatic month (1st to 1st), and Security → Recent events folds away
+//   8  Free access: the owner lets someone in for free (no end date); an
+//      admin does the same for a week from their own Admin panel; the owner
+//      ends one
 // (The exact-time cut-off, calendar months, reminders and the cron clean-up
 // are covered with a simulated clock in tests/worker.test.mjs and
 // tests/push.test.mjs.)
@@ -16,7 +19,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { serve, launch, ROOT } from './harness.mjs';
+import { serve, launch, ROOT, HOST_PAGE } from './harness.mjs';
 import { startEnv } from './env.mjs';
 
 const OUT = process.argv[2] || 'subscribers-out';
@@ -28,11 +31,13 @@ const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok }); con
 const scriptHost = await serve((rq, rs) => { rs.setHeader('Content-Type', 'text/plain'); rs.end(fs.readFileSync(path.join(ROOT, 'script.js'))); });
 const env = await startEnv({ extraEnv: { ADMIN_TOKEN: ADMIN, CONSOLE_SCRIPT_URL: `http://127.0.0.1:${scriptHost.port}/script.js` } });
 const admin = (p, body) => fetch(env.workerUrl + p, { method: 'POST', headers: { Authorization: 'Bearer ' + ADMIN, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
+const site = await serve((rq, rs) => { rs.setHeader('Content-Type', 'text/html'); rs.end(HOST_PAGE); });
 const browser = await launch();
 const R = (page, fn, arg) => page.evaluate(([f, a]) => (0, eval)(f)(document.getElementById('gpa-root-host').shadowRoot, a), [String(fn), arg]);
 const run = Date.now().toString(36).slice(-4);
 const RENZO = 'renzo' + run;
 const MIRA = 'mira' + run;
+const GIFT = 'gift' + run, GIFT2 = 'pal' + run, ADM = 'adm' + run;
 const sr = (sel) => `#gpa-root-host >> ${sel}`;
 const shot = (page, name) => page.screenshot({ path: path.join(OUT, name) });
 
@@ -47,6 +52,18 @@ async function phone() {
   page.on('pageerror', (e) => page._errors.push(String(e)));
   await page.goto(env.workerUrl + '/console/');
   await page.waitForFunction(() => !!document.getElementById('gpa-root-host'), null, { timeout: 30000 });
+  return { ctx, page };
+}
+// The console on a website, on a computer (moderators can't use the phone app).
+async function computer() {
+  const ctx = await browser.newContext({ viewport: { width: 1200, height: 860 } });
+  await ctx.addInitScript((u) => { try { localStorage.setItem('gpa_admin_tele_endpoint', u); localStorage.setItem('gpa_openai_key_skip', '1'); } catch (e) { /* ignore */ } }, env.workerUrl);
+  const page = await ctx.newPage();
+  page._errors = [];
+  page.on('pageerror', (e) => page._errors.push(String(e)));
+  await page.goto(`http://127.0.0.1:${site.port}/`);
+  await page.evaluate((c) => { (0, eval)(c); }, fs.readFileSync(path.join(ROOT, 'script.js'), 'utf8'));
+  await page.waitForFunction(() => !!document.getElementById('gpa-root-host'));
   return { ctx, page };
 }
 async function signUp(page, user, button = 'signup') {
@@ -205,6 +222,85 @@ try {
   await owner.page.waitForTimeout(300);
   f = await fold();
   check('Tapping again folds it', f.exp === 'false' && f.hidden, JSON.stringify(f));
+
+  // 8: Free access. The owner gives gift free access with no end date.
+  const freeRow = (page, u) => R(page, (root, x) => { const el = [...root.querySelectorAll('.gac-free-row')].find((r) => r.dataset.user.toLowerCase() === x.toLowerCase()); return el ? el.textContent.replace(/\s+/g, ' ').trim() : null; }, u);
+  await owner.page.waitForFunction(() => { const b = document.getElementById('gpa-root-host').shadowRoot.querySelector('#gac-free'); return b && !/Loading/.test(b.textContent); }, null, { timeout: 15000 }).catch(() => {});
+  check('Security has a “Free access” card right above Subscribers', await R(owner.page, (root) => { const fc = root.querySelector('#gac-free-card'), sc = root.querySelector('#gac-subs-card'); return !!fc && !!sc && fc.nextElementSibling === sc && /Give free access/.test(fc.textContent); }));
+  await R(owner.page, (root) => root.querySelector('#gac-free-card').scrollIntoView({ block: 'start' }));
+  await owner.page.fill(sr('#gac-free-name'), GIFT);
+  await owner.page.fill(sr('#gac-free-note'), 'Birthday');
+  check('“How long” starts on “No end date”', (await owner.page.inputValue(sr('#gac-free-period'))) === 'none');
+  await owner.page.waitForTimeout(200);
+  await shot(owner.page, '10-free-access-form.png');
+  await owner.page.click(sr('#gac-free-form button[type="submit"]'));
+  await owner.page.waitForFunction((u) => [...document.getElementById('gpa-root-host').shadowRoot.querySelectorAll('.gac-free-row')].some((x) => x.dataset.user === u), GIFT, { timeout: 10000 }).catch(() => {});
+  let fr = await freeRow(owner.page, GIFT);
+  check('gift is listed: “Free · no end”, given by the owner, the note', fr && /Free · no end/.test(fr) && /given by \w+/.test(fr) && /Birthday/.test(fr) && /End free access/.test(fr), fr);
+  check('gift can get in', (await (await fetch(env.workerUrl + '/access?user=' + GIFT)).json()).allowed === true);
+  await owner.page.waitForFunction((u) => [...document.getElementById('gpa-root-host').shadowRoot.querySelectorAll('.gac-subscr')].some((x) => x.dataset.user === u), GIFT, { timeout: 10000 }).catch(() => {});
+  const gsub = await subRow(owner.page, GIFT);
+  check('Subscribers shows gift as “Free · no end” with only “End free access”', gsub && /Free · no end/.test(gsub) && /no end/.test(gsub) && /End free access/.test(gsub) && !/Renew/.test(gsub), gsub);
+  await R(owner.page, (root) => root.querySelector('#gac-free-card').scrollIntoView({ block: 'start' }));
+  await owner.page.waitForTimeout(300);
+  await shot(owner.page, '11-free-access-given.png');
+
+  // An admin gives pal a week from her own Admin panel (no owner token).
+  await admin('/admin/config', { allowlist: { on: true, users: [...(await (await fetch(env.workerUrl + '/admin/config/view', { headers: { Authorization: 'Bearer ' + ADMIN } })).json()).config.allowlist.users, ADM] } }).catch(() => {});
+  const adm = await phone();
+  r = await signUp(adm.page, ADM);
+  check('adm creates an account', r.inside, JSON.stringify(r));
+  await admin('/admin/user/action', { u: ADM, action: 'setrole', role: 'admin' });
+  await adm.page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await adm.page.waitForFunction(() => document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-login').style.display !== 'none', null, { timeout: 25000 }).catch(() => {});
+  r = await signUp(adm.page, ADM, 'signin');
+  check('adm signs in again as an admin', r.inside, JSON.stringify(r));
+  await R(adm.page, (root) => { const n = root.querySelector('.gpa-dropdown-item[data-tab="admin"]'); n.style.display = ''; n.click(); });
+  await adm.page.waitForFunction(() => { const r2 = document.getElementById('gpa-root-host').shadowRoot; return !r2.querySelector('#gac-layout').hidden && /admin/.test(r2.querySelector('#gac-who').textContent); }, null, { timeout: 15000 }).catch(() => {});
+  await R(adm.page, (root) => root.querySelector('.gps-tab[data-asec="security"]').click());
+  await adm.page.waitForFunction(() => { const b2 = document.getElementById('gpa-root-host').shadowRoot.querySelector('#gac-free'); return b2 && !/Loading/.test(b2.textContent); }, null, { timeout: 15000 }).catch(() => {});
+  check('Made an admin, adm has no subscription countdown (staff are unlimited)', await R(adm.page, (root) => { const el = root.querySelector('#gpa-substrip'); return !el || el.hidden; }));
+  check('The admin sees Free access in Security (and not Subscribers, which stays the owner’s)', await R(adm.page, (root) => !!root.querySelector('#gac-free-form') && !root.querySelector('#gac-subs-card') && /The owner gets an alert/.test(root.querySelector('#gac-free').textContent)));
+  await R(adm.page, (root) => root.querySelector('#gac-free-card').scrollIntoView({ block: 'start' }));
+  await adm.page.fill(sr('#gac-free-name'), GIFT2);
+  await adm.page.selectOption(sr('#gac-free-period'), '1w');
+  await adm.page.click(sr('#gac-free-form button[type="submit"]'));
+  await adm.page.waitForFunction((u) => [...document.getElementById('gpa-root-host').shadowRoot.querySelectorAll('.gac-free-row')].some((x) => x.dataset.user === u), GIFT2, { timeout: 10000 }).catch(() => {});
+  fr = await freeRow(adm.page, GIFT2);
+  const wkEnd = new Date(Date.now() + 7 * 864e5).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  check('The admin gave pal a week: “Free until <a week from now>”, given by the admin', fr && fr.includes('Free until ' + wkEnd) && fr.includes('given by ' + ADM), fr + ' (expected ' + wkEnd + ')');
+  check('pal can get in', (await (await fetch(env.workerUrl + '/access?user=' + GIFT2)).json()).allowed === true);
+  await adm.page.waitForTimeout(300);
+  await shot(adm.page, '12-admin-gives-free-access.png');
+
+  // The owner ends gift's free access: gift is out.
+  await R(owner.page, (root) => { root.querySelector('.gps-tab[data-asec="overview"]').click(); });
+  await owner.page.waitForTimeout(800);
+  await R(owner.page, (root) => root.querySelector('.gps-tab[data-asec="security"]').click());
+  await owner.page.waitForFunction((u) => [...document.getElementById('gpa-root-host').shadowRoot.querySelectorAll('.gac-free-row')].some((x) => x.dataset.user === u), GIFT2, { timeout: 15000 }).catch(() => {});
+  check('The owner sees what the admin gave', /given by /.test(await freeRow(owner.page, GIFT2) || ''), await freeRow(owner.page, GIFT2));
+  await R(owner.page, (root, u) => { window.confirm = () => true; [...root.querySelectorAll('.gac-free-row')].find((x) => x.dataset.user === u).querySelector('[data-free="end"]').click(); }, GIFT);
+  await owner.page.waitForFunction((u) => ![...document.getElementById('gpa-root-host').shadowRoot.querySelectorAll('.gac-free-row')].some((x) => x.dataset.user === u), GIFT, { timeout: 10000 }).catch(() => {});
+  check('“End free access”: gift leaves the list and can’t get in', !(await freeRow(owner.page, GIFT)) && (await (await fetch(env.workerUrl + '/access?user=' + GIFT)).json()).allowed === false);
+  // A moderator (no Security page) finds the same card in Moderation, in the console on a computer.
+  await admin('/admin/user/action', { u: ADM, action: 'setrole', role: 'moderator' });
+  await adm.page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await adm.page.waitForFunction(() => document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-login').style.display !== 'none', null, { timeout: 25000 }).catch(() => {});
+  await adm.ctx.close();
+  await admin('/admin/user/action', { u: ADM, action: 'revokesessions' });   // the owner signs the phone out, so the computer can sign in
+  const mod = await computer();
+  r = await signUp(mod.page, ADM, 'signin');
+  await R(mod.page, (root) => { const n = root.querySelector('.gpa-dropdown-item[data-tab="admin"]'); n.style.display = ''; n.click(); });
+  await mod.page.waitForFunction(() => { const r2 = document.getElementById('gpa-root-host').shadowRoot; return !r2.querySelector('#gac-layout').hidden && /moderator/.test(r2.querySelector('#gac-who').textContent); }, null, { timeout: 15000 }).catch(() => {});
+  await R(mod.page, (root) => root.querySelector('.gps-tab[data-asec="moderation"]').click());
+  await mod.page.waitForFunction((u) => [...document.getElementById('gpa-root-host').shadowRoot.querySelectorAll('.gps-sec[data-asec="moderation"] .gac-free-row')].some((x) => x.dataset.user === u), GIFT2, { timeout: 15000 }).catch(() => {});
+  check('As a moderator: Security is hidden, and Free access is in Moderation (with pal listed)', r.inside && await R(mod.page, (root) => root.querySelector('.gps-tab[data-asec="security"]').hidden && !!root.querySelector('.gps-sec[data-asec="moderation"] #gac-free-form')) && !!(await freeRow(mod.page, GIFT2)), JSON.stringify(r));
+  await R(mod.page, (root) => root.querySelector('.gps-sec[data-asec="moderation"] #gac-free-card').scrollIntoView({ block: 'start' }));
+  await mod.page.waitForTimeout(300);
+  await shot(mod.page, '13-moderator-free-access.png');
+  check('No page errors (moderator)', mod.page._errors.length === 0, mod.page._errors.slice(0, 2).join(' | '));
+  await mod.ctx.close();
+  check('No page errors (admin)', adm.page._errors.length === 0, adm.page._errors.slice(0, 2).join(' | '));
   check('No page errors (owner)', owner.page._errors.length === 0, owner.page._errors.slice(0, 2).join(' | '));
   check('No page errors (renzo)', renzo.page._errors.length === 0, renzo.page._errors.slice(0, 2).join(' | '));
   await owner.ctx.close();
@@ -212,10 +308,11 @@ try {
 } finally {
   await admin('/admin/config', { allowlist: { on: false, users: [] } }).catch(() => {});
   await admin('/admin/subscriptions', { action: 'delete', user: RENZO }).catch(() => {});
-  await admin('/admin/subscriptions', { action: 'delete', user: MIRA }).catch(() => {});
+  for (const u of [MIRA, GIFT, GIFT2]) await admin('/admin/subscriptions', { action: 'delete', user: u }).catch(() => {});
   await browser.close();
   await env.close();
   await scriptHost.close();
+  await site.close();
 }
 const passed = results.filter((x) => x.ok).length;
 console.log(`\n${passed}/${results.length} checks passed`);

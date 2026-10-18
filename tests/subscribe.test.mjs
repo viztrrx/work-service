@@ -275,7 +275,7 @@ test('subscribe: Terms, Refund & Cancellation and Privacy pages; contact email; 
   } finally { st.restore(); }
 });
 
-test('subscribe: members who already pay can add a one-time contribution ($8–$500); it never buys a subscription', async () => {
+test('subscribe: members who already pay can add a one-time contribution ($6–$500); it never buys a subscription', async () => {
   const st = stubStripe();
   try {
     const t = setup();
@@ -302,7 +302,7 @@ test('subscribe: members who already pay can add a one-time contribution ($8–$
     assert.equal((await t.call('/subscribe/check?user=stranger')).data.ok, true);
     // Amount and member checks.
     const give = (body) => t.call('/subscribe/contribute', { method: 'POST', body });
-    assert.equal((await give({ user: 'kj', cents: 799 })).status, 400, 'under $8');
+    assert.equal((await give({ user: 'kj', cents: 599 })).status, 400, 'under $6');
     assert.equal((await give({ user: 'kj', cents: 50001 })).status, 400, 'over $500');
     assert.equal((await give({ user: 'kj', cents: 10.5 })).status, 400, 'whole cents only');
     assert.equal((await give({ user: 'kj', cents: 'lots' })).status, 400);

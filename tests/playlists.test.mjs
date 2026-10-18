@@ -1,4 +1,4 @@
-// Playlist → YouTube links (Music → Playlists, owner and admins). Spotify,
+// Playlist → YouTube links (Music → Playlists, everyone signed in). Spotify,
 // Apple Music and YouTube are replaced by stubs that answer in the shape of
 // their public pages / API (the real services can't be reached from tests).
 import { test } from 'node:test';
@@ -102,7 +102,7 @@ test('playlists: reads Spotify (embed) and Apple Music pages', async () => {
   } finally { f.restore(); }
 });
 
-test('playlists: owner and admins, app only; Worker key only; each song searched once', async () => {
+test('playlists: everyone signed in, app or website; Worker key only; each song searched once', async () => {
   const f = stubFetch({ quotaAfter: 2 });
   try {
     const env = { TELEMETRY: makeKV(), ADMIN_TOKEN: ADMIN, OWNER: 'boss' };
@@ -113,13 +113,14 @@ test('playlists: owner and admins, app only; Worker key only; each song searched
     };
     const searches = () => f.seen.filter((u) => u.startsWith('https://www.googleapis.com/')).length;
     const SP = 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=1';
-    // Not in the app (a website, or no origin at all): refused, even for the owner.
+    // On a website (not the app) it works too now (owner's call).
     const web = await call('/music/lists?user=boss', { headers: owner, app: false });
-    assert.equal(web.status, 403);
-    assert.equal(web.data.appOnly, true);
-    assert.equal((await worker.fetch(new Request('https://w.test/music/lists?user=boss', { headers: owner }), env, { waitUntil() {} })).status, 403);
-    // A regular user, in the app: refused.
-    assert.equal((await call('/music/lists?user=kj')).status, 403);
+    assert.equal(web.status, 200, JSON.stringify(web.data));
+    assert.equal((await worker.fetch(new Request('https://w.test/music/lists?user=boss', { headers: owner }), env, { waitUntil() {} })).status, 200);
+    // A typed name without signing in: refused (lists are saved to an account).
+    const anon = await call('/music/lists?user=kj');
+    assert.deepEqual([anon.status, anon.data.signIn], [401, true]);
+    assert.equal((await call('/music/lists?user=boss')).status, 401, 'the owner’s name alone isn’t proof');
     // The owner, in the app: imports a playlist.
     const imp = await call('/music/lists/import?user=boss', { method: 'POST', headers: owner, body: { url: SP } });
     assert.equal(imp.status, 200, JSON.stringify(imp.data));
@@ -184,5 +185,50 @@ test('playlists: owner and admins, app only; Worker key only; each song searched
     } finally { g.restore(); }
     // Delete.
     assert.deepEqual((await call('/music/lists/delete?user=boss', { method: 'POST', headers: owner, body: { id } })).data.lists, []);
+  } finally { f.restore(); }
+});
+
+test('playlists: a regular signed-in user can use them, with a daily cap on new lookups (cached songs are free)', async () => {
+  const f = stubFetch();
+  try {
+    const env = { TELEMETRY: makeKV(), ADMIN_TOKEN: ADMIN, OWNER: 'boss', YOUTUBE_API_KEY: 'yt-key-1' };
+    const call = async (path, { method = 'GET', headers = {}, body } = {}) => {
+      const res = await worker.fetch(new Request('https://w.test' + path, { method, headers: { 'CF-Connecting-IP': '1.2.3.4', Origin: 'https://school.example', ...headers }, body: body == null ? undefined : JSON.stringify(body) }), env, { waitUntil() {} });
+      return { status: res.status, data: await res.json().catch(() => ({})) };
+    };
+    const searches = () => f.seen.filter((u) => u.startsWith('https://www.googleapis.com/')).length;
+    const SP = 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=1';
+    const v = (u) => (u + '0'.repeat(64)).slice(0, 64).replace(/[^0-9a-f]/g, 'a');
+    const tok = (await call('/auth/register', { method: 'POST', body: { user: 'kj', verifier: v('kj') } })).data.token;
+    const kjH = { 'X-GPA-Session': tok };
+    // kj (a regular user, on the website) imports a playlist.
+    const imp = await call('/music/lists/import?user=kj', { method: 'POST', headers: kjH, body: { url: SP } });
+    assert.equal(imp.status, 200, JSON.stringify(imp.data));
+    // kj has already used 39 of today's 40 new lookups: one song is looked up, then it stops with a reason.
+    const day = new Date().toISOString().slice(0, 10);
+    await env.TELEMETRY.put('ytlists-search:' + day + ':kj', '39');
+    const r1 = await call('/music/lists/find?user=kj', { method: 'POST', headers: kjH, body: { id: imp.data.list.id } });
+    assert.deepEqual([r1.data.searched, r1.data.capped, r1.data.stop, r1.data.more], [1, true, true, false]);
+    assert.match(r1.data.error, /40 new song lookups today/);
+    assert.equal(searches(), 1);
+    assert.equal(await env.TELEMETRY.get('ytlists-search:' + day + ':kj'), '40');
+    // At the cap: nothing more is searched.
+    const r2 = await call('/music/lists/find?user=kj', { method: 'POST', headers: kjH, body: { id: imp.data.list.id } });
+    assert.deepEqual([r2.data.searched, r2.data.capped], [0, true]);
+    assert.equal(searches(), 1);
+    // The owner looks the same playlist up (no cap): the song kj found comes from the cache.
+    const oImp = await call('/music/lists/import?user=boss', { method: 'POST', headers: { Authorization: 'Bearer ' + ADMIN }, body: { url: SP } });
+    const o = await call('/music/lists/find?user=boss', { method: 'POST', headers: { Authorization: 'Bearer ' + ADMIN }, body: { id: oImp.data.list.id } });
+    assert.equal(o.data.searched, 2);
+    assert.equal(searches(), 3);
+    // Next time kj asks, the songs the owner found are cached: they fill in with no new lookup, even at the cap.
+    const r3 = await call('/music/lists/find?user=kj', { method: 'POST', headers: kjH, body: { id: imp.data.list.id } });
+    assert.equal(r3.data.list.pending, 0, JSON.stringify(r3.data.list).slice(0, 300));
+    assert.equal(searches(), 3);
+    // Regular users: 10 playlists a day.
+    await env.TELEMETRY.put('ytlists-rate:' + day + ':kj', '10');
+    const cap = await call('/music/lists/import?user=kj', { method: 'POST', headers: kjH, body: { url: SP } });
+    assert.equal(cap.status, 429);
+    assert.match(cap.data.error, /10 playlists today/);
   } finally { f.restore(); }
 });

@@ -14,7 +14,7 @@
 //   6  the footer (Terms, Refunds & cancellation, Privacy, contact email),
 //      the renewal terms by the button, and each policy page on a phone
 //   7  a member who already pays types their name: instead of Subscribe they
-//      get a one-time contribution ($8 or more) → checkout → "Thank you";
+//      get a one-time contribution ($6 or more) → checkout → "Thank you";
 //      the owner's Subscribers card shows it; the subscription is unchanged
 //   node tests/browser/subscribe.mjs [outDir]
 import fs from 'node:fs';
@@ -208,8 +208,9 @@ try {
   await page.fill('#user', NAME);
   const giveShown = await page.waitForFunction(() => !document.getElementById('contrib').hidden, null, { timeout: 8000 }).then(() => true, () => false);
   check('A member who already pays gets “already subscribed” and the contribution box, not Subscribe', giveShown && await page.isHidden('#subbox') && /already subscribed/.test(await page.textContent('#hint')), await page.textContent('#hint'));
-  await page.fill('#amt', '7');
-  check('Under $8: the button turns off and says the smallest is $8', await page.isDisabled('#give') && /smallest contribution is \$8\.00/.test(await page.textContent('#amt-hint')), await page.textContent('#amt-hint'));
+  check('The smallest contribution is $6: the first quick button is $6 and starts picked', (await page.textContent('#contrib [data-amt="6"]')).trim() === '$6' && await page.getAttribute('#contrib [data-amt="6"]', 'aria-pressed') === 'true' && (await page.textContent('#give')).trim() === 'Contribute $6.00', await page.textContent('#give'));
+  await page.fill('#amt', '5.99');
+  check('Under $6: the button turns off and says the smallest is $6', await page.isDisabled('#give') && /smallest contribution is \$6\.00/.test(await page.textContent('#amt-hint')), await page.textContent('#amt-hint'));
   await page.click('#contrib [data-amt="20"]');
   check('Tapping $20: “Contribute $20.00”', (await page.textContent('#give')).trim() === 'Contribute $20.00' && await page.getAttribute('#contrib [data-amt="20"]', 'aria-pressed') === 'true', await page.textContent('#give'));
   await page.screenshot({ path: path.join(OUT, '09-contribute.png') });

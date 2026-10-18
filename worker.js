@@ -449,6 +449,11 @@ const adminLink = (sec, params) => appLink('admin', { sec, ...(params || {}) });
 const SUB_PERIODS = { '1w': { days: 7 }, '2w': { days: 14 }, '1m': { months: 1 }, '3m': { months: 3 }, '6m': { months: 6 }, '12m': { months: 12 } };
 const SUB_PERIOD_LABEL = { '1w': '1 week', '2w': '2 weeks', '1m': '1 month', '3m': '3 months', '6m': '6 months', '12m': '1 year' };
 const SUB_REMIND_MS = 3 * 24 * 3600 * 1000;
+// Playlists for everyone: per person a day (the owner and admins: 30 imports, no lookup cap).
+const LISTS_USER_IMPORTS = 10;
+const LISTS_USER_SEARCHES = 40;
+// Free access with no end date (Admin → Security → Free access) ends here.
+const FREE_FOREVER = Date.UTC(9999, 0, 1);
 function addSubPeriod(from, period) {
   const p = SUB_PERIODS[period] || SUB_PERIODS['1m'];
   if (p.days) return from + p.days * 24 * 3600 * 1000;
@@ -1374,7 +1379,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     const mySubscription = (cfg, user) => {
       const s = subscriptionOf(cfg, user);
       if (!s || s.expiresAt <= Date.now() || String(user).toLowerCase() === OWNER) return null;
-      return { startedAt: s.startedAt, expiresAt: s.expiresAt, period: s.period, ...(s.autoRenew ? { autoRenew: true } : {}), ...(s.auto ? { auto: true } : {}) };
+      if (s.free && s.expiresAt >= FREE_FOREVER) return null;   // free, no end: nothing to count down
+      return { startedAt: s.startedAt, expiresAt: s.expiresAt, period: s.period, ...(s.autoRenew ? { autoRenew: true } : {}), ...(s.auto ? { auto: true } : {}), ...(s.free ? { free: true } : {}) };
     };
     // Why a name is refused, in words for that person.
     const deniedReason = (cfg, user) => (subscriptionOf(cfg, user) ? SUB_ENDED : ACCESS_DENIED);
@@ -1628,6 +1634,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       '/admin/access-requests':        { method: 'GET',  perm: 'system.manage' },
       '/admin/access-requests/decide': { method: 'POST', perm: 'system.manage' },
       '/admin/subscriptions':          { method: 'POST', perm: 'system.manage' },
+      '/admin/free-access':            { method: 'POST', perm: 'coadmin' },
       '/admin/invites':                { method: 'POST', perm: 'system.manage' },
       '/admin/heatmap':                { method: 'GET',  perm: 'users.view' },
       '/admin/weekly':                 { method: 'POST', perm: 'system.manage' },
@@ -1813,6 +1820,76 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       }
       return json({ error: 'action must be list, create or revoke' }, 400);
     }
+    // Free access (Admin → Security → Free access; moderators: Moderation):
+    // the owner, admins and moderators can let someone in for free, whatever
+    // their subscription says, with no end date or for a set time. It's a
+    // subscription record with free: true, so access, the sweep and the
+    // subscribe page treat it like one; nothing goes in the money ledger.
+    // When staff give it, the owner gets an alert. POST { action: 'list' |
+    // 'give' | 'end', user, period: 'none' | '1w' | … , note }.
+    if (url.pathname === '/admin/free-access') {
+      const kv = env.TELEMETRY;
+      let body = {};
+      try { body = JSON.parse(await req.text()) || {}; } catch (e) { return json({ error: 'invalid request' }, 400); }
+      const principal = await resolvePrincipal();
+      const by = principal.role === 'owner' ? OWNER : String(principal.user || (principal.actor === 'coadmin-token' ? 'co-admin' : principal.actor) || principal.role).slice(0, 40);
+      const cfg = await getConfig(kv);
+      cfg.subscriptions = cfg.subscriptions && typeof cfg.subscriptions === 'object' ? cfg.subscriptions : {};
+      const now = Date.now();
+      const view = () => ({ ok: true, periods: SUB_PERIOD_LABEL,
+        free: Object.values(cfg.subscriptions).filter((s) => s && s.free && !s.ended && s.expiresAt > now)
+          .map((s) => ({ user: s.user, startedAt: s.startedAt, expiresAt: s.expiresAt >= FREE_FOREVER ? null : s.expiresAt, by: s.freeBy || '', note: s.note || '' }))
+          .sort((a, b) => b.startedAt - a.startedAt) });
+      const action = String(body.action || 'list');
+      if (action === 'list') return json(view());
+      const name = String(body.user || '').trim().replace(/^@/, '');
+      if (!/^[A-Za-z0-9_.-]{1,40}$/.test(name)) return json({ error: 'Enter a username (letters, numbers, . _ -).' }, 400);
+      const key = name.toLowerCase();
+      if (key === OWNER) return json({ error: 'That’s the owner: always in.' }, 400);
+      const cur = cfg.subscriptions[key];
+      const users = new Set(((cfg.allowlist && cfg.allowlist.users) || []).map((u) => String(u).toLowerCase()));
+      const day = (ts) => new Date(ts).toLocaleDateString('en-US', { timeZone: (env && env.OWNER_TZ) || 'America/New_York', month: 'short', day: 'numeric', year: 'numeric' });
+      let period = '';
+      if (action === 'give') {
+        if (await isStaffName(kv, key)) return json({ error: name + ' is an admin or moderator: they already get in without a subscription.' }, 400);
+        period = !body.period || body.period === 'none' ? 'none' : SUB_PERIODS[body.period] ? body.period : '';
+        if (!period) return json({ error: 'Pick a length.' }, 400);
+        const live = !!cur && !cur.ended && cur.expiresAt > now;
+        // Someone billed monthly by Stripe would keep paying: cancel that first.
+        if (live && cur.autoRenew && cur.stripe && cur.stripe.subscription) return json({ error: name + ' pays monthly through Stripe. Cancel it in Stripe first, then give free access.' }, 409);
+        const end = period === 'none' ? FREE_FOREVER : addSubPeriod(now, period);
+        const note = String(body.note || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+        let user = name;
+        try { const acct = await getAcct(kv, key); if (acct && acct.user) user = acct.user; } catch (e) { /* as typed */ }
+        cfg.subscriptions[key] = {
+          user: cur ? cur.user : user,
+          startedAt: live && cur.free ? cur.startedAt : now,
+          // Time they already have (paid or free) is never cut short.
+          expiresAt: Math.max(end, live ? cur.expiresAt : 0),
+          period: period === 'none' ? 'free' : period, note, free: true, freeBy: by,
+          history: [...((cur && cur.history) || []), { at: now, action: 'free', period, by, note }].slice(-24)
+        };
+        users.add(key);
+        // A request this person left on the sign-in screen is settled.
+        try { const rq = await kv.get(accessReqKey(key), 'json'); if (rq && rq.status === 'pending') { rq.status = 'approved'; rq.decidedAt = now; await kv.put(accessReqKey(key), JSON.stringify(rq), { expirationTtl: 60 * 60 * 24 * 30 }); } } catch (e) { /* best-effort */ }
+      } else if (action === 'end') {
+        if (!cur || !cur.free || cur.ended || cur.expiresAt <= now) return json({ error: name + ' doesn’t have free access.' }, 404);
+        cur.expiresAt = now; cur.ended = true; cur.endedAt = now;
+        cur.history = [...(cur.history || []), { at: now, action: 'free-end', by }].slice(-24);
+        users.delete(key);
+      } else return json({ error: 'action must be list, give or end' }, 400);
+      cfg.allowlist = { on: !!(cfg.allowlist && cfg.allowlist.on), users: [...users].slice(0, 500) };
+      await kv.put('config', JSON.stringify(cfg));
+      await logAudit(kv, { route: url.pathname, action: 'free_' + action, target: key, admin: principal.role, meta: { period, by } });
+      if (principal.role !== 'owner') {
+        const s = cfg.subscriptions[key];
+        await notifyOwner(env, action === 'give'
+          ? { cat: 'subs', title: by + ' gave ' + s.user + ' free access', body: (s.expiresAt >= FREE_FOREVER ? 'No end date.' : 'Until ' + day(s.expiresAt) + '.') + ' See Admin → Security → Free access.', url: adminLink('security', { focus: 'free', user: s.user }) }
+          : { cat: 'subs', title: by + ' ended ' + s.user + '’s free access', body: s.user + ' was taken off your allowed users.', url: adminLink('security', { focus: 'free' }) }).catch(() => {});
+      }
+      return json(view());
+    }
+
     // Subscribers (Admin → Security → Subscribers). POST { action: 'list' |
     // 'add' | 'renew' | 'end' | 'delete', user, period, note }.
     if (url.pathname === '/admin/subscriptions') {
@@ -1825,7 +1902,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       // The automatic month for listed names, so the card shows it right away.
       if ((await autoSubscribeListed(env, cfg, now)).length) await kv.put('config', JSON.stringify(cfg));
       const view = () => {
-        const list = Object.values(cfg.subscriptions).map((s) => ({ ...s, active: s.expiresAt > now, daysLeft: Math.max(0, Math.ceil((s.expiresAt - now) / 864e5)) }));
+        const list = Object.values(cfg.subscriptions).map((s) => ({ ...s, active: s.expiresAt > now, daysLeft: Math.max(0, Math.ceil((s.expiresAt - now) / 864e5)), ...(s.expiresAt >= FREE_FOREVER ? { forever: true } : {}) }));
         list.sort((a, b) => (b.active - a.active) || (a.active ? a.expiresAt - b.expiresAt : b.expiresAt - a.expiresAt));
         return { ok: true, subscriptions: list, allowlistOn: !!(cfg.allowlist && cfg.allowlist.on), periods: SUB_PERIOD_LABEL,
           ledger: (Array.isArray(cfg.subLedger) ? cfg.subLedger : []).slice(-1000) };
@@ -1852,8 +1929,10 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       const users = new Set(((cfg.allowlist && cfg.allowlist.users) || []).map((u) => String(u).toLowerCase()));
       const cur = cfg.subscriptions[key];
       if (action === 'add' || action === 'renew') {
+        if (action === 'add' && cur && cur.free && cur.expiresAt > now) return json({ error: name + ' has free access. End it in Free access first.' }, 409);
         if (action === 'add' && cur && cur.expiresAt > now && !cur.auto) return json({ error: name + ' is already subscribed until ' + new Date(cur.expiresAt).toISOString().slice(0, 10) + '. Use Renew to add time.' }, 409);
         if (action === 'renew' && !cur) return json({ error: name + ' isn’t a subscriber yet. Add them first.' }, 404);
+        if (action === 'renew' && cur.free && cur.expiresAt >= FREE_FOREVER) return json({ error: name + ' has free access with no end date.' }, 409);
         // Renewing early adds the time on top of what is left; otherwise the
         // new period starts at the chosen start date (default: now).
         const stacking = action === 'renew' && cur.expiresAt > now;
@@ -3182,6 +3261,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         const cur = cfg.subscriptions && cfg.subscriptions[key];
         // An automatic month on Allowed users isn't paid: they may subscribe (it replaces it).
         const autoMonth = !!cur && cur.auto && !cur.ended && cur.expiresAt > Date.now();
+        if (cur && cur.free && !cur.ended && cur.expiresAt > Date.now()) return { error: '“' + name + '” already has free access, so there’s nothing to pay. Contributions are welcome instead.', subscribed: true, key, canContribute: true, hasAccount: !!(await getAcct(kv, key)) };
         // Already paid up: never a second subscription; contributing is their only option.
         if (cur && !cur.ended && cur.expiresAt > Date.now() && !autoMonth) return { error: '“' + name + '” is already subscribed for this month, so it can’t be paid for again. Contributions are welcome instead.', subscribed: true, key, canContribute: true, hasAccount: !!(await getAcct(kv, key)) };
         if (!autoMonth && cfg.allowlist && cfg.allowlist.on && (cfg.allowlist.users || []).includes(key)) return { error: '“' + name + '” already has access. No need to subscribe.' };
@@ -3339,12 +3419,12 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           return json({ ok: true, url: sess.url });
         }
         // A member who already subscribes (and has an account) adds a
-        // one-time contribution: $8 to $500, Stripe Checkout in payment mode.
+        // one-time contribution: $6 to $500, Stripe Checkout in payment mode.
         if (url.pathname === '/subscribe/contribute' && req.method === 'POST') {
           let body = {};
           try { const raw = await req.text(); if (raw.length > 1024) throw 0; body = JSON.parse(raw) || {}; } catch (e) { return json({ ok: false, error: 'invalid request' }, 400); }
           const cents = contribCents(body.cents);
-          if (!cents) return json({ ok: false, error: 'Pick an amount from $8 to $500.' }, 400);
+          if (!cents) return json({ ok: false, error: 'Pick an amount from $6 to $500.' }, 400);
           const st = await nameStatus(body.user, '');
           if (!st.canContribute) return json({ ok: false, error: 'Contributions are only for subscribers. Subscribe first, then you can contribute.' }, 409);
           if (await checkoutLimited()) return json({ ok: false, error: 'Too many tries. Wait a bit and try again.' }, 429);
@@ -3459,6 +3539,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       const kv = env && env.TELEMETRY;
       const cfg = await getConfig(kv);
       const who = await effectiveUser(url.searchParams.get('user'));
+      const who0 = who;
       const listener = who.user;
       const staff = async () => {
         const p = await resolvePrincipal();
@@ -3531,14 +3612,20 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           }
           return json({ ...base, video, canLookUp: true, rights: rightsNote(video) });
         }
-        // Playlists → YouTube links (see web/playlists.js): the owner and
-        // admins, in the phone app only. The YouTube key is the Worker secret
-        // YOUTUBE_API_KEY: it never leaves the Worker and is only used to look
-        // up a song nobody has looked up before.
+        // Playlists → YouTube links (see web/playlists.js): everyone signed
+        // in, in the app or on the website (owner's call; it was owner and
+        // admins in the app only). Saved per account, so a verified session
+        // is needed (the owner may also use the admin token or owner code).
+        // The YouTube key is the Worker secret YOUTUBE_API_KEY: it never
+        // leaves the Worker and is only used to look up a song nobody has
+        // looked up before. Those new lookups are limited per person a day
+        // (LISTS_USER_SEARCHES) except for the owner and admins, so one
+        // person can't use up the key's daily quota for everyone.
         if (url.pathname.startsWith('/music/lists')) {
-          if (!fromApp()) return json({ ok: false, appOnly: true, error: 'Playlists work in the Agent Console app on your phone.' }, 403);
-          const who = await staff();
-          if (!who) return json({ ok: false, error: 'Playlists are for the owner and admins.' }, 403);
+          const boss = await staff();
+          const me = String(listener || '').trim();
+          const who = boss || (who0.verified && me && me.toLowerCase() !== 'anonymous' ? me : '');
+          if (!who) return json({ ok: false, signIn: true, error: 'Sign in to use Playlists.' }, 401);
           if (!kv) return json({ ok: false, error: 'storage not configured' }, 503);
           const lists = await readLists(kv, who);
           const ytKey = String((env && env.YOUTUBE_API_KEY) || '').trim();
@@ -3554,7 +3641,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           if (url.pathname === '/music/lists/import' && req.method === 'POST') {
             const rk = 'ytlists-rate:' + dayKey() + ':' + String(who).toLowerCase();
             const n = parseInt(await kv.get(rk), 10) || 0;
-            if (n >= 30) return json({ ok: false, error: 'That’s 30 playlists today. Try again tomorrow.' }, 429);
+            const cap = boss ? 30 : LISTS_USER_IMPORTS;
+            if (n >= cap) return json({ ok: false, error: 'That’s ' + cap + ' playlists today. Try again tomorrow.' }, 429);
             const read = await readPlaylist(env, body.url);
             const l = newList(read);
             const keep = [l, ...lists.filter((x) => x.url !== l.url)].slice(0, LISTS_MAX);
@@ -3568,7 +3656,11 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
             // Songs someone already looked up come from the shared cache
             // (ytm:<song>) and cost no YouTube search; only new songs are
             // searched, a few per request (the app keeps asking until done).
-            let error = '', quota = false, searched = 0, changed = 0, scanned = 0, needKey = false;
+            let error = '', quota = false, searched = 0, changed = 0, scanned = 0, needKey = false, capped = false;
+            // New lookups left today for this person (unlimited for the owner and admins).
+            const sk = 'ytlists-search:' + dayKey() + ':' + String(who).toLowerCase();
+            const used = boss ? 0 : parseInt(await kv.get(sk), 10) || 0;
+            const left = boss ? Infinity : Math.max(0, LISTS_USER_SEARCHES - used);
             for (const t of l.tracks) {
               if (searched >= MATCH_BATCH || scanned >= MATCH_SCAN) break;
               if (t.m !== undefined) continue;
@@ -3577,6 +3669,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
               const hit = await kv.get(ck, 'json');
               if (hit && 'm' in hit) { t.m = hit.m; changed++; continue; }
               if (!ytKey) { needKey = true; continue; }
+              if (searched >= left) { capped = true; break; }
               try {
                 t.m = await searchYouTube(env, ytKey, t);
                 searched++; changed++;
@@ -3584,6 +3677,11 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
               } catch (e) { error = e.message; quota = !!e.quota || !!e.badKey; break; }
             }
             if (changed) await writeLists(kv, who, lists);
+            if (!boss && searched) await kv.put(sk, String(used + searched), { expirationTtl: 2 * 24 * 3600 });
+            if (capped && !error) {
+              const pub = publicList(l);
+              return json({ ok: false, capped: true, stop: true, error: 'That’s ' + LISTS_USER_SEARCHES + ' new song lookups today. The rest are looked up tomorrow (songs someone already found show right away).', list: pub, more: false, searched });
+            }
             if (needKey && !error) {
               const pub = publicList(l);
               return json({ ok: false, needKey: true, error: 'Finding videos needs the YouTube key on the Worker (YOUTUBE_API_KEY).', list: pub, more: false, searched }, 200);
@@ -4391,6 +4489,11 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           a.role = role;
           a.epoch = (a.epoch || 0) + 1;   // role changes take effect on the next sign-in
           await kv.put(acctKey(u), JSON.stringify(a));
+          // Made staff: unlimited, so an automatic month (Allowed users) goes away now.
+          if (role !== 'user') {
+            const rc = await getConfig(kv);
+            if (rc.subscriptions && rc.subscriptions[u] && rc.subscriptions[u].auto) { delete rc.subscriptions[u]; await kv.put('config', JSON.stringify(rc)); }
+          }
           await logAudit(kv, { route: url.pathname, action: 'setrole', target: u, meta: { before, after: role } });
           return json({ ok: true, role });
         }

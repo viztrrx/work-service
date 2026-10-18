@@ -13,7 +13,11 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
-  **automatic month for Allowed users** + **Recent events folds** (owner:
+  **Free access** override in Security (owner, admins, moderators), **Playlists
+  for everyone** signed in, and contributions from **$6** (owner: "add a
+  override button… owner/staff only", "don't make it owner only make it so
+  everyone has access to it", "lower the price from $8 minimum to $6").
+  Before that: **automatic month for Allowed users** + **Recent events folds** (owner:
   "if i didn't put them as a subscriber but they are on the allowed list
   their subscription starts on the beginning of the month and only lasts a
   month… make the recent events collapsible"; chosen: at month end they
@@ -326,7 +330,7 @@ day, 14 days; not system notices), `trivia` (#public only). Memory only:
   tells the owner to refund and cancel the extra subscription, and the page
   says it'll be refunded.
   Contributions: `/subscribe/check` adds `canContribute` (and `hasAccount`)
-  for every active subscriber; the page then shows `#contrib` ($8–$500,
+  for every active subscriber; the page then shows `#contrib` ($6–$500 since the owner lowered it from $8,
   `CONTRIB_MIN_CENTS`/`CONTRIB_MAX_CENTS`) instead of Subscribe.
   `/subscribe/contribute` (same 10/h-per-network limit as checkout,
   `checkoutLimited`) makes a Checkout Session in **payment** mode with
@@ -398,7 +402,25 @@ day, 14 days; not system notices), `trivia` (#public only). Memory only:
   Alerts: `notifySubs` batches (more than 3 → one notification). The
   Security page's **Recent events** is a `foldCard` (`wireFold`, closed by
   default, remembered in `gac_sec_events_open`; the `focus=events` deep link
-  opens it). Tests: worker.test.mjs "automatic month", subscribers.mjs step 7.
+  opens it). Making someone staff (`setrole` moderator/admin) deletes their
+  auto record at once. Tests: worker.test.mjs "automatic month",
+  subscribers.mjs step 7.
+  **Free access** (owner: "add a override button if i wanna give access to
+  them incase im feeling nice or generous make it owner/staff only… same
+  area"): `/admin/free-access` (`coadmin`: owner, admins, moderators,
+  co-admin token) list/give/end. A subscription record with `free: true`,
+  `freeBy`, `period: 'free'` and `expiresAt = FREE_FOREVER` (year 9999) for
+  "no end", or `addSubPeriod` for a set time; never shortens a live record
+  (max of the two); refused for the owner, staff, and Stripe-billed
+  `autoRenew`; no ledger entry; settles a pending access request; staff
+  grants alert the owner (`notifyOwner`, `focus: 'free'` deep link); audit
+  `free_give`/`free_end`. Subscribers view adds `forever`; Add/Renew refuse a
+  live free record; `nameStatus` says "already has free access" (can
+  contribute); `mySubscription` hides a no-end free record (limited free:
+  strip says "Free access, a gift: ends …"). UI: `freeCard()` +
+  `wireFreeAccess()` in Security (above Subscribers) and, for roles without
+  `security.view` (moderators), in Moderation. Tests: worker.test.mjs "free
+  access", subscribers.mjs step 8 (owner, admin, moderator).
 
 ### 4.2 Chat
 All rooms live in `ChatRoom` DOs. The console polls every 3 s while Chat is
@@ -508,8 +530,10 @@ API), `mp3.mjs` (real conversions; needs system `ffmpeg`/`ffprobe`; the
 real-YouTube case is reported NOT RUN on purpose). Possible next steps if
 asked: nothing server-side is needed; a Cloudflare Container would only be
 worth it for files too big for a phone's memory.
-**Playlists → YouTube links** (owner + admins; `web/playlists.js`, routes
-`/music/lists*` gated by `staff()`, KV `ytlists:<who>`): paste a Spotify /
+**Playlists → YouTube links** (everyone signed in since 2026-10-19, owner:
+"don't make it owner only make it so everyone has access to it"; was owner +
+admins in the app only; `web/playlists.js`, routes `/music/lists*`: a
+verified session, or `staff()` for the owner token/code; KV `ytlists:<who>`): paste a Spotify /
 Apple Music playlist or album link → the Worker reads the song list
 (Spotify Web API if `SPOTIFY_CLIENT_ID/SECRET`, else the public embed page's
 `__NEXT_DATA__`, first 100 songs; Apple: the page's `serialized-server-data`
@@ -518,8 +542,11 @@ YouTube Data API with **only** the Worker secret `YOUTUBE_API_KEY` (the
 owner's wish: key in Cloudflare, not the code or the browser; a key sent by
 a browser is ignored), caching every answer in KV `ytm:<sha256 artist|title>`
 (60 days, 7 for no match) so each song is searched once across everyone;
-**app only**: `/music/lists*` refuses anything not `fromApp()` (403
-`appOnly`) and the button shows only in `APP_MODE`; `pickVideo` prefers the artist's Topic /
+no longer app only (the button shows for any signed-in session, website or
+app). Quota guard: regular users get `LISTS_USER_SEARCHES` (40) new YouTube
+lookups a day (`ytlists-search:<day>:<name>`; cached songs are free;
+`capped` answer stops the client loop) and `LISTS_USER_IMPORTS` (10) imports
+a day; the owner and admins keep 30 imports and no lookup cap; `pickVideo` prefers the artist's Topic /
 VEVO / official channel and rejects covers, sped-up, live etc. **Links only,
 nothing downloaded** — the owner first asked to rip the songs to MP3; that
 was declined (copyright) and this was the agreed alternative; don't add a
@@ -589,7 +616,7 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 ## 6. Testing
 
 ```bash
-npm test                                   # node --test tests/*.test.mjs (117 tests)
+npm test                                   # node --test tests/*.test.mjs (119 tests)
 npx wrangler deploy --dry-run --outdir /tmp/x   # bundle/config check, deploys nothing
 # Browser suites (Playwright vs local workerd), each takes an output dir for screenshots:
 node tests/browser/eaglercraft.e2e.mjs     # 83
@@ -601,7 +628,7 @@ node tests/browser/allowlist.mjs           # 6
 node tests/browser/access-requests.mjs     # 12
 node tests/browser/one-session.mjs         # 15
 node tests/browser/same-computer.mjs       # 12
-node tests/browser/subscribers.mjs         # 23
+node tests/browser/subscribers.mjs         # 39
 node tests/browser/owner-tools.mjs         # 15
 node tests/browser/staff-chat.mjs          # 19
 node tests/browser/chat-burst.mjs          # 4
@@ -613,9 +640,9 @@ node tests/browser/fun.mjs                 # 18
 node tests/browser/music.mjs               # 15
 node tests/browser/my-music.mjs            # 15
 node tests/browser/admin-app.mjs           # 20
-node tests/browser/playlists.mjs           # 21
+node tests/browser/playlists.mjs           # 23
 node tests/browser/mp3.mjs                 # 51 (+1 NOT RUN: real YouTube download; needs ffmpeg/ffprobe)
-node tests/browser/subscribe.mjs           # 37
+node tests/browser/subscribe.mjs           # 38
 node tests/browser/usage-meter.mjs         # 16
 node tests/browser/usage-meter-sizes.mjs   # 25
 node tests/browser/ask-photo-size.mjs      # 6

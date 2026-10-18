@@ -782,7 +782,11 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     { at: '2026-10-18T23:45:00-04:00', commit: '', title: 'YouTube to MP3 (owner)', parts: {
       music: ['feature', 'My music → YouTube to MP3 (owner only): FFmpeg on your device turns a video or audio file you own into a verified MP3 (128–320 kbps) with real progress and Cancel, then Download MP3 or Save to My music; a YouTube link shows the video’s details and how to get its audio legitimately'] } },
     { at: '2026-10-19T00:30:00-04:00', commit: '', title: 'Allowed users get a month automatically; Recent events folds', parts: {
-      admin: ['feature', 'Security → Subscribers: anyone on Allowed users you haven’t made a subscriber gets one automatically, from the 1st of the month to the 1st of the next (admins and moderators stay unlimited); Recent events folds away under its title'] } }
+      admin: ['feature', 'Security → Subscribers: anyone on Allowed users you haven’t made a subscriber gets one automatically, from the 1st of the month to the 1st of the next (admins and moderators stay unlimited); Recent events folds away under its title'] } },
+    { at: '2026-10-19T01:30:00-04:00', commit: '', title: 'Free access; Playlists for everyone; $6 contributions', parts: {
+      admin: ['feature', 'Security → Free access: the owner, admins and moderators can let someone in for free, with no end date or for a set time (moderators find it in Moderation); the owner gets an alert when staff do'],
+      music: ['feature', 'Playlists (Spotify / Apple Music → YouTube links) are open to everyone signed in, in the app or on the website; 40 new song lookups a day per person'],
+      console: ['change', 'Subscribe page: contributions start at $6'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -3567,7 +3571,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           </section>
           <section class="gpa-card gpx-card gpx-src-panel" data-src-panel="lists">
             <div class="gpx-card-head">${GPS_ICONS.link}<div class="gpa-card-title">Playlist → YouTube links</div></div>
-            <p class="gpa-sub">Paste a Spotify or Apple Music playlist or album link. You get each song's official YouTube video, organized by playlist and saved to your account. Only the owner and admins see this, in the app.</p>
+            <p class="gpa-sub">Paste a Spotify or Apple Music playlist or album link. You get each song's official YouTube video, organized by playlist and saved to your account. Songs someone already looked up show right away; each person can look up 40 new songs a day.</p>
             <div class="gpa-row gpx-composer">
               <input id="gpa-lists-url" class="gpa-input" placeholder="open.spotify.com/playlist/… or music.apple.com/…" aria-label="Spotify or Apple Music playlist link" autocomplete="off" />
               <button id="gpa-lists-go" class="gpa-btn primary" type="button">Get links</button>
@@ -11143,7 +11147,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // After start-up: the sign-in state is declared further down this file.
   setTimeout(() => { mp3Refresh(); onSessionChange(() => { mp3.ownerOk = null; mp3Refresh(); }); }, 0);
 
-  // ---- Playlists → YouTube links (owner and admins, app only; web/playlists.js) ----
+  // ---- Playlists → YouTube links (everyone signed in; web/playlists.js) ----
   // The Worker reads the playlist's songs and finds each one's official
   // video with its own YouTube key (the YOUTUBE_API_KEY secret, which never
   // reaches the browser); this shows the links, organized by playlist.
@@ -11153,11 +11157,12 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     saved: panel.querySelector('#gpa-lists-saved'), player: panel.querySelector('#gpa-lists-player'), open: null, finding: false
   };
   const SERVICE_NAME = { spotify: 'Spotify', apple: 'Apple Music' };
-  const listsStaff = () => APP_MODE && (!!admGet(ADMIN_KEYS.TELE_TOKEN) || !!admGet(ADMIN_KEYS.OWNER_CODE) || ['admin', 'owner'].includes(sessionRole()));
+  // Everyone signed in (owner's call), in the app or on the website.
+  const listsStaff = () => !!sessionToken() || !!admGet(ADMIN_KEYS.TELE_TOKEN) || !!admGet(ADMIN_KEYS.OWNER_CODE);
   async function listsCall(path, body) {
     const r = await fetch(musicBase() + withUser(path), { method: body ? 'POST' : 'GET', cache: 'no-store', headers: { ...musicStaffHeaders(), ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
     const d = await r.json().catch(() => ({}));
-    if (r.status === 403 && !d.needKey) { refreshListsAccess(false); }
+    if ((r.status === 401 || r.status === 403) && !d.needKey) { refreshListsAccess(false); }
     if (!r.ok && !d.list) throw new Error(d.error || ('Playlists are unavailable (' + r.status + ')'));
     return d;
   }
@@ -20447,7 +20452,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     bar.querySelector('i').style.width = pct + '%';
     bar.setAttribute('aria-valuenow', String(pct));
     bar.setAttribute('aria-valuetext', (sameDay ? 'Ends today' : days + ' days left') + ', until ' + endDay);
-    subStripEl.querySelector('#gpa-substrip-note').textContent = sub.auto
+    subStripEl.querySelector('#gpa-substrip-note').textContent = sub.free
+      ? 'Free access, a gift: ends ' + (sameDay ? 'today at ' + endTime : endDay + ' at ' + endTime) + '.'
+      : sub.auto
       ? 'This month’s access (on the allowed list) ends ' + (sameDay ? 'today at ' + endTime : endDay + ' at ' + endTime) + '. Subscribe on the payment page, or ask the owner, to keep it.'
       : left <= 3 * 864e5
         ? 'Your subscription ends ' + (sameDay ? 'today at ' + endTime : endDay + ' at ' + endTime) + '. Ask the owner to renew to keep access.'
@@ -21247,6 +21254,52 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       head.addEventListener('click', () => set(head.getAttribute('aria-expanded') !== 'true'));
     };
     const empty = (title, desc) => gpxEmpty({ icon: 'overview', title, desc, cls: 'gac-empty' });
+    // ---- Free access: the owner, admins and moderators let someone in for free ----
+    // (Security for the owner and admins, Moderation for moderators.)
+    const freeCard = () => card('Free access', `<div id="gac-free"><p class="gps-hint">Loading…</p></div>`, 'star', 'gac-free-card');
+    function wireFreeAccess(root, onChange) {
+      const el = root.querySelector('#gac-free');
+      if (!el) return;
+      const fmt = (ts) => new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric', year: new Date(ts).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+      let period = 'none';
+      const render = (d) => {
+        const periods = { none: 'No end date', ...(d.periods || {}) };
+        el.innerHTML = `<p class="gps-hint">Let someone in for free, whatever their subscription says: for good, or for a set time. ${isOwner() ? 'Admins and moderators can do this too, and you get an alert when they do.' : 'The owner gets an alert.'}</p>`
+          + `<form class="gac-subs-form" id="gac-free-form" autocomplete="off">`
+          + `<label>Username<input class="gpa-input" id="gac-free-name" placeholder="e.g. renzo" spellcheck="false" autocapitalize="off" maxlength="40" required></label>`
+          + `<label>How long<select class="gpa-input" id="gac-free-period">${Object.entries(periods).map(([k, v]) => `<option value="${esc(k)}"${k === period ? ' selected' : ''}>${esc(v)}</option>`).join('')}</select></label>`
+          + `<label class="gac-subs-wide">Note (optional)<input class="gpa-input" id="gac-free-note" placeholder="Birthday gift" maxlength="120"></label>`
+          + `<button class="gps-btn primary" type="submit">Give free access</button></form>`
+          + (d.free.length ? `<ul class="gac-acct-list gac-free-list">` + d.free.map((x) => `<li class="gac-acct gac-free-row" data-user="${esc(x.user)}"><div class="gac-acct-top"><span class="gac-req-name">${esc(x.user)}</span><span class="gac-req-badge pending">${esc(x.expiresAt ? 'Free until ' + fmt(x.expiresAt) : 'Free · no end')}</span></div>`
+            + `<div class="gac-req-meta">Since ${esc(fmt(x.startedAt))}${x.by ? ' · given by ' + esc(x.by) : ''}${x.note ? ' · ' + esc(x.note) : ''}</div>`
+            + `<div class="gac-req-actions"><button class="gps-btn" data-free="end" type="button">End free access</button></div></li>`).join('') + `</ul>`
+            : `<p class="gps-hint">Nobody has free access right now.</p>`);
+      };
+      const send = async (body) => { const r = await api('/admin/free-access', { method: 'POST', body }); render(r); if (onChange) onChange(); return r; };
+      el.addEventListener('change', (e) => { if (e.target.id === 'gac-free-period') period = e.target.value; });
+      el.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const user = el.querySelector('#gac-free-name').value.trim();
+        if (!user) return;
+        const btn = el.querySelector('#gac-free-form button[type="submit"]');
+        btn.disabled = true;
+        try {
+          const r = await send({ action: 'give', user, period, note: el.querySelector('#gac-free-note').value });
+          const x = r.free.find((f) => f.user.toLowerCase() === user.toLowerCase());
+          showToast(user + ' has free access' + (x && x.expiresAt ? ' until ' + fmt(x.expiresAt) : '') + '.');
+        } catch (err) { btn.disabled = false; showToast(err.message, { type: 'danger' }); }
+      });
+      el.addEventListener('click', async (e) => {
+        const btn = e.target.closest('button[data-free="end"]');
+        if (!btn) return;
+        const user = btn.closest('.gac-free-row').dataset.user;
+        if (!confirm('End ' + user + '’s free access now? They’re signed out and taken off Allowed users.')) return;
+        btn.disabled = true;
+        try { await send({ action: 'end', user }); showToast(user + '’s free access ended.'); }
+        catch (err) { btn.disabled = false; showToast(err.message, { type: 'danger' }); }
+      });
+      api('/admin/free-access', { method: 'POST', body: { action: 'list' } }).then(render, (err) => { el.innerHTML = '<p class="gps-hint">Couldn’t load free access: ' + esc(err.message) + '</p>'; });
+    }
     function bars(series, key, opts) {
       opts = opts || {};
       if (!series.length || !series.some((d) => d[key])) return `<p class="gps-hint">${esc(opts.emptyText || 'No data in this period yet.')}</p>`;
@@ -21498,6 +21551,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           + (isOwner() ? card('Phone app', `<div class="gac-allow-row"><span>Only you and admins can use the app</span><button class="gps-switch${d.config.appStaffOnly !== false ? ' primary' : ''}" id="gac-app-staff" type="button" aria-pressed="${d.config.appStaffOnly !== false}" aria-label="Only you and admins can use the app">Only you and admins can use the app</button></div>`
             + `<p class="gps-hint">The home-screen app (<code>/console/</code>) signs in with a name and PIN. With this on, only you and people with the <b>admin</b> role get in; everyone else is told to use the console on a computer. To make someone an admin: Users → their name → Role: admin → Change role (they sign in again once). Admins never need the admin token: the Admin panel opens from their role, and they can be signed in on their phone and a computer at the same time.</p>`, 'account', 'gac-app-card') : '')
           + (isOwner() ? card('Access requests', `<div id="gac-access-req"><p class="gps-hint">Loading…</p></div>`, 'key') : '')
+          + freeCard()
           + (isOwner() ? card('Subscribers', `<div id="gac-subs"><p class="gps-hint">Loading…</p></div>`, 'timer', 'gac-subs-card') : '')
           + (isOwner() ? card('Allowed users', `<p class="gps-hint">When on, only these usernames (and you) can create an account, sign in or use the console. Everyone else sees “Unable to create account”, and anyone already signed in who isn’t listed is signed out.</p>`
             + `<div class="gac-allow-row"><span>Only allow listed users</span><button class="gps-switch${d.config.allowlist && d.config.allowlist.on ? ' primary' : ''}" id="gac-allow-on" type="button" aria-pressed="${d.config.allowlist && d.config.allowlist.on ? 'true' : 'false'}" aria-label="Only allow listed users">Only allow listed users</button></div>`
@@ -21514,6 +21568,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
               + `</li>`).join('') + `</ul>` : ''), 'account') : '')
           + `<div id="gac-legacy-security"></div></aside></div>`;
         wireFold(b, 'gac-sec-events', 'gac_sec_events_open');
+        wireFreeAccess(b, () => loadSubs());
         // ---- Subscribers: paid access for a set time ----
         const subsEl = b.querySelector('#gac-subs');
         const fmtDay = (ts) => new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric', year: new Date(ts).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
@@ -21548,12 +21603,14 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             + (ledger.length ? `<div class="gac-subs-totals${giftTotal ? ' has-gifts' : ''}"><div><b>${esc(money(month))}</b><span>this month</span></div><div><b>${esc(money(total))}</b><span>collected in all</span></div><div><b>${active.length}</b><span>active now</span></div>${giftTotal ? `<div><b>${esc(money(giftTotal))}</b><span>contributions</span></div>` : ''}</div>` : '')
             + (d.subscriptions.length ? `<p class="gps-hint gac-subs-count"${ledger.length ? ' hidden' : ''}>${active.length} active${d.subscriptions.length > active.length ? ' · ' + (d.subscriptions.length - active.length) + ' ended' : ''}</p><ul class="gac-acct-list gac-subs-list">` + d.subscriptions.map((s) => {
               const soon = s.active && s.expiresAt - Date.now() <= 3 * 864e5;
-              const badge = (s.auto && s.active ? 'Automatic · ' : '') + (!s.active ? 'Ended' : s.daysLeft <= 1 ? 'Ends today' : s.daysLeft + ' days left');
+              const badge = s.free && s.active && s.forever ? 'Free · no end' : (s.auto && s.active ? 'Automatic · ' : s.free && s.active ? 'Free · ' : '') + (!s.active ? 'Ended' : s.daysLeft <= 1 ? 'Ends today' : s.daysLeft + ' days left');
               return `<li class="gac-acct gac-subscr${s.active ? '' : ' is-ended'}${soon ? ' is-soon' : ''}" data-user="${esc(s.user)}"><div class="gac-acct-top"><span class="gac-req-name">${esc(s.user)}</span><span class="gac-req-badge ${s.active && !soon ? 'pending' : ''}">${esc(badge)}</span></div>`
-                + `<div class="gac-req-meta">${s.active ? 'Since ' + esc(fmtDay(s.startedAt)) + ' · ends ' + esc(fmtDay(s.expiresAt)) : 'Ended ' + esc(fmtDay(s.endedAt || s.expiresAt))}${lastPaid(s) ? ' · paid ' + esc(money(lastPaid(s))) : ''}${giftsBy(s.user) ? ' · contributed ' + esc(money(giftsBy(s.user))) : ''}${s.note ? ' · ' + esc(s.note) : ''}</div>`
-                + `<div class="gac-req-actions"><button class="gps-btn${s.active ? '' : ' primary'}" data-sub="renew" type="button">Renew +${esc(periods[subsPeriod] || '1 month')}</button>`
+                + `<div class="gac-req-meta">${s.active ? 'Since ' + esc(fmtDay(s.startedAt)) + (s.forever ? ' · no end' : ' · ends ' + esc(fmtDay(s.expiresAt))) + (s.free && s.freeBy ? ' · given by ' + esc(s.freeBy) : '') : 'Ended ' + esc(fmtDay(s.endedAt || s.expiresAt))}${lastPaid(s) ? ' · paid ' + esc(money(lastPaid(s))) : ''}${giftsBy(s.user) ? ' · contributed ' + esc(money(giftsBy(s.user))) : ''}${s.note ? ' · ' + esc(s.note) : ''}</div>`
+                + (s.free && s.active
+                  ? `<div class="gac-req-actions"><button class="gps-btn" data-sub="end" type="button">End free access</button></div>`
+                  : `<div class="gac-req-actions"><button class="gps-btn${s.active ? '' : ' primary'}" data-sub="renew" type="button">Renew +${esc(periods[subsPeriod] || '1 month')}</button>`
                 + `<button class="gps-btn" data-sub="editstart" type="button">Change start</button>`
-                + (s.active ? '<button class="gps-btn" data-sub="end" type="button">End now</button>' : '<button class="gps-btn" data-sub="delete" type="button">Remove</button>') + `</div>`
+                + (s.active ? '<button class="gps-btn" data-sub="end" type="button">End now</button>' : '<button class="gps-btn" data-sub="delete" type="button">Remove</button>') + `</div>`)
                 + `<form class="gac-subs-edit" hidden><label>Subscribed on<input class="gpa-input" type="datetime-local" value="${esc(localInput(s.startedAt))}" max="${esc(localInput(Date.now() + 60e3))}"></label><button class="gps-btn primary" type="submit">Save</button><button class="gps-btn" type="button" data-sub="canceledit">Cancel</button></form></li>`;
             }).join('') + `</ul>` : `<p class="gps-hint">No subscribers yet.</p>`);
           const form = subsEl.querySelector('#gac-subs-form');
@@ -21598,7 +21655,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
               if (!f.hidden) f.querySelector('input').focus();
               return;
             }
-            if (action === 'end' && !confirm('End ' + user + '’s subscription now? They’re signed out and can’t get back in until you renew it.')) return;
+            if (action === 'end' && !confirm(btn.textContent === 'End free access' ? 'End ' + user + '’s free access now? They’re signed out and taken off Allowed users.' : 'End ' + user + '’s subscription now? They’re signed out and can’t get back in until you renew it.')) return;
             if (action === 'delete' && !confirm('Remove ' + user + ' from the subscribers list? (Their access stays as Allowed users says.)')) return;
             btn.disabled = true;
             try {
@@ -21607,6 +21664,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
               const s = r.subscriptions.find((x) => x.user.toLowerCase() === user.toLowerCase());
               showToast(action === 'renew' ? user + ' is subscribed until ' + fmtDay(s.expiresAt) + '.' : action === 'end' ? user + '’s subscription ended.' : user + ' removed from subscribers.');
               renderSubs(r);
+              if (action === 'end') { const fr = b.querySelector('#gac-free-card'); if (fr) { fr.outerHTML = freeCard(); wireFreeAccess(b, () => loadSubs()); } }
             } catch (err) { btn.disabled = false; showToast(err.message, { type: 'danger' }); }
           });
           subsEl.addEventListener('submit', async (e) => {
@@ -21741,8 +21799,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             + `<div class="gac-allow-row"><span>🧠 Daily trivia at 12 PM (first correct answer wins a point)</span><button class="gps-switch${!d.fun || d.fun.trivia ? ' primary' : ''}" data-fun="trivia" type="button" aria-pressed="${!d.fun || d.fun.trivia}" aria-label="Daily trivia">Daily trivia</button></div>`
             + `<div class="gac-allow-row"><span>🏆 Announce new game records</span><button class="gps-switch${!d.fun || d.fun.shoutouts ? ' primary' : ''}" data-fun="shoutouts" type="button" aria-pressed="${!d.fun || d.fun.shoutouts}" aria-label="Announce new game records">Announce new game records</button></div>`
             + `<div class="gac-actions"><button class="gps-btn" id="gac-trivia-now" type="button">Ask a trivia question now</button></div>`, 'sparkle', 'gac-fun-card') : '')
+          + (can('security.view') ? '' : freeCard())
           + `<div id="gac-legacy-moderation"></div>`;
         b.querySelectorAll('.gac-report blockquote').forEach((q, i) => { q.textContent = list[i].msgText; });
+        wireFreeAccess(b);
         const funCard = b.querySelector('#gac-fun-card');
         if (funCard) funCard.addEventListener('click', async (e) => {
           if (e.target.closest('#gac-trivia-now')) {
@@ -22073,6 +22133,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       }
       else if (sec === 'security' && p.focus === 'allow') await land(() => (user && byUser('.gac-acct', user)) || gac.querySelector('#gac-sec-events'));
       else if (sec === 'security' && p.focus === 'events') await land(() => { const ev = gac.querySelector('#gac-sec-events'); const h = ev && ev.querySelector('.gac-fold-head'); if (h && h.getAttribute('aria-expanded') !== 'true') h.click(); return ev; });
+      else if (sec === 'security' && p.focus === 'free') await land(() => { const box = gac.querySelector('#gac-free'); if (!box || /Loading/.test(box.textContent)) return null; return (user && byUser('.gac-free-row', user)) || box.closest('.gac-card'); });
       else if (sec === 'security' && p.focus === 'subs') {
         await land(() => {
           const box = gac.querySelector('#gac-subs');

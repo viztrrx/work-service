@@ -9,7 +9,7 @@
 // requires one. The commitments here (reply within 2 business days, cancel
 // within 1, fix billing errors within 3) are the owner's to keep. Update
 // POLICY_EFFECTIVE when any of it changes.
-import { money, priceCents, supportEmail, portalUrl, policyFooter } from './subscribe.js';
+import { money, priceCents, supportEmail, portalUrl, policyFooter, CONTRIB_MIN_CENTS } from './subscribe.js';
 
 export const POLICY_EFFECTIVE = 'October 18, 2026';
 export const POLICY_PAGES = { terms: 'Terms of Service', refunds: 'Refund & Cancellation Policy', privacy: 'Privacy Policy' };
@@ -62,7 +62,7 @@ function body(env, kind, price) {
       <li>For security, an account may be limited to one signed-in device at a time.</li>
     </ul>
     <h2>3. Subscription, billing and cancellation</h2>
-    <p>The subscription costs ${price} USD a month. It renews and is charged automatically every month until you cancel. You can cancel any time; you keep access until the end of the month you’ve paid for. Payments are non-refundable except for billing errors. Members may also make optional one-time contributions ($8 or more); a contribution doesn’t change the subscription or add features, isn’t tax-deductible, and is non-refundable. Cancellation, refunds and price changes are covered by our <a href="/subscribe/refunds">Refund &amp; Cancellation Policy</a>, which is part of these terms.</p>
+    <p>The subscription costs ${price} USD a month. It renews and is charged automatically every month until you cancel. You can cancel any time; you keep access until the end of the month you’ve paid for. Payments are non-refundable except for billing errors. Members may also make optional one-time contributions (${money(CONTRIB_MIN_CENTS)} or more); a contribution doesn’t change the subscription or add features, isn’t tax-deductible, and is non-refundable. Cancellation, refunds and price changes are covered by our <a href="/subscribe/refunds">Refund &amp; Cancellation Policy</a>, which is part of these terms.</p>
     <h2>4. Acceptable use</h2>
     <p>Don’t use Saints Service to:</p>
     <ul>

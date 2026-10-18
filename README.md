@@ -90,7 +90,7 @@ The Music tab needs no YouTube key and no sign-in:
   room gets a ▶ Play card that streams it from your Worker. Deleting a song
   removes it for everyone it was shared with. Shared library and personal uploads together stay
   under the same ~9.5 GB R2 limit.
-- **Playlists** (you and admins only, in the web app at `/console/` only):
+- **Playlists** (everyone signed in, in the app or the console on any website):
   paste a Spotify or Apple Music playlist or album link and get every song's
   official YouTube video, in order, organized by playlist and saved to your
   account. Each song has a **YouTube ↗** link and ▶ to play it in the
@@ -102,19 +102,22 @@ The Music tab needs no YouTube key and no sign-in:
     Cloudflare secret** (never in the code or the browser): Cloudflare →
     Workers & Pages → `donnajbe` → Settings → Variables and Secrets → **Add**
     → Type **Secret**, name `YOUTUBE_API_KEY`, value your key → Deploy. Only
-    the Worker uses it, only for Playlists, only for you and admins, and only
-    for requests from the web app (it refuses the console on other websites).
+    the Worker uses it, only for Playlists, and it never reaches anyone's
+    browser.
   - The key is used only when it has to be: a song is searched once, and the
     answer is kept for everyone (60 days; 7 for "no clear video"), so the same
-    song in another playlist or for another admin costs nothing, and opening
+    song in another playlist or for anyone else costs nothing, and opening
     saved playlists never searches. A free key covers about 100 new songs a
-    day; the rest are found the next day. Without the key every song gets a
+    day for everyone together; the rest are found the next day. So one person
+    can't use it all up, each regular user gets **40 new song lookups a day**
+    (songs someone already found don't count); you and admins have no limit. Without the key every song gets a
     YouTube search link.
   - Spotify playlists are read from Spotify's public embed page, which shows
     the first 100 songs. For longer playlists, add `SPOTIFY_CLIENT_ID` and
     `SPOTIFY_CLIENT_SECRET` (a free app at developer.spotify.com) as Worker
     secrets. Apple Music playlists are read from their public page.
-  - Up to 20 playlists per person, 200 songs each, 30 imports a day.
+  - Up to 20 playlists per person, 200 songs each; 10 imports a day (30 for
+    you and admins).
 - **YouTube to MP3** (you only, inside **My music**): turns a video or audio
   file you own into an MP3 on your device with real FFmpeg, with **Download
   MP3** and **Save to My music**. A YouTube link shows the video's details,
@@ -314,7 +317,7 @@ refund it and cancel the extra subscription in Stripe.
 
 **Contributions:** when someone who already pays types
 their name on the subscribe page, instead of "already subscribed" they get a
-box to add a **one-time contribution** of $8 to $500 (quick buttons $8, $10,
+box to add a **one-time contribution** of $6 to $500 (quick buttons $6, $10,
 $20, $50, or any amount). It's a separate one-time Stripe payment: it doesn't
 change their subscription, the page says it's non-refundable and not
 tax-deductible (Saints Service isn't a charity, so it's called a contribution,
@@ -418,6 +421,8 @@ else got there first, use **Reset PIN**.
 **Subscribers (paid access).** **Admin → Security → Subscribers** registers a name as a paying subscriber for a set time: 1 week, 2 weeks, 1 month (default), 3 months, 6 months or 1 year, with an optional note such as "$10 · Cash App". Adding someone puts them on Allowed users and lets them sign in right away. While **Only allow listed users** is on (the card offers to turn it on), a subscriber gets in exactly until their end time; at that moment the Worker refuses them, they're signed out with "Your subscription has ended. Ask the owner to renew it.", and within 5 minutes they're taken off Allowed users. You get a phone alert ("Subscriptions ending") 3 days before and when it ends. **Renew** adds the chosen length (on top of any time left, or from today if it already ended); **End now** cuts them off immediately; **Remove** forgets an ended record. Months are calendar months (Oct 15 → Nov 15; Jan 31 → Feb 28). **Subscribed on** (date and time, default now) sets when the time starts, so someone who paid on Oct 1 and is added on Oct 15 still ends on Nov 1; it can't be in the future, and a start so early that the time is already over is refused. **Change start** on a row moves the start (and the end with it) later. **Paid ($)** records what they paid; the card totals **this month** and **collected in all** (payments stay in the total even if a record is removed). In their last 3 days a subscriber also gets a pop-up once a day ("Your access ends in 2 days (Nov 5, 7:40 PM). Ask the owner to renew it…"). Subscribers see their own countdown under the header on every tab ("Subscription · 21 days left · ends Nov 5 at 7:40 PM"), amber in the last 3 days with "Ask the owner to renew to keep access". An ended subscriber can tap **Ask to renew** on the sign-in screen; approving that request in Access requests lets them in for free (Renew is the paid way back). A subscription decides on its own, so a name left on the Allowed users text box doesn't let an expired subscriber back in.
 
 **Automatic month for Allowed users.** While **Only allow listed users** is on, anyone on Allowed users you haven't made a subscriber gets one automatically: from the 1st of this month at midnight (your time, New York) to the 1st of next month. Their row says **Automatic · N days left** with the note "Automatic: on Allowed users". When it ends they lose access like any subscriber, unless you **Renew** them or they pay on the subscribe page (their paid month starts the day they pay). **Add subscriber** on one of them replaces the automatic month with a real one. Names that already had a subscription (even an ended one) don't get one, admins and moderators stay unlimited, and taking a name off Allowed users removes its automatic month. A name added in the middle of the month gets the rest of that month. Putting a name back on Allowed users after its automatic month ended gives it the current month (a paid subscriber who ended still needs **Renew**). **Recent events** on the same page is folded under its title (with a count); tap it to open, and it stays the way you left it on that device.
+
+**Free access (override).** When you're feeling generous: **Admin → Security → Free access** (right above Subscribers) lets someone in for free, whatever their subscription says. Type the name, pick **No end date** (the default) or 1 week to 1 year, add a note if you like, and tap **Give free access**: they're put on Allowed users and can sign in right away. Their row says **Free · no end** (or **Free until Oct 25**) with who gave it; Subscribers shows them too, with only **End free access**. Admins and moderators can do this as well (moderators find the card under **Moderation**, since they don't have Security), and you get a phone alert whenever one of them does. Free access never shortens time someone already paid for, isn't counted as money, and the subscribe page tells them there's nothing to pay (they can still contribute). Someone billed monthly through Stripe is refused (cancel it in Stripe first, so they aren't charged). **End free access** signs them out and takes them off Allowed users. Admins and moderators never need it: they're always in, and making someone staff removes any automatic month.
 
 **Requesting access.** Under "Unable to create account" the sign-in screen
 offers **Request access**: the person can add a short note and send it. You

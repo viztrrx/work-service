@@ -980,6 +980,9 @@ test('subscribers: listed names never made subscribers get an automatic month (1
     // zed is made a moderator during the month: not cut off at the end.
     await signUp(c, 'zed');
     assert.equal((await c.call('/admin/user/action', { method: 'POST', headers: owner, body: { u: 'zed', action: 'setrole', role: 'moderator' } })).status, 200);
+    assert.equal((await cfg()).subscriptions.zed, undefined, 'made staff: the automatic month goes away at once (no countdown)');
+    // (A record left from before is still dropped, not ended, at the end of the month.)
+    { const c2 = await cfg(); c2.subscriptions.zed = { ...c1.subscriptions.zed }; await env.TELEMETRY.put('config', JSON.stringify(c2)); }
     // Nov 1, just after midnight New York: the automatic months end (zed is staff now: kept, unlimited).
     at(Date.parse('2026-11-01T04:05:00Z'));
     await cron();
@@ -1021,6 +1024,87 @@ test('subscribers: listed names never made subscribers get an automatic month (1
     await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: false, users: ['newbie'] } } });
     assert.equal((await cfg()).subscriptions.newbie, undefined);
   } finally { Date.now = realNow; }
+});
+
+test('free access: owner, admins and moderators can let someone in for free (no end or a set time); users can’t', async () => {
+  const env = makeEnv(); const c = makeClient(env);
+  const free = (body, headers = owner) => c.call('/admin/free-access', { method: 'POST', headers, body });
+  const cfg = () => env.TELEMETRY.get('config', 'json');
+  // A regular user can't; a moderator can (session), so can the co-admin token.
+  await signUp(c, 'mod2');
+  const joeTok = (await signUp(c, 'joe')).data.token;
+  await c.call('/admin/user/action', { method: 'POST', headers: owner, body: { u: 'mod2', action: 'setrole', role: 'moderator' } });
+  await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: ['pal', 'mod2'] } } });
+  assert.equal((await free({ action: 'give', user: 'pal' }, sess(joeTok))).status, 403, 'a regular user is refused');
+  assert.equal((await free({ action: 'give', user: 'pal' }, {})).status, 401, 'nobody signed in is refused');
+  const modLogin = await c.call('/auth/login', { method: 'POST', body: { user: 'mod2', verifier: verifierFor('mod2', '1234'), takeover: true } });
+  assert.equal(modLogin.status, 200);
+  const modTok = modLogin.data.token;
+  // pal is on the list: an automatic month. The moderator gives pal free access with no end.
+  const g = await free({ action: 'give', user: 'pal', period: 'none', note: 'birthday' }, sess(modTok));
+  assert.equal(g.status, 200, JSON.stringify(g.data));
+  assert.deepEqual(g.data.free.map((x) => [x.user, x.expiresAt, x.by, x.note]), [['pal', null, 'mod2', 'birthday']]);
+  let rec = (await cfg()).subscriptions.pal;
+  assert.deepEqual([rec.free, rec.auto, rec.freeBy], [true, undefined, 'mod2']);
+  assert.equal((await c.call('/access?user=pal')).data.allowed, true);
+  // It never ends: a sweep years from now leaves it alone, and pal stays on the list.
+  const realNow = Date.now;
+  try {
+    Date.now = () => realNow() + 5 * 365 * 864e5;
+    const pend = []; await worker.scheduled({ cron: '*/5 * * * *' }, env, { waitUntil: (p) => pend.push(p) }); await Promise.all(pend);
+    assert.equal((await c.call('/access?user=pal')).data.allowed, true);
+  } finally { Date.now = realNow; }
+  assert.equal((await cfg()).allowlist.users.includes('pal'), true);
+  // Nothing in the money ledger; the subscribe page has nothing for pal to pay.
+  assert.equal(((await cfg()).subLedger || []).length, 0);
+  env.STRIPE_SECRET_KEY = 'sk_test_abc'; env.STRIPE_WEBHOOK_SECRET = 'whsec_test';   // the subscribe page is on
+  const chk = (await c.call('/subscribe/check?user=pal')).data;
+  assert.deepEqual([chk.ok, chk.canContribute], [false, true]);
+  assert.match(chk.error, /already has free access/);
+  // No countdown for free access with no end.
+  const palUp = await signUp(c, 'pal');
+  assert.equal(palUp.status, 200);
+  const palMe = (await c.call('/status?user=pal', { headers: sess(palUp.data.token) })).data;
+  assert.ok(palMe && !('error' in palMe) && palMe.subscription == null, JSON.stringify(palMe).slice(0, 200));
+  // The owner can't "Add" over it by mistake, or Renew a never-ending one.
+  const add = await c.call('/admin/subscriptions', { method: 'POST', headers: owner, body: { action: 'add', user: 'pal', period: '1m' } });
+  assert.equal(add.status, 409);
+  assert.match(add.data.error, /has free access/);
+  // A set time: 1 week for a name not on the list (it's added to the list).
+  const wk = await free({ action: 'give', user: 'Neo', period: '1w' });
+  assert.equal(wk.status, 200);
+  const neo = wk.data.free.find((x) => x.user === 'Neo');
+  assert.ok(neo.expiresAt - Date.now() > 6.9 * 864e5 && neo.expiresAt - Date.now() <= 7 * 864e5 + 5e3);
+  assert.equal(neo.by, 'boss');
+  assert.ok((await cfg()).allowlist.users.includes('neo'));
+  // Never shortens time someone already has: a paid 3 months given "1 week free" keeps the 3 months.
+  await c.call('/admin/subscriptions', { method: 'POST', headers: owner, body: { action: 'add', user: 'rich', period: '3m', amount: 30 } });
+  const r3 = (await cfg()).subscriptions.rich.expiresAt;
+  await free({ action: 'give', user: 'rich', period: '1w' });
+  assert.equal((await cfg()).subscriptions.rich.expiresAt, r3);
+  // Refused: the owner, staff, a bad name, someone billed by Stripe.
+  assert.equal((await free({ action: 'give', user: 'boss' })).status, 400);
+  assert.match((await free({ action: 'give', user: 'mod2' })).data.error, /admin or moderator/);
+  assert.equal((await free({ action: 'give', user: 'bad name!' })).status, 400);
+  const c0 = await cfg();
+  c0.subscriptions.stripey = { user: 'stripey', startedAt: Date.now(), expiresAt: Date.now() + 20 * 864e5, period: '1m', autoRenew: true, stripe: { customer: 'cus_1', subscription: 'sub_1' } };
+  await env.TELEMETRY.put('config', JSON.stringify(c0));
+  const st = await free({ action: 'give', user: 'stripey' });
+  assert.equal(st.status, 409);
+  assert.match(st.data.error, /through Stripe/);
+  // Ending it: pal loses access and comes off the list, like an ended subscription.
+  const end = await free({ action: 'end', user: 'pal' }, { Authorization: 'Bearer ' + COADMIN });
+  assert.equal(end.status, 200);
+  assert.equal(end.data.free.some((x) => x.user === 'pal'), false);
+  assert.equal((await cfg()).allowlist.users.includes('pal'), false);
+  const acc = (await c.call('/access?user=pal')).data;
+  assert.equal(acc.allowed, false);
+  assert.equal((await free({ action: 'end', user: 'pal' })).status, 404, 'already ended');
+  assert.equal((await free({ action: 'end', user: 'rich' })).status, 200, 'free on top of paid time can be ended too');
+  // The audit log names who did it.
+  const audit = [...env.TELEMETRY.store.keys()].filter((k) => k.startsWith('audit:'));
+  const acts = (await Promise.all(audit.map((k) => env.TELEMETRY.get(k, 'json')))).flat().filter(Boolean).map((x) => x.action);
+  assert.ok(acts.includes('free_give') && acts.includes('free_end'), acts.join(','));
 });
 
 test('subscribers: month math keeps the day, or the month’s last day', async () => {
