@@ -1,7 +1,7 @@
 import { webApp } from './web/handler.js';
 import { consoleApp } from './web/console/handler.js';
 import { policyPage, POLICY_PAGES } from './web/policies.js';
-import { subscribePage, subscribeReady, priceCents, displayCents, stripe, checkoutParams, contributionParams, contribCents, isContribution, periodEndMs, invoiceSubscription, stripeSignatureOk, SUB_NAME_RE, SESSION_RE, ATTEMPT_RE } from './web/subscribe.js';
+import { subscribePage, subscribeReady, priceCents, displayCents, stripe, checkoutParams, contributionParams, CHECKOUT_TTL_S, contribCents, isContribution, periodEndMs, invoiceSubscription, stripeSignatureOk, SUB_NAME_RE, SESSION_RE, ATTEMPT_RE } from './web/subscribe.js';
 import { readPlaylist, readLists, writeLists, newList, listSummary, publicList, searchYouTube, matchCacheKey, LISTS_MAX, MATCH_BATCH, MATCH_SCAN } from './web/playlists.js';
 import { audiusSearch, audiusStream, listLibrary, addToLibrary, removeFromLibrary, serveLibraryFile, audioKind, listMine, mineUsage, addToMine, removeFromMine, MINE_DAILY_UPLOADS } from './web/music.js';
 import { PUSH_CATEGORIES, vapidKeys, validSubscription, addSubscription, updateSubscription, removeSubscription, getSubscription, sendPush, notifyOwner, ownerTime, cleanCategories, anySubscriberWants,
@@ -3107,8 +3107,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         if (key === OWNER) return { error: 'That name is taken. Pick another.' };
         const cfg = await getConfig(kv);
         const cur = cfg.subscriptions && cfg.subscriptions[key];
-        // A member who already pays (and has an account) can add a contribution instead.
-        if (cur && !cur.ended && cur.expiresAt > Date.now()) return { error: '“' + name + '” is already subscribed.', subscribed: true, key, canContribute: !!(await getAcct(kv, key)) };
+        // Already paid up: never a second subscription; contributing is their only option.
+        if (cur && !cur.ended && cur.expiresAt > Date.now()) return { error: '“' + name + '” is already subscribed for this month, so it can’t be paid for again. Contributions are welcome instead.', subscribed: true, key, canContribute: true, hasAccount: !!(await getAcct(kv, key)) };
         if (cfg.allowlist && cfg.allowlist.on && (cfg.allowlist.users || []).includes(key)) return { error: '“' + name + '” already has access. No need to subscribe.' };
         const hold = await kv.get('subhold:' + key, 'json');
         if (hold && !(attempt && hold.attempt === attempt) && hold.until > Date.now()) return { error: 'Someone is paying for “' + name + '” right now. Pick another name or try again in 30 minutes.' };
@@ -3160,6 +3160,25 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         let sub = sess.subscription;
         if (typeof sub === 'string' && sub) { try { sub = await stripe(env, 'GET', 'subscriptions/' + encodeURIComponent(sub)); } catch (e) { sub = { id: sess.subscription }; } }
         const subId = (sub && sub.id) || '';
+        // Checkout refuses a name that's already paid up, so this only happens
+        // if two payments raced. Don't add time twice: record it and tell the
+        // owner to refund it (the policy refunds duplicate charges).
+        {
+          const cfg = await getConfig(kv);
+          const cur = cfg.subscriptions && cfg.subscriptions[user.toLowerCase()];
+          const ledger = Array.isArray(cfg.subLedger) ? cfg.subLedger : [];
+          const active = !!cur && !cur.ended && cur.expiresAt > Date.now();
+          if (active && !ledger.some((x) => x && x.ref === sess.id) && !(cur.stripe && cur.stripe.subscription && cur.stripe.subscription === subId)) {
+            const amount = Math.round(Math.max(0, Number(sess.amount_total) || 0)) / 100;
+            cfg.subLedger = [...ledger, { user: cur.user, at: Date.now(), amount, action: 'duplicate', via: 'stripe', ref: sess.id }].slice(-1000);
+            await kv.put('config', JSON.stringify(cfg));
+            await logAudit(kv, { route: url.pathname, action: 'subscription_duplicate', target: user.toLowerCase(), meta: { amount, subscription: subId } });
+            await notifyOwner(env, { cat: 'subs', title: user + ' paid twice', body: 'They were already subscribed. Refund the extra $' + amount.toFixed(2) + ' in Stripe (Payments) and cancel the extra subscription' + (subId ? ' ' + subId : '') + ' (Subscriptions).', url: adminLink('security', { focus: 'subs', user }) }, url.origin).catch(() => {});
+            const rec = { user, approved: true, duplicate: true, code: '' };
+            await kv.put('subpay:' + sess.id, JSON.stringify(rec), { expirationTtl: 30 * 24 * 3600 });
+            return rec;
+          }
+        }
         const r = await approveSub(user, { periodEnd: periodEndMs(sub), amount: (Number(sess.amount_total) || priceCents(env)) / 100, customer: typeof sess.customer === 'string' ? sess.customer : '', subscription: subId, ref: sess.id });
         const rec = { user, code: r.code, approved: true };
         await kv.put('subpay:' + sess.id, JSON.stringify(rec), { expirationTtl: 30 * 24 * 3600 });
@@ -3188,9 +3207,10 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         await kv.put('subpay:' + sess.id, JSON.stringify(rec), { expirationTtl: 30 * 24 * 3600 });
         return rec;
       };
-      // At most 10 checkouts (subscriptions and contributions) an hour from one network.
-      const checkoutLimited = async () => {
-        const rk = 'subco:' + (await sha256hex('ip|' + clientIp(req))).slice(0, 24) + ':' + Math.floor(Date.now() / 3600e3);
+      // At most 10 checkouts (subscriptions and contributions) an hour from one
+      // network; 'subacct' counts PIN setups the same way.
+      const checkoutLimited = async (prefix = 'subco') => {
+        const rk = prefix + ':' + (await sha256hex('ip|' + clientIp(req))).slice(0, 24) + ':' + Math.floor(Date.now() / 3600e3);
         const n = parseInt(await kv.get(rk), 10) || 0;
         if (n >= 10) return true;
         await kv.put(rk, String(n + 1), { expirationTtl: 2 * 3600 });
@@ -3220,7 +3240,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         if (url.pathname === '/subscribe/check' && req.method === 'GET') {
           const at = String(url.searchParams.get('attempt') || '');
           const st = await nameStatus(url.searchParams.get('user'), ATTEMPT_RE.test(at) ? at : '');
-          return json(st.ok ? { ok: true, note: st.note } : { ok: false, error: st.error, ...(st.canContribute ? { canContribute: true } : {}) });
+          return json(st.ok ? { ok: true, note: st.note } : { ok: false, error: st.error, ...(st.canContribute ? { canContribute: true, hasAccount: !!st.hasAccount } : {}) });
         }
         if (url.pathname === '/subscribe/checkout' && req.method === 'POST') {
           let body = {};
@@ -3229,11 +3249,16 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           const attempt = ATTEMPT_RE.test(String(body.attempt || '')) ? String(body.attempt) : '';
           const st = await nameStatus(body.user, attempt);
           if (!st.ok) return json({ ok: false, error: st.error }, 409);
-          // Same visit + same name = same Stripe request: a double tap or a
-          // retry gets the same checkout back instead of a second one.
-          const idem = attempt ? 'subscribe-' + (await sha256hex(attempt + '|' + st.key)).slice(0, 40) : undefined;
+          // One open checkout per name: it expires after CHECKOUT_TTL_S and
+          // the name is held a little longer, so two payments for the same
+          // name can't both be open. The same visit gets its open checkout
+          // back (double taps, Back then Continue) instead of a second one.
+          const hold = await kv.get('subhold:' + st.key, 'json');
+          if (hold && attempt && hold.attempt === attempt && hold.url && hold.until > Date.now() + 60e3) return json({ ok: true, url: hold.url });
+          const idem = attempt ? 'subscribe-' + (await sha256hex(attempt + '|' + st.key + '|' + Math.floor(Date.now() / 60e3))).slice(0, 40) : undefined;
           const sess = await stripe(env, 'POST', 'checkout/sessions', checkoutParams(env, url.origin, st.user), { idempotencyKey: idem });
-          await kv.put('subhold:' + st.key, JSON.stringify({ attempt, session: sess.id, until: Date.now() + 30 * 60e3 }), { expirationTtl: 3600 });
+          const expires = (Number(sess.expires_at) || Math.floor(Date.now() / 1000) + CHECKOUT_TTL_S) * 1000;
+          await kv.put('subhold:' + st.key, JSON.stringify({ attempt, session: sess.id, url: sess.url, until: expires + 2 * 60e3 }), { expirationTtl: 3600 });
           return json({ ok: true, url: sess.url });
         }
         // A member who already subscribes (and has an account) adds a
@@ -3244,13 +3269,39 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           const cents = contribCents(body.cents);
           if (!cents) return json({ ok: false, error: 'Pick an amount from $8 to $500.' }, 400);
           const st = await nameStatus(body.user, '');
-          if (!st.canContribute) return json({ ok: false, error: 'Contributions are for members who already subscribe and have an account.' }, 409);
+          if (!st.canContribute) return json({ ok: false, error: 'Contributions are only for subscribers. Subscribe first, then you can contribute.' }, 409);
           if (await checkoutLimited()) return json({ ok: false, error: 'Too many tries. Wait a bit and try again.' }, 429);
           const user = String(body.user).trim().replace(/^@/, '');
           const attempt = ATTEMPT_RE.test(String(body.attempt || '')) ? String(body.attempt) : '';
           const idem = attempt ? 'contribute-' + (await sha256hex(attempt + '|' + st.key + '|' + cents)).slice(0, 40) : undefined;
           const sess = await stripe(env, 'POST', 'checkout/sessions', contributionParams(env, url.origin, user, cents), { idempotencyKey: idem });
           return json({ ok: true, url: sess.url });
+        }
+        // Right after paying, a new subscriber picks their own PIN here. The
+        // page sends the same PBKDF2 verifier the console would (never the
+        // PIN). Only the buyer's page knows the checkout id, and it only works
+        // while the name has no account and its sign-up code is unused.
+        if (url.pathname === '/subscribe/account' && req.method === 'POST') {
+          let body = {};
+          try { const raw = await req.text(); if (raw.length > 1024) throw 0; body = JSON.parse(raw) || {}; } catch (e) { return json({ ok: false, error: 'invalid request' }, 400); }
+          const id = String(body.session || '');
+          const verifier = String(body.verifier || '');
+          if (!SESSION_RE.test(id) || !/^[0-9a-f]{64}$/.test(verifier)) return json({ ok: false, error: 'invalid request' }, 400);
+          if (await checkoutLimited('subacct')) return json({ ok: false, error: 'Too many tries. Wait a bit and try again.' }, 429);
+          const rec = await kv.get('subpay:' + id, 'json');
+          if (!rec || !rec.approved || rec.duplicate || rec.contribution || !SUB_NAME_RE.test(String(rec.user || ''))) return json({ ok: false, error: 'Unknown payment.' }, 404);
+          const user = rec.user, key = user.toLowerCase();
+          if (await getAcct(kv, key)) return json({ ok: false, exists: true, error: 'The account for “' + user + '” is already set up. Sign in with its PIN.' }, 409);
+          const inv = await kv.get(inviteKey(key), 'json');
+          if (!inv || !rec.code || !(await timingSafeEqualStr(normInvite(inv.code), normInvite(rec.code)))) return json({ ok: false, error: 'This payment’s account setup was already used. Ask the owner for help.' }, 409);
+          if (!allowedUser(await getConfig(kv), user)) return json({ ok: false, error: ACCESS_DENIED }, 403);
+          const salt = randHex(16);
+          await kv.put(acctKey(key), JSON.stringify({ user, verifier: await sha256hex(salt + '|' + verifier), salt, role: 'user', ownerVerified: false, createdAt: Date.now(), epoch: 0, sessions: [] }));
+          await kv.delete(inviteKey(key));   // used up
+          await kv.put('subpay:' + id, JSON.stringify({ ...rec, code: '', account: true }), { expirationTtl: 30 * 24 * 3600 });
+          await noteSec('account_created', { user, note: 'subscribe page' });
+          await notifyOwner(env, { cat: 'newuser', title: 'New account: ' + user, body: 'Set their PIN on the subscribe page after paying.', url: adminLink('users', { user }) }, url.origin).catch(() => {});
+          return json({ ok: true, user });
         }
         if (url.pathname === '/subscribe/status' && req.method === 'GET') {
           const id = url.searchParams.get('session') || '';

@@ -25,6 +25,9 @@ export const STRIPE_API_VERSION = '2026-08-26.dahlia';
 export const INTEGRATION_ID = 'agent-console-subscribe-qhxmtwbr';
 
 export const SUB_PRICE_DEFAULT = 1380;
+// A subscription checkout stays open 31 minutes (Stripe's minimum is 30); the
+// Worker holds the name a little longer, so one name never has two open.
+export const CHECKOUT_TTL_S = 31 * 60;
 export const SUB_NAME_RE = /^[A-Za-z0-9_.-]{1,40}$/;
 export const SESSION_RE = /^cs_(?:test|live)_[A-Za-z0-9]{8,200}$/;
 export const priceCents = (env) => {
@@ -94,6 +97,7 @@ export function checkoutParams(env, origin, user) {
     integration_identifier: INTEGRATION_ID,
     success_url: origin + '/subscribe/?done={CHECKOUT_SESSION_ID}',
     cancel_url: origin + '/subscribe/?canceled=1',
+    expires_at: Math.floor(Date.now() / 1000) + CHECKOUT_TTL_S,
     allow_promotion_codes: 'false',
     // Shown above Stripe's Subscribe button: how it renews and how to cancel.
     custom_text: { submit: { message: 'Renews automatically every month until you cancel. Cancel any time; you keep access until the end of the month you paid for. Payments are non-refundable, except billing errors. Help: ' + supportEmail(env) } }
@@ -243,6 +247,12 @@ export function subscribePage(env, { ready, cents }) {
   .chips button[aria-pressed="true"] { border-color: var(--violet); background: rgba(114,80,203,0.25); }
   .amt { position: relative; } .amt span { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--sub); }
   .amt input { padding-left: 28px; }
+  .note { font-size: 13px; color: var(--sub); margin: 16px 0 0; padding-top: 14px; border-top: 1px solid var(--border); text-align: center; line-height: 1.5; }
+  .note b { color: var(--text); }
+  .pin-h { font-size: 18px; margin: 18px 0 4px; }
+  #pin-form label { margin-top: 10px; }
+  #pin-user { color: var(--sub); }
+  details.alt { margin-top: 16px; font-size: 13px; color: var(--sub); } details.alt summary { cursor: pointer; color: var(--ok); }
   .legal { text-align: center; color: var(--sub); font-size: 12.5px; margin-top: 18px; }
   .legal nav { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; }
   .legal p { margin: 6px 0; }
@@ -257,7 +267,7 @@ export function subscribePage(env, { ready, cents }) {
   </section>
 
   <section id="form" ${ready ? '' : 'hidden'}>
-    <h1>Subscribe</h1>
+    <h1 id="form-title">Subscribe</h1>
     <div class="price">${esc(price)} <small>/ month</small></div>
     <p class="cur">US dollars · billed monthly until you cancel</p>
     <ul><li>Full access to Saints Service</li><li>Your username is approved as soon as your payment goes through</li><li>Cancel any time · access lasts to the end of the month you paid for</li></ul>
@@ -277,6 +287,7 @@ export function subscribePage(env, { ready, cents }) {
     <button id="pay" type="button" disabled>Continue to payment</button>
     <p class="terms">By continuing, you agree to the <a href="/subscribe/terms">Terms of Service</a> and the <a href="/subscribe/refunds">Refund &amp; Cancellation Policy</a>. You’ll be charged ${esc(price)} USD today and then every month until you cancel. Payments are non-refundable. You can cancel any time${portal ? ` <a href="${esc(portal)}" target="_blank" rel="noopener">online</a> or` : ''} by emailing <a href="mailto:${esc(supportEmail(env))}">${esc(supportEmail(env))}</a>.</p>
     <p class="small">You’ll choose how to pay (card, Apple Pay, Google Pay, Cash App Pay…) on Stripe’s secure page.${portal ? ` · <a href="${esc(portal)}" target="_blank" rel="noopener">Manage or cancel a subscription</a>` : ''}</p>
+    <p class="note" id="contrib-note"><b>Contributions are only for subscribers.</b> New here? Subscribe first. Already subscribed? Type your username above to contribute. Each username can only be subscribed once at a time.</p>
     </div>
   </section>
 
@@ -289,19 +300,36 @@ export function subscribePage(env, { ready, cents }) {
   <section id="done" hidden>
     <h1>You’re in, <span id="done-user"></span>!</h1>
     <p class="hint ok">Payment received. Your username is approved.</p>
-    <div id="done-code" hidden>
-      <p class="hint">Your sign-up code (you’ll need it once, when you create your account):</p>
-      <div class="code" id="code"></div>
-    </div>
-    <ol id="steps-new" hidden>
+    <form id="pin-form" hidden>
+      <h2 class="pin-h">Create your PIN</h2>
+      <p class="hint">You choose it, and you’ll use it with your username to sign in. Use at least 4 characters, and don’t share it.</p>
+      <label for="pin-user">Username</label>
+      <input id="pin-user" autocomplete="username" readonly>
+      <label for="pin1">PIN</label>
+      <input id="pin1" type="password" autocomplete="new-password" maxlength="64">
+      <label for="pin2">Type your PIN again</label>
+      <input id="pin2" type="password" autocomplete="new-password" maxlength="64">
+      <div id="pin-hint" class="hint" role="status" aria-live="polite"></div>
+      <button id="pin-go" type="submit">Create my account</button>
+      <details class="alt" id="pin-alt"><summary>Rather create your account in the app?</summary>
+        <p class="hint">In Saints Service, tap <b>＋</b> (create account), type your username and a PIN, and enter this one-time sign-up code when it asks:</p>
+        <div class="code" id="code"></div>
+      </details>
+    </form>
+    <ol id="steps-ready" hidden>
       <li>Open Saints Service (the Agent Console) the way the owner showed you.</li>
-      <li>Tap <b>＋</b> (create account) and type your username <b class="u"></b> and a PIN.</li>
-      <li>When it asks, enter the sign-up code above.</li>
+      <li>Type your username <b class="u"></b> and the PIN you just made, then tap <b>Sign in</b>.</li>
     </ol>
     <ol id="steps-back" hidden>
       <li>Open Saints Service (the Agent Console) and sign in as <b class="u"></b> with your PIN, as before.</li>
     </ol>
-    <p class="small">Your subscription renews monthly until you cancel. Stripe emails you a receipt. Keep this page or a screenshot of your code until you’ve signed in.${portal ? ` · <a href="${esc(portal)}" target="_blank" rel="noopener">Manage or cancel</a>` : ` To cancel, email <a href="mailto:${esc(supportEmail(env))}">${esc(supportEmail(env))}</a>.`}</p>
+    <p class="small">Your subscription renews monthly until you cancel. Stripe emails you a receipt.<span id="keep-open" hidden> Keep this page open until you’ve made your PIN.</span>${portal ? ` · <a href="${esc(portal)}" target="_blank" rel="noopener">Manage or cancel</a>` : ` To cancel, email <a href="mailto:${esc(supportEmail(env))}">${esc(supportEmail(env))}</a>.`}</p>
+  </section>
+
+  <section id="dup" hidden>
+    <h1>Already subscribed</h1>
+    <p class="hint">“<span id="dup-user"></span>” was already paid up, so this payment was a duplicate. It will be refunded in full; the owner has been told. Questions: <a href="mailto:${esc(supportEmail(env))}">${esc(supportEmail(env))}</a>.</p>
+    <a class="btn" href="/subscribe/">OK</a>
   </section>
 
   <section id="thanks" hidden>
@@ -322,7 +350,7 @@ ${policyFooter(env)}
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  var show = function (id) { ['closed', 'form', 'wait', 'done', 'thanks', 'cancel'].forEach(function (x) { $(x).hidden = x !== id; }); };
+  var show = function (id) { ['closed', 'form', 'wait', 'done', 'dup', 'thanks', 'cancel'].forEach(function (x) { $(x).hidden = x !== id; }); };
   var q = new URLSearchParams(location.search);
   var hint = $('hint'), input = $('user'), pay = $('pay'), timer = null, okName = '';
   var contrib = $('contrib'), subbox = $('subbox'), amt = $('amt'), give = $('give'), giveName = '';
@@ -339,14 +367,19 @@ ${policyFooter(env)}
   function setHint(text, cls) { hint.textContent = text; hint.className = 'hint' + (cls ? ' ' + cls : ''); }
   function check() {
     var u = input.value.trim().replace(/^@/, '');
-    okName = ''; pay.disabled = true; giveName = ''; contrib.hidden = true; subbox.hidden = false;
+    okName = ''; pay.disabled = true; giveName = ''; contrib.hidden = true; subbox.hidden = false; $('form-title').textContent = 'Subscribe';
     if (!u) { setHint('Letters, numbers, dot, dash or underscore.'); return; }
     if (!/^[A-Za-z0-9_.-]{1,40}$/.test(u)) { setHint('Use only letters, numbers, dot, dash or underscore.', 'bad'); return; }
     setHint('Checking…');
     fetch('/subscribe/check?user=' + encodeURIComponent(u) + '&attempt=' + attempt, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
       if (input.value.trim().replace(/^@/, '') !== u) return;
       if (d.ok) { okName = u; pay.disabled = false; setHint(d.note || ('“' + u + '” is available.'), 'ok'); }
-      else if (d.canContribute) { giveName = u; contrib.hidden = false; subbox.hidden = true; setHint('“' + u + '” is already subscribed. Thank you for being a member!', 'ok'); syncAmt(); }
+      else if (d.canContribute) {
+        // Already paid up: no second subscription, only a contribution.
+        giveName = u; contrib.hidden = false; subbox.hidden = true; $('form-title').textContent = 'Contribute';
+        setHint('“' + u + '” is already subscribed for this month, so it can’t be paid for again. You can add a one-time contribution below.' + (d.hasAccount ? '' : ' (No PIN yet? Finish on your payment confirmation page, or ask the owner.)'), 'ok');
+        syncAmt();
+      }
       else setHint(d.error || 'That name can’t be used.', 'bad');
     }).catch(function () { setHint('Couldn’t check right now. Try again.', 'bad'); });
   }
@@ -406,16 +439,50 @@ ${policyFooter(env)}
     })();
     return;
   }
-  var session = q.get('done');
+  var session = q.get('done'), pinUser = '';
+  // The new subscriber's own PIN: the same verifier the console derives
+  // (PBKDF2-SHA256, salted by the username), so only it is sent, never the PIN.
+  function verifierFor(user, pin) {
+    var u = String(user).toLowerCase(), enc = new TextEncoder();
+    return crypto.subtle.importKey('raw', enc.encode('gpa-server|' + u + '|' + pin), 'PBKDF2', false, ['deriveBits']).then(function (k) {
+      return crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode('gpa-server-salt|' + u), iterations: 210000 }, k, 256);
+    }).then(function (bits) { return Array.prototype.map.call(new Uint8Array(bits), function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); });
+  }
+  var pinForm = $('pin-form');
+  if (pinForm) pinForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var p1 = $('pin1').value, p2 = $('pin2').value, ph = $('pin-hint'), go = $('pin-go');
+    var say = function (t, cls) { ph.textContent = t; ph.className = 'hint' + (cls ? ' ' + cls : ''); };
+    if (p1.length < 4) { say('Use a PIN of at least 4 characters.', 'bad'); return; }
+    if (p1 !== p2) { say('The two PINs don’t match. Type them again.', 'bad'); return; }
+    if (!(window.crypto && crypto.subtle && window.TextEncoder)) { say('This browser can’t set your PIN here. Open “Rather create your account in the app?” below.', 'bad'); $('pin-alt').open = true; return; }
+    go.disabled = true; go.textContent = 'Securing your PIN…'; say('');
+    verifierFor(pinUser, p1).then(function (v) {
+      return fetch('/subscribe/account', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session: session, verifier: v }) }).then(function (r) { return r.json(); });
+    }).then(function (d) {
+      if (d.ok) {
+        $('pin1').value = ''; $('pin2').value = '';
+        pinForm.hidden = true; $('steps-ready').hidden = false; $('keep-open').hidden = true;
+        setDone('Your account is ready. Sign in with your username and the PIN you just made.');
+        return;
+      }
+      if (d.exists) { pinForm.hidden = true; $('steps-back').hidden = false; }
+      say(d.error || 'Couldn’t create your account. Try again.', 'bad');
+      go.disabled = false; go.textContent = 'Create my account';
+    }).catch(function () { say('Couldn’t reach the server. Try again.', 'bad'); go.disabled = false; go.textContent = 'Create my account'; });
+  });
+  function setDone(t) { var h = document.querySelector('#done .hint.ok'); if (h) h.textContent = t; }
   if (session) {
     show('wait');
     var tries = 0;
     (function poll() {
       fetch('/subscribe/status?session=' + encodeURIComponent(session), { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
+        if (d.duplicate) { $('dup-user').textContent = d.user; show('dup'); return; }
         if (d.approved) {
           $('done-user').textContent = d.user;
           Array.prototype.forEach.call(document.querySelectorAll('.u'), function (b) { b.textContent = d.user; });
-          if (d.code) { $('code').textContent = d.code; $('done-code').hidden = false; $('steps-new').hidden = false; }
+          if (d.code) { $('code').textContent = d.code; $('pin-user').value = d.user; pinUser = d.user; $('pin-form').hidden = false; $('keep-open').hidden = false; }
+          else if (d.account) $('steps-ready').hidden = false;
           else $('steps-back').hidden = false;
           show('done'); return;
         }

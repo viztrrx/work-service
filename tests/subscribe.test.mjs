@@ -208,8 +208,10 @@ test('subscribe: API version pinned, sessions tagged, double taps reuse the chec
     assert.equal(a.data.url, b.data.url, 'same checkout back');
     assert.equal(st.sessions.size, 1);
     const posts = st.calls.filter((c) => c.url.endsWith('/v1/checkout/sessions'));
-    assert.equal(posts.length, 2);
-    assert.ok(posts[0].idem && posts[0].idem === posts[1].idem, 'same Idempotency-Key');
+    assert.equal(posts.length, 1, 'the second tap gets the open checkout back without asking Stripe again');
+    assert.ok(posts[0].idem && posts[0].idem.startsWith('subscribe-'), 'Idempotency-Key');
+    const exp = Number(new URLSearchParams(posts[0].body).get('expires_at'));
+    assert.ok(Math.abs(exp - (Date.now() / 1000 + 31 * 60)) < 30, 'the checkout expires after 31 minutes');
     assert.ok(st.calls.every((c) => c.version === '2026-08-26.dahlia'), 'every call pinned to one API version');
     const p = new URLSearchParams(posts[0].body);
     assert.equal(p.get('line_items[0][price]'), 'price_monthly15', 'the Dashboard Price');
@@ -289,7 +291,9 @@ test('subscribe: members who already pay can add a one-time contribution ($8–$
     assert.equal(chk.ok, false);
     assert.equal(chk.canContribute, true);
     assert.match(chk.error, /already subscribed/);
-    assert.equal((await t.call('/subscribe/check?user=nokey')).data.canContribute, undefined);
+    const nk = (await t.call('/subscribe/check?user=nokey')).data;
+    assert.deepEqual([nk.ok, nk.canContribute, nk.hasAccount], [false, true, false], 'already paid, no account yet: still only a contribution');
+    assert.equal(chk.hasAccount, true);
     assert.equal((await t.call('/subscribe/check?user=stranger')).data.ok, true);
     // Amount and member checks.
     const give = (body) => t.call('/subscribe/contribute', { method: 'POST', body });
@@ -297,8 +301,9 @@ test('subscribe: members who already pay can add a one-time contribution ($8–$
     assert.equal((await give({ user: 'kj', cents: 50001 })).status, 400, 'over $500');
     assert.equal((await give({ user: 'kj', cents: 10.5 })).status, 400, 'whole cents only');
     assert.equal((await give({ user: 'kj', cents: 'lots' })).status, 400);
-    assert.equal((await give({ user: 'stranger', cents: 1000 })).status, 409, 'not a member');
-    assert.equal((await give({ user: 'nokey', cents: 1000 })).status, 409, 'no account yet');
+    const strangerGive = await give({ user: 'stranger', cents: 1000 });
+    assert.equal(strangerGive.status, 409, 'not a member');
+    assert.match(strangerGive.data.error, /only for subscribers\. Subscribe first/);
     // kj gives $10: a one-time checkout, tagged as a contribution.
     const before = (await t.cfg()).subscriptions.find((x) => x.user === 'kj');
     const r = await give({ user: 'kj', cents: 1000, attempt: 'a'.repeat(20) });
@@ -338,5 +343,76 @@ test('subscribe: members who already pay can add a one-time contribution ($8–$
     assert.ok(!c.subscriptions.some((x) => /^freebie/.test(x.user)), 'no subscription from a one-time payment');
     const conf = (await t.call('/admin/config/view', { headers: owner })).data.config;
     assert.ok(!conf.allowlist.users.some((u) => /^freebie/.test(u)), 'not on Allowed users');
+  } finally { st.restore(); }
+});
+
+test('subscribe: a paid-up name can’t be bought twice; a new subscriber makes their own PIN on the page', async () => {
+  const st = stubStripe();
+  try {
+    const t = setup();
+    await t.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: [] } } });
+    // Pay for "pia".
+    const attempt = 'q'.repeat(20);
+    await t.call('/subscribe/checkout', { method: 'POST', body: { user: 'pia', attempt } });
+    const sid = [...st.sessions.keys()].pop();
+    st.pay(sid);
+    const status = (await t.call('/subscribe/status?session=' + sid)).data;
+    assert.equal(status.approved, true);
+    assert.match(status.code, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/, 'kept as the in-app fallback');
+    // Paid up: checkout refuses a second subscription (any visit), and says why.
+    for (const a of [attempt, 'w'.repeat(20), undefined]) {
+      const again = await t.call('/subscribe/checkout', { method: 'POST', body: { user: 'PIA', attempt: a } });
+      assert.equal(again.status, 409);
+      assert.match(again.data.error, /already subscribed for this month, so it can’t be paid for again/);
+    }
+    assert.equal(st.sessions.size, 1, 'no second checkout was made');
+    // The PIN page: needs a real checkout id and a verifier (never the PIN).
+    const mk = (body) => t.call('/subscribe/account', { method: 'POST', body });
+    const v = 'b'.repeat(64);
+    assert.equal((await mk({ session: sid, verifier: '1234' })).status, 400, 'a PIN is refused; only the 64-hex verifier');
+    assert.equal((await mk({ session: 'cs_test_' + 'n'.repeat(20), verifier: v })).status, 404, 'unknown checkout');
+    const made = await mk({ session: sid, verifier: v });
+    assert.equal(made.status, 200, JSON.stringify(made.data));
+    assert.equal(made.data.user, 'pia');
+    // It's a normal account: signing in with the same verifier works; the sign-up code is used up.
+    const login = await t.call('/auth/login', { method: 'POST', body: { user: 'pia', verifier: v } });
+    assert.equal(login.status, 200, JSON.stringify(login.data));
+    assert.ok(login.data.token);
+    assert.equal((await t.call('/auth/login', { method: 'POST', body: { user: 'pia', verifier: 'c'.repeat(64) } })).status, 401, 'a different PIN doesn’t work');
+    const twice = await mk({ session: sid, verifier: 'd'.repeat(64) });
+    assert.equal(twice.status, 409, 'only once');
+    assert.equal(twice.data.exists, true);
+    const after = (await t.call('/subscribe/status?session=' + sid)).data;
+    assert.deepEqual([after.approved, after.account, after.code], [true, true, ''], 'the page now says “sign in”');
+    // A name that already had an account (re-subscribing) never gets a PIN form.
+    await t.call('/admin/subscriptions', { method: 'POST', headers: owner, body: { action: 'end', user: 'pia' } });
+    // Contribution and duplicate checkout ids can't be used to make accounts.
+    const cid = 'cs_test_' + 'k'.repeat(20) + '9';
+    await t.env.TELEMETRY.put('subpay:' + cid, JSON.stringify({ user: 'ghost', contribution: true, paid: true, amount: 8 }));
+    assert.equal((await mk({ session: cid, verifier: v })).status, 404);
+    // Two payments raced for one name: the second adds no time, is flagged as a duplicate to refund.
+    await t.call('/admin/subscriptions', { method: 'POST', headers: owner, body: { action: 'add', user: 'ray', period: '1m', amount: 14, note: 'cash' } });
+    const before = (await t.cfg()).subscriptions.find((x) => x.user === 'ray');
+    const dupId = 'cs_test_' + 'd'.repeat(20) + '7';
+    st.sessions.set(dupId, { id: dupId, object: 'checkout.session', mode: 'subscription', client_reference_id: 'ray', metadata: { user: 'ray' }, amount_total: 1400, status: 'complete', payment_status: 'paid', customer: 'cus_9', subscription: 'sub_dup' });
+    await t.hook({ id: 'evt_dup', type: 'checkout.session.completed', data: { object: st.sessions.get(dupId) } });
+    const dup = (await t.call('/subscribe/status?session=' + dupId)).data;
+    assert.deepEqual([dup.duplicate, dup.code], [true, '']);
+    const c = await t.cfg();
+    assert.equal(c.subscriptions.find((x) => x.user === 'ray').expiresAt, before.expiresAt, 'no extra time');
+    assert.deepEqual(c.ledger.filter((x) => x.user === 'ray').map((x) => [x.action, x.amount]), [['add', 14], ['duplicate', 14]]);
+    assert.equal((await mk({ session: dupId, verifier: v })).status, 404, 'a duplicate can’t make an account either');
+    // An expired checkout (after its 31 minutes) is replaced by a fresh one, not reused.
+    const z = 'z'.repeat(20);
+    await t.call('/subscribe/checkout', { method: 'POST', body: { user: 'zed', attempt: z } });
+    const hold = await t.env.TELEMETRY.get('subhold:zed', 'json');
+    const same = await t.call('/subscribe/checkout', { method: 'POST', body: { user: 'zed', attempt: z } });
+    assert.equal(same.data.url, hold.url, 'while it’s open: the same checkout');
+    const realNow = Date.now;
+    Date.now = () => realNow() + 32 * 60e3;   // 32 minutes later
+    let fresh;
+    try { fresh = await t.call('/subscribe/checkout', { method: 'POST', body: { user: 'zed', attempt: z } }); } finally { Date.now = realNow; }
+    assert.equal(fresh.status, 200);
+    assert.notEqual(fresh.data.url, hold.url, 'a new checkout');
   } finally { st.restore(); }
 });

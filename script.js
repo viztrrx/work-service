@@ -776,7 +776,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       console: ['fix', 'Subscribe page: price from Stripe, failed-renewal alerts for the owner, and trying again after backing out of checkout no longer locks the name'] } },
     { at: '2026-10-18T22:30:00-04:00', commit: '', title: 'Subscribe page: members can add a contribution', parts: {
       console: ['feature', 'Subscribe page: a member who already pays and has an account can add a one-time contribution ($8 to $500) instead of subscribing again'],
-      admin: ['feature', 'Subscribers: a contributions total and “contributed $X” on each member’s row'] } }
+      admin: ['feature', 'Subscribers: a contributions total and “contributed $X” on each member’s row'] } },
+    { at: '2026-10-18T23:30:00-04:00', commit: '', title: 'Subscribe page: pick your own PIN; no paying twice', parts: {
+      console: ['feature', 'Subscribe page: after paying, a new subscriber picks their own PIN there and then just signs in; a name that’s already paid up can only contribute, never pay for the subscription again; a clear note that contributions are only for subscribers'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',

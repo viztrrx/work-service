@@ -4,9 +4,10 @@
 // webhook (like Stripe does) and returns to the success page. The real Stripe
 // can't be reached from the test machine. Steps, with screenshots:
 //   1  the page: $13.80 / month, a username box; taken names are refused
-//   2  pay → back on the page: "You're in", with a one-time sign-up code
-//   3  the new subscriber creates their account in the console with that
-//      code and gets in; the console says "Subscribed · renews monthly"
+//   2  pay → back on the page: "You're in" and "Create your PIN": they pick
+//      their own PIN there (short or mismatched PINs are refused)
+//   3  they sign in to the console with that username and PIN (no code)
+//      and get in; the console says "Subscribed · renews monthly"
 //   4  the owner sees them in Subscribers with the payment in the ledger
 //   5  canceling at checkout: "Nothing was charged", and trying again with
 //      the same name isn't blocked by their own unfinished checkout
@@ -92,6 +93,7 @@ try {
   const page = track(await ctx.newPage());
   await page.goto(env.workerUrl + '/subscribe/');
   check('The subscribe page shows $13.80 / month and a username box', /\$13\.80\s*\/ month/.test(await page.textContent('.price')) && await page.isVisible('#user'));
+  check('A clear note: contributions are only for subscribers, subscribe first', await page.isVisible('#contrib-note') && /Contributions are only for subscribers\. New here\? Subscribe first\./.test(await page.textContent('#contrib-note')), await page.textContent('#contrib-note'));
   await page.fill('#user', 'oldfriend');
   await page.waitForFunction(() => /already has access/.test(document.getElementById('hint').textContent), null, { timeout: 8000 }).catch(() => {});
   check('A name that already has access is refused', /already has access/.test(await page.textContent('#hint')) && await page.isDisabled('#pay'), await page.textContent('#hint'));
@@ -108,11 +110,19 @@ try {
   await page.waitForURL(/\/subscribe\/\?done=cs_test_/, { timeout: 10000 });
   const doneOk = await page.waitForFunction(() => !document.getElementById('done').hidden, null, { timeout: 20000 }).then(() => true, () => false);
   const signupCode = doneOk ? (await page.textContent('#code')).trim() : '';
-  check('Back on the page: “You’re in”, with a one-time sign-up code', doneOk && /^[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(signupCode), signupCode);
-  check('…the payment was confirmed by Stripe’s signed webhook', webhooksSent === 1, String(webhooksSent));
+  check('Back on the page: “You’re in”, and “Create your PIN” (the sign-up code only tucked away as an in-app fallback)', doneOk && await page.isVisible('#pin-form') && (await page.inputValue('#pin-user')) === NAME && await page.isHidden('#code') && /^[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(signupCode), signupCode);
+  await page.fill('#pin1', '12'); await page.fill('#pin2', '12'); await page.click('#pin-go');
+  check('A PIN under 4 characters is refused', /at least 4 characters/.test(await page.textContent('#pin-hint')), await page.textContent('#pin-hint'));
+  await page.fill('#pin1', '246810'); await page.fill('#pin2', '246811'); await page.click('#pin-go');
+  check('Two PINs that don’t match are refused', /don’t match/.test(await page.textContent('#pin-hint')), await page.textContent('#pin-hint'));
   await page.screenshot({ path: path.join(OUT, '02-paid-approved.png') });
+  await page.fill('#pin2', '246810'); await page.click('#pin-go');
+  const made = await page.waitForFunction(() => !document.getElementById('steps-ready').hidden, null, { timeout: 20000 }).then(() => true, () => false);
+  check('Their own PIN creates the account; the page says to sign in with it', made && await page.isHidden('#pin-form') && await page.isHidden('#keep-open') && /account is ready/.test(await page.textContent('#done')), (await page.textContent('#done')).replace(/\s+/g, ' ').slice(0, 160));
+  await page.screenshot({ path: path.join(OUT, '02b-pin-made.png') });
+  check('…the payment was confirmed by Stripe’s signed webhook', webhooksSent === 1, String(webhooksSent));
 
-  // 3: create the account in the console with the code.
+  // 3: sign in to the console with the PIN they made (no code, no Create).
   const pc = await browser.newContext({ viewport: { width: 1200, height: 860 } });
   await pc.addInitScript((u) => { try { localStorage.setItem('gpa_admin_tele_endpoint', u); localStorage.setItem('gpa_openai_key_skip', '1'); } catch (e) { /* ignore */ } }, env.workerUrl);
   const cp = track(await pc.newPage());
@@ -121,16 +131,11 @@ try {
   await cp.waitForFunction(() => !!document.getElementById('gpa-root-host'));
   await cp.fill(sr('#gpa-login-user'), NAME);
   await cp.fill(sr('#gpa-login-pin'), '246810');
-  await cp.click(sr('#gpa-signup-btn'));
-  await cp.waitForTimeout(2500);
-  const asks = await R(cp, (r) => ({ box: !r.querySelector('#gpa-login-invite-wrap').hidden, msg: r.querySelector('#gpa-login-msg').textContent }));
-  check('The console asks for the sign-up code', asks.box && /sign-up code/.test(asks.msg), JSON.stringify(asks));
-  await cp.fill(sr('#gpa-login-invite'), signupCode);
-  await cp.click(sr('#gpa-signup-btn'));
-  await cp.waitForTimeout(2500);
+  await cp.click(sr('#gpa-login-btn'));
+  await cp.waitForTimeout(3000);
   await R(cp, (r) => { const b = r.querySelector('#gpa-langpick .gpa-langpick-opt[data-lang="en"]'); if (b && b.offsetParent) b.click(); });
   const inside = await R(cp, (r) => r.querySelector('#gpa-login').style.display === 'none');
-  check('With the code, their account is created and they’re in', inside, await R(cp, (r) => r.querySelector('#gpa-login-msg').textContent));
+  check('Sign in with that username and PIN: they’re in (on a device that never saw them before)', inside, await R(cp, (r) => r.querySelector('#gpa-login-msg').textContent));
   const strip = await cp.waitForFunction(() => { const s = document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-substrip'); return s && !s.hidden && /renews monthly/.test(s.textContent); }, null, { timeout: 25000 }).then(() => true, () => false);
   check('The console shows “Subscribed · renews monthly”', strip, await R(cp, (r) => r.querySelector('#gpa-substrip').textContent.replace(/\s+/g, ' ').trim()));
   await cp.screenshot({ path: path.join(OUT, '03-console-subscribed.png') });
@@ -145,7 +150,9 @@ try {
   await page.goto(env.workerUrl + '/subscribe/');
   await page.fill('#user', NAME);
   await page.waitForFunction(() => /already subscribed/.test(document.getElementById('hint').textContent), null, { timeout: 8000 }).catch(() => {});
-  check('The same name can’t be bought twice', /already subscribed/.test(await page.textContent('#hint')), await page.textContent('#hint'));
+  check('The same name can’t be bought twice: no Subscribe button, only Contribute', /can’t be paid for again/.test(await page.textContent('#hint')) && await page.isHidden('#pay') && await page.isVisible('#give') && (await page.textContent('#form-title')) === 'Contribute', await page.textContent('#hint'));
+  const second = await fetch(env.workerUrl + '/subscribe/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: NAME }) });
+  check('…and the server refuses a second subscription even if asked directly', second.status === 409, String(second.status));
 
   // 5: cancel at checkout.
   const SECOND = 'second' + Date.now().toString(36).slice(-3);

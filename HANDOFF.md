@@ -12,8 +12,11 @@ list (rounds 1–3) was finished and pushed.
 
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
-  deployed (pushing to `main` deploys; see below). The last commit:
-  **contributions** on the subscribe page (owner: "if they already have an
+  deployed (pushing to `main` deploys; see below). The last commit: the
+  subscribe page lets a **new subscriber pick their own PIN**, a paid-up
+  name can **only contribute, never pay twice**, and a note says
+  contributions are only for subscribers (owner: "make it clear and make no
+  mistakes"). Before that: **contributions** on the subscribe page (owner: "if they already have an
   account and paid the $14 subscription… they should have an option to
   contribute/donate anything from $8 or higher"). Before that: the
   subscribe page's **Terms, Refund & Cancellation and Privacy pages** and
@@ -290,8 +293,31 @@ day, 14 days; not system notices), `trivia` (#public only). Memory only:
   strip says "Subscribed · renews monthly". **Never tested against real
   Stripe** (blocked from the dev container): tests use a stand-in that signs
   webhooks like Stripe. Tests: `subscribe.test.mjs`, `subscribe.mjs`.
-  Contributions: `/subscribe/check` adds `canContribute` when the name has an
-  active subscription and an account; the page then shows `#contrib` ($8–$500,
+  Own PIN: after payment `/subscribe/status` gives the buyer's page the
+  sign-up code; the page shows **Create your PIN**, derives the console's
+  server verifier (PBKDF2-SHA256 210k, `gpa-server|<lower user>|<pin>`, salt
+  `gpa-server-salt|<lower user>`; must stay identical to `serverVerifier()` in
+  script.js) and POSTs `{session, verifier}` to `/subscribe/account`, which
+  needs `subpay:<session>` approved (not a contribution or duplicate), no
+  account yet, and the unused `invite:<name>` matching the record; it creates
+  the account like `/auth/register` (salted verifier hash), deletes the
+  invite, sets the record to `{code:'', account:true}` (10/h per network,
+  prefix `subacct`). The console then signs in with Sign in (with Allowed
+  users on, a device without a local profile is fine). The code stays as a
+  fallback under "Rather create your account in the app?".
+  No paying twice: `nameStatus` refuses any active subscriber ("already
+  subscribed for this month, so it can't be paid for again"), so checkout is
+  409 and the page shows only the contribution box (`#form-title` →
+  Contribute). Checkout Sessions expire after `CHECKOUT_TTL_S` (31 min); the
+  hold `subhold:<name>` stores `{attempt, session, url, until: expiry+2min}`,
+  so the same visit gets its open checkout URL back without calling Stripe
+  and another visit can't open a second one; the Idempotency-Key includes the
+  minute (double taps). If two payments still race, `fromSession` sees an
+  active name and records `action: 'duplicate'` (no time added, no sign-up),
+  tells the owner to refund and cancel the extra subscription, and the page
+  says it'll be refunded.
+  Contributions: `/subscribe/check` adds `canContribute` (and `hasAccount`)
+  for every active subscriber; the page then shows `#contrib` ($8–$500,
   `CONTRIB_MIN_CENTS`/`CONTRIB_MAX_CENTS`) instead of Subscribe.
   `/subscribe/contribute` (same 10/h-per-network limit as checkout,
   `checkoutLimited`) makes a Checkout Session in **payment** mode with
@@ -463,7 +489,8 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 
 | Commit | What |
 |---|---|
-| (this) | Subscribe page: one-time contributions ($8+) from members |
+| (this) | Subscribe page: own PIN after paying, no paying twice, contributions note |
+| `4944c8b` | Subscribe page: one-time contributions ($8+) from members |
 | `c9d49b1` | Refund policy: no refunds (billing errors only) |
 | `c9465ac` | Subscribe page: Terms, Refund & Cancellation, Privacy pages; contact email; renewal disclosure |
 | `c196301` | Subscribe page: "Saints Service", the planet icon and its colors |
@@ -501,7 +528,7 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 ## 6. Testing
 
 ```bash
-npm test                                   # node --test tests/*.test.mjs (113 tests)
+npm test                                   # node --test tests/*.test.mjs (114 tests)
 npx wrangler deploy --dry-run --outdir /tmp/x   # bundle/config check, deploys nothing
 # Browser suites (Playwright vs local workerd), each takes an output dir for screenshots:
 node tests/browser/eaglercraft.e2e.mjs     # 83
@@ -526,7 +553,7 @@ node tests/browser/music.mjs               # 15
 node tests/browser/my-music.mjs            # 15
 node tests/browser/admin-app.mjs           # 20
 node tests/browser/playlists.mjs           # 21
-node tests/browser/subscribe.mjs           # 32
+node tests/browser/subscribe.mjs           # 36
 node tests/browser/usage-meter.mjs         # 16
 node tests/browser/usage-meter-sizes.mjs   # 25
 node tests/browser/ask-photo-size.mjs      # 6
