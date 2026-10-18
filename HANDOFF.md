@@ -13,6 +13,21 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **Opens centered** (owner: "make it so it doesn't take up the whole
+  screen on injection… a decent size and centered in the middle of the
+  website so it's not obvious"): new size key `'center'` (`centeredSize()`:
+  60% × 72% of the viewport, capped 920 × 680, at least 360 × 420), the
+  default whenever the console is injected (`panelSizeKey` ignores a stored
+  `'full'`; Compact…XL are kept); centered by `applyPanelSize`, on window
+  resize and when un-minimizing; draggable; the sign-in preference restore
+  uses the same rule. APP_MODE stays full. Settings → Size has a Centered
+  button. Signed out on a website (owner, with a marked-up screenshot: only
+  the sign-in card, not the dark window around it): `.gpa-panel.gpa-injected
+  .gpa-locked` makes the panel transparent (no background, border, shadow,
+  backdrop blur), hides everything but `.gpa-login`/`.gpa-gate`/`.gpa-mini`,
+  and lets clicks through (`pointer-events: none`, card `auto`;
+  `syncHostHit()` sets the host's too, off while minimized); gates there are
+  card-only, and the sign-in card hides under a device lock (`:has`). Before that:
   **Student number required + Forgot PIN by student number + locked
   devices + Sign-in help** (owner: "if their email isn't logged and saved
   to their account… they have to enter their student number… don't let them

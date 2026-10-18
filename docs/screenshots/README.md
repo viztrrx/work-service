@@ -14,6 +14,7 @@ new subscriber and then the owner would see things.
 | [3-playlists](#3-playlists-everyone-signed-in) | Spotify / Apple Music playlist → YouTube links, for everyone |
 | [4-youtube-to-mp3](#4-youtube-to-mp3-owner) | The MP3 converter in Music → My music |
 | [5-subscribe-page](#5-subscribe-page) | The payment page and the $6 contribution box |
+| [8-opens-centered](#8-opens-small-and-centered) | **New:** injected into a website: only the sign-in card shows; signed in, a centered window |
 | [7-student-number-and-locks](#7-student-numbers-forgot-pin-and-locked-devices) | **New:** the required student-number screen, Forgot PIN by student number, locked devices, your Sign-in help card |
 | [6-pin-reset](#6-resetting-a-forgotten-pin-owner) | Forgotten PINs: **Forgot PIN?** request + your Approve (no contact needed), or a reset code |
 
@@ -221,3 +222,21 @@ ends**.
 **Everyone's school email and the log.**
 
 <img src="7-student-number-and-locks/8-owner-emails-and-log.png" width="420" alt="Approved people with school emails, and the Sign-in help log">
+
+---
+
+## 8. Opens small and centered
+
+Injected into a website and signed out, **only the sign-in card** shows, in
+the middle of the page (no dark window around it; the page stays usable).
+
+<img src="8-opens-centered/1-signed-out-card-only.png" width="640" alt="Only the sign-in card, centered on the website">
+
+The same for Forgot PIN and a locked device.
+
+<img src="8-opens-centered/2-forgot-pin-card-only.png" width="420" alt="Forgot PIN card only"> <img src="8-opens-centered/3-locked-card-only.png" width="420" alt="Locked device card only">
+
+Signed in, the console is a **centered window** (about 60% of the page),
+not the whole screen. (Here the required student-number screen is on top.)
+
+<img src="8-opens-centered/4-signed-in-centered.png" width="640" alt="Signed-in console as a centered window">

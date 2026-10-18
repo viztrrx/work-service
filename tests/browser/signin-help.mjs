@@ -75,6 +75,19 @@ try {
 
   // 1: kim's first sign-in: the student-number screen.
   kim = await computer();
+  // Injected and signed out: only the sign-in card, centered; the page around it stays usable.
+  await kim.page.waitForTimeout(800);
+  const look = await kim.page.evaluate(() => {
+    const host = document.getElementById('gpa-root-host');
+    const r = host.shadowRoot;
+    const card = r.querySelector('.gpa-login-card').getBoundingClientRect();
+    const panel = r.querySelector('.gpa-panel');
+    const hit = document.elementFromPoint(Math.max(5, card.left - 60), card.top + card.height / 2);
+    return { cardW: Math.round(card.width), cardCx: Math.round(card.left + card.width / 2), cardCy: Math.round(card.top + card.height / 2), vw: innerWidth, vh: innerHeight,
+      panelBg: getComputedStyle(panel).backgroundColor, hitIsPage: !!hit && hit !== host && !host.contains(hit) };
+  });
+  check('Injected, signed out: only the sign-in card shows, centered on the page; the page around it can still be clicked', look.cardW < 420 && Math.abs(look.cardCx - look.vw / 2) < 4 && Math.abs(look.cardCy - look.vh / 2) < 60 && /rgba\(0, 0, 0, 0\)|transparent/.test(look.panelBg) && look.hitIsPage, JSON.stringify(look));
+  await kim.page.screenshot({ path: path.join(OUT, '00-signin-card-only.png') });
   let s = await signIn(kim.page, KIM, '246810', '#gpa-signup-btn');
   check('kim creates her account and gets in', s.inside, JSON.stringify(s));
   const gateUp = await waitFor(kim.page, (r) => { const g = r.querySelector('.gpa-student-gate'); return !!g && !g.hidden; }, null, 20000);
@@ -97,6 +110,8 @@ try {
   await kim.page.screenshot({ path: path.join(OUT, '02-student-number-filled.png') });
   await kim.page.click(sr('#gpa-sg-save'));
   const gateGone = await waitFor(kim.page, (r) => { const g = r.querySelector('.gpa-student-gate'); return !g || g.hidden; }, null, 10000);
+  const inside = await kim.page.evaluate(() => { const p = document.getElementById('gpa-root-host').shadowRoot.querySelector('.gpa-panel').getBoundingClientRect(); return { w: Math.round(p.width), h: Math.round(p.height), cx: Math.round(p.left + p.width / 2), cy: Math.round(p.top + p.height / 2), vw: innerWidth, vh: innerHeight }; });
+  check('Signed in: a centered window, not the whole screen', inside.w < inside.vw * 0.7 && inside.h < inside.vh * 0.8 && Math.abs(inside.cx - inside.vw / 2) < 4 && Math.abs(inside.cy - inside.vh / 2) < 4, JSON.stringify(inside));
   check('Saved: the screen goes away and the console works again', gateGone, await R(kim.page, (r) => (r.querySelector('#gpa-sg-msg') || {}).textContent || ''));
   check('…and the rest of the console is usable', gateGone && await R(kim.page, (r) => ![...r.children].some((c) => c.inert)));
   const kimAcct = await admin('/admin/signin-help', { action: 'list' });

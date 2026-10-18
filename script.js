@@ -159,8 +159,19 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // or collapse to.
   const APP_MODE = window.__agentConsoleApp === true;
   const FULL_MARGIN = APP_MODE ? 0 : 16;
+  // "Centered" (the default whenever the console is injected into a website):
+  // a moderate window in the middle of the page, so it isn't obvious from
+  // across the room and doesn't cover the whole site. Tracks the viewport.
+  function centeredSize() {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    return {
+      w: Math.max(Math.min(360, vw), Math.min(Math.round(vw * 0.6), 920, vw - 32)),
+      h: Math.max(Math.min(420, vh), Math.min(Math.round(vh * 0.72), 680, vh - 32))
+    };
+  }
   function sizeFor(key) {
     if (APP_MODE) return { w: window.innerWidth, h: window.innerHeight };
+    if (key === 'center') return centeredSize();
     if (key === 'full') {
       return {
         w: Math.max(360, window.innerWidth - FULL_MARGIN * 2),
@@ -798,7 +809,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       admin: ['feature', 'Allowed users: Forgot PIN requests with the device they came from (usual device or not), Approve new PIN / Deny; New subscribers: Share the Doc (subscribers check Google Docs at school)'] } },
     { at: '2026-10-19T06:00:00-04:00', commit: '', title: 'Student numbers, PIN resets by student number, locked devices', parts: {
       console: ['feature', 'Everyone signs in with their school student number on file (a screen you can’t skip asks once); Forgot PIN resets right away when the student number matches; too many unauthorized sign-in attempts lock the device until 12 PM'],
-      admin: ['feature', 'Security → Sign-in help (owner and admins): locked devices (Approve / keep locked), Forgot-PIN requests, everyone’s school email, and a log; alerts to the owner and admins'] } }
+      admin: ['feature', 'Security → Sign-in help (owner and admins): locked devices (Approve / keep locked), Forgot-PIN requests, everyone’s school email, and a log; alerts to the owner and admins'] } },
+    { at: '2026-10-19T07:00:00-04:00', commit: '', title: 'Opens centered, not full screen', parts: {
+      console: ['change', 'Injected into a website, only the sign-in card shows (centered, the page around it still usable); signed in, the console is a centered window (about 60% of the page) instead of the whole screen; Full page is still in Settings → Size']} }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -3012,7 +3025,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         .gps-ov-wide { grid-column: auto; }
         .gps-models { grid-template-columns: minmax(0, 1fr); }
         .gps-sizes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-        .gps .gps-sizes > button[data-size="full"] { grid-column: span 2; }
+        .gps .gps-sizes > button[data-size="full"], .gps .gps-sizes > button[data-size="center"] { grid-column: span 2; }
         .gps-gallery-sm { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .gps-choices-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         .gps-color { grid-template-columns: 40px minmax(0, 1fr) 84px 32px; gap: 8px; }
@@ -3083,7 +3096,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   particleWrap.appendChild(particleCanvas);
 
   const panel = document.createElement('div');
-  panel.className = 'gpa-panel' + (APP_MODE ? ' gpa-app' : '');
+  panel.className = 'gpa-panel' + (APP_MODE ? ' gpa-app' : ' gpa-injected');
   particleWrap.appendChild(panel);
 
   panel.innerHTML = `
@@ -4141,6 +4154,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
                     <button class="size-btn" data-size="normal"><span class="gps-sil" style="--w:36px;--h:48px"></span><span>Normal</span></button>
                     <button class="size-btn" data-size="large"><span class="gps-sil" style="--w:42px;--h:56px"></span><span>Large</span></button>
                     <button class="size-btn" data-size="xl"><span class="gps-sil" style="--w:48px;--h:64px"></span><span>XL</span></button>
+                    <button class="size-btn" data-size="center"><span class="gps-sil gps-sil-full" style="--w:60px;--h:44px"></span><span>Centered</span></button>
                     <button class="size-btn" data-size="full"><span class="gps-sil gps-sil-full" style="--w:88px;--h:56px"></span><span>Full page</span></button>
                   </div>
                 </div>
@@ -6038,6 +6052,21 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
          the login screen is part of the same design system, not a
          separately-styled disguise. */
       .gpa-panel.gpa-locked { }
+      /* Injected into a website and signed out: only the sign-in card shows.
+         The window around it is invisible and lets clicks through to the
+         page; the card (and a lock screen, if any) is all there is. */
+      .gpa-panel.gpa-injected.gpa-locked:not(.gpa-minimized) {
+        background: transparent !important; border-color: transparent !important; box-shadow: none !important; pointer-events: none;
+        backdrop-filter: none !important; -webkit-backdrop-filter: none !important; overflow: visible !important;
+      }
+      /* …and a lock screen there is just its card too (the sign-in card hides under it). */
+      .gpa-panel.gpa-injected.gpa-locked:not(.gpa-minimized) .gpa-gate { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; pointer-events: none; }
+      .gpa-panel.gpa-injected.gpa-locked:not(.gpa-minimized) .gpa-gate .gpa-gate-card { pointer-events: auto; box-shadow: 0 24px 70px -20px rgba(0,0,0,.55), 0 0 0 1px var(--gpa-border); }
+      .gpa-panel.gpa-injected.gpa-locked:not(.gpa-minimized):has(> .gpa-device-lock:not([hidden])) .gpa-login { visibility: hidden; }
+      .gpa-panel.gpa-injected.gpa-locked:not(.gpa-minimized) > :not(.gpa-login):not(.gpa-gate):not(.gpa-mini) { visibility: hidden !important; }
+      .gpa-panel.gpa-injected.gpa-locked:not(.gpa-minimized) .gpa-login { background: transparent; pointer-events: none; }
+      .gpa-panel.gpa-injected.gpa-locked:not(.gpa-minimized) .gpa-login-card { pointer-events: auto; box-shadow: 0 24px 70px -20px rgba(0,0,0,.55), 0 0 0 1px var(--gpa-border); }
+      .gpa-panel.gpa-injected .gpa-gate { pointer-events: auto; }
       /* Neutral, quiet button while signed out — no accent glow or rings. */
       .gpa-mini.gpa-mini-locked {
         width: 42px; height: 42px; border-radius: 50% !important;
@@ -6805,6 +6834,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     // dot. Drop the class while minimized, restore it on expand if signed out.
     panel.classList.toggle('gpa-locked', !v && !signedInNow);
     panel.classList.toggle('gpa-minimized', v);
+    syncHostHit();
     applyReopenIconVisibility();
     panel.classList.toggle('gpa-fullpage', !v && panelSizeKey === 'full');
     panel.style.width = v ? 'auto' : sizeFor(panelSizeKey).w + 'px';
@@ -6824,6 +6854,12 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       host.style.left = targetLeft + 'px';
       host.style.top = targetTop + 'px';
       host.addEventListener('transitionend', () => host.classList.remove('gpa-settling'), { once: true });
+    } else if (panelSizeKey === 'center') {
+      // Centered reopens in the middle of the page, where it started.
+      host.classList.remove('gpa-settling');
+      const c = sizeFor('center');
+      host.style.left = Math.round((window.innerWidth - c.w) / 2) + 'px';
+      host.style.top = Math.round((window.innerHeight - c.h) / 2) + 'px';
     } else if (panelSizeKey === 'full') {
       // Full-page mode always re-centers on the current viewport rather than
       // expanding from wherever the mini dot happened to be resting — there's
@@ -8021,15 +8057,18 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // Defaults to the full-page "app" surface now rather than the small
   // windowed panel — the windowed presets are still there for anyone who
   // wants the old floating-widget footprint back.
-  let panelSizeKey = APP_MODE ? 'full' : (localStorage.getItem(PANEL_SIZE_KEY) || 'full');
-  if (!PANEL_SIZES[panelSizeKey] && panelSizeKey !== 'full') panelSizeKey = 'full';
+  // Injected into a website, the console always opens centered and
+  // moderate-sized (owner's rule: not the whole screen); Full page is still
+  // in Settings for the rest of that visit. The smaller presets are kept.
+  const storedSize = localStorage.getItem(PANEL_SIZE_KEY);
+  let panelSizeKey = APP_MODE ? 'full' : (PANEL_SIZES[storedSize] ? storedSize : 'center');
   const sizeBtns = panel.querySelectorAll('.size-btn');
   function setSizeUI(s) {
     sizeBtns.forEach((b) => b.classList.toggle('primary', b.dataset.size === s));
   }
   function applyPanelSize(key) {
     if (APP_MODE) key = 'full';
-    panelSizeKey = (PANEL_SIZES[key] || key === 'full') ? key : 'full';
+    panelSizeKey = (PANEL_SIZES[key] || key === 'full' || key === 'center') ? key : 'center';
     localStorage.setItem(PANEL_SIZE_KEY, panelSizeKey);
     const { w, h } = sizeFor(panelSizeKey);
     if (!isMin) {
@@ -8039,6 +8078,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       if (panelSizeKey === 'full') {
         host.style.left = FULL_MARGIN + 'px';
         host.style.top = FULL_MARGIN + 'px';
+      } else if (panelSizeKey === 'center') {
+        host.style.left = Math.round((window.innerWidth - w) / 2) + 'px';
+        host.style.top = Math.round((window.innerHeight - h) / 2) + 'px';
       }
     }
     // Keep the ambient particle field sized to whatever the panel is now.
@@ -8059,7 +8101,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   requestAnimationFrame(() => applyPanelSize(panelSizeKey));
   // Full-page mode is the one size that should actually track the window —
   // it's meant to fill it, not just have filled it once at some past moment.
-  onWin('resize', () => { if (panelSizeKey === 'full' && !isMin) applyPanelSize('full'); });
+  onWin('resize', () => { if ((panelSizeKey === 'full' || panelSizeKey === 'center') && !isMin) applyPanelSize(panelSizeKey); });
   sizeBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
       setSizeUI(btn.dataset.size);
@@ -15940,8 +15982,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       if (typeof setParticleUI === 'function') setParticleUI(localStorage.getItem(PARTICLE_KEY) || 'off');
       if (typeof setParticleStyle === 'function') setParticleStyle(localStorage.getItem(PARTICLE_KEY) || 'off');
       if (typeof setSizeUI === 'function' && typeof applyPanelSize === 'function') {
-        const sz = localStorage.getItem(PANEL_SIZE_KEY) || 'full';
-        setSizeUI((PANEL_SIZES[sz] || sz === 'full') ? sz : 'full');
+        // Same rule as on injection: a saved "Full page" doesn't come back; it opens centered.
+        const sz0 = localStorage.getItem(PANEL_SIZE_KEY);
+        const sz = PANEL_SIZES[sz0] ? sz0 : 'center';
+        setSizeUI(sz);
         applyPanelSize(sz);
       }
       if (typeof gpsRefreshAll === 'function') gpsRefreshAll();
@@ -15950,8 +15994,14 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
 
   // Toggles every "signed out" visual: plain rounded window, no HUD chrome,
   // no particles, neutral minimized button.
+  // Signed out on a website, the host box must not catch clicks around the
+  // sign-in card either (the page underneath stays usable).
+  function syncHostHit() {
+    host.style.pointerEvents = !APP_MODE && panel.classList.contains('gpa-locked') && !panel.classList.contains('gpa-minimized') ? 'none' : '';
+  }
   function setLockedChrome(locked) {
     panel.classList.toggle('gpa-locked', locked);
+    syncHostHit();
     minimized.classList.toggle('gpa-mini-locked', locked);
     if (locked) {
       minimized.textContent = '';
@@ -24453,7 +24503,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       const checks = [
         (safeGet(THEME_KEY) || 'matte') !== 'matte',
         !!safeGet(CUSTOM_THEME_KEY),
-        (safeGet(PANEL_SIZE_KEY) || 'full') !== 'full',
+        !['full', 'center'].includes(safeGet(PANEL_SIZE_KEY) || 'center'),
         ...Object.keys(APPEARANCE_DEFAULTS).map((k) => appearance[k] !== APPEARANCE_DEFAULTS[k]),
         (safeGet(PARTICLE_KEY) || 'off') !== 'off',
         particleMargin !== 40,
