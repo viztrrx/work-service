@@ -29,6 +29,8 @@ export const SUB_PRICE_DEFAULT = 1380;
 // Worker holds the name a little longer, so one name never has two open.
 export const CHECKOUT_TTL_S = 31 * 60;
 export const SUB_NAME_RE = /^[A-Za-z0-9_.-]{1,40}$/;
+// New subscribers' school email: 6-digit student number @ this domain.
+export const SCHOOL_DOMAIN = 'alseducation.onmicrosoft.com';
 export const SESSION_RE = /^cs_(?:test|live)_[A-Za-z0-9]{8,200}$/;
 export const priceCents = (env) => {
   const n = Math.round(Number(env && env.SUB_PRICE_CENTS));
@@ -251,6 +253,16 @@ export function subscribePage(env, { ready, cents }) {
   .note b { color: var(--text); }
   .pin-h { font-size: 18px; margin: 18px 0 4px; }
   #pin-form label { margin-top: 10px; }
+  .warn { border: 1px solid rgba(248,113,113,0.55); background: rgba(248,113,113,0.09); border-radius: 14px; padding: 12px 14px; margin: 10px 0 4px; font-size: 13.5px; color: var(--text); line-height: 1.5; }
+  .warn b { display: block; color: #fca5a5; margin-bottom: 4px; font-size: 14.5px; }
+  .warn ul { margin: 6px 0 0; color: var(--sub); font-size: 13px; } .warn ul li::before { content: "•"; color: #fca5a5; }
+  .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--text); margin: 14px 0 6px !important; cursor: pointer; }
+  .check input { width: 20px; height: 20px; flex: 0 0 20px; margin: 1px 0 0; padding: 0; accent-color: var(--teal); }
+  .email-box { display: flex; align-items: center; background: var(--field); border: 1px solid var(--border); border-radius: 12px; padding: 0 14px; }
+  .email-box:focus-within { border-color: var(--violet); box-shadow: 0 0 0 3px rgba(114,80,203,0.25); }
+  .email-box input { width: 7.2ch; flex: 0 0 auto; border: 0; background: none; box-shadow: none !important; padding: 13px 0; letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
+  .email-box span { color: var(--sub); font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  #email-form h2, #pin-form h2 { margin-bottom: 4px; }
   #pin-user { color: var(--sub); }
   details.alt { margin-top: 16px; font-size: 13px; color: var(--sub); } details.alt summary { cursor: pointer; color: var(--ok); }
   .legal { text-align: center; color: var(--sub); font-size: 12.5px; margin-top: 18px; }
@@ -305,12 +317,15 @@ export function subscribePage(env, { ready, cents }) {
     <form id="pin-form" hidden>
       <h2 class="pin-h">Create your PIN</h2>
       <p class="hint">You choose it, and you’ll use it with your username to sign in. Use at least 4 characters, and don’t share it.</p>
+      <div class="warn" role="note" id="pin-warn"><b>You must remember this PIN.</b>It’s the only way to sign in. Nobody can look it up or reset it for you, not even the owner, so if you forget it you won’t be able to get back in.
+        <ul><li>Make it simple enough that <b style="display:inline;color:inherit">you</b> will always remember it, and only you would know it.</li><li>Not easy to guess: no 1234, 0000, 1111, 1212, your birthday, your username or your student number.</li></ul></div>
       <label for="pin-user">Username</label>
       <input id="pin-user" autocomplete="username" readonly>
       <label for="pin1">PIN</label>
       <input id="pin1" type="password" autocomplete="new-password" maxlength="64">
       <label for="pin2">Type your PIN again</label>
       <input id="pin2" type="password" autocomplete="new-password" maxlength="64">
+      <label class="check" for="pin-ok"><input type="checkbox" id="pin-ok"> I’ll remember this PIN. I understand it can’t be recovered.</label>
       <div id="pin-hint" class="hint" role="status" aria-live="polite"></div>
       <button id="pin-go" type="submit">Create my account</button>
       <details class="alt" id="pin-alt"><summary>Rather create your account in the app?</summary>
@@ -318,6 +333,15 @@ export function subscribePage(env, { ready, cents }) {
         <div class="code" id="code"></div>
       </details>
     </form>
+    <form id="email-form" hidden novalidate>
+      <h2 class="pin-h">Add your school email</h2>
+      <p class="hint">Type only the 6 numbers of your school email. The owner and admins get it and send you the instructions for getting Saints Service on your computer.</p>
+      <label for="sid">School email</label>
+      <div class="email-box"><input id="sid" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off" spellcheck="false" placeholder="000000" aria-describedby="sid-dom"><span id="sid-dom">@${SCHOOL_DOMAIN}</span></div>
+      <div id="sid-hint" class="hint" role="status" aria-live="polite"></div>
+      <button id="sid-go" type="submit" disabled>Send my email</button>
+    </form>
+    <p class="hint ok" id="email-sent" hidden></p>
     <ol id="steps-ready" hidden>
       <li>Open Saints Service (the Agent Console) the way the owner showed you.</li>
       <li>Type your username <b class="u"></b> and the PIN you just made, then tap <b>Sign in</b>.</li>
@@ -450,13 +474,32 @@ ${policyFooter(env)}
       return crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: enc.encode('gpa-server-salt|' + u), iterations: 210000 }, k, 256);
     }).then(function (bits) { return Array.prototype.map.call(new Uint8Array(bits), function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); });
   }
+  // PINs anyone could guess are refused (the server never sees the PIN, so this is checked here).
+  var COMMON = ['1234', '12345', '123456', '1234567', '12345678', '0000', '1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888', '9999', '1212', '6969', '4321', '1122', '1313', '2000', '2001', '2580', '1004', '7777777', 'abcd', 'qwerty', 'password', 'pass', 'pin'];
+  function weakPin(p, user) {
+    var low = String(p).toLowerCase();
+    if (COMMON.indexOf(low) >= 0) return 'That PIN is one of the first ones people try. Pick something only you would know.';
+    if (/^(.)\\1+$/.test(low)) return 'All the same character is too easy to guess. Pick something only you would know.';
+    if (/^\\d+$/.test(low)) {
+      var up = true, down = true;
+      for (var i = 1; i < low.length; i++) { var d = low.charCodeAt(i) - low.charCodeAt(i - 1); if (d !== 1) up = false; if (d !== -1) down = false; }
+      if (up || down) return 'Counting up or down (like 1234 or 9876) is too easy to guess.';
+      if (/^(19|20)\\d\\d$/.test(low)) return 'A year is easy to guess. Pick something only you would know.';
+    }
+    if (user && low === String(user).toLowerCase()) return 'Don’t use your username as your PIN.';
+    return '';
+  }
   var pinForm = $('pin-form');
+  if ($('pin-ok')) $('pin-ok').addEventListener('change', function () { if (this.checked && /^Tick/.test($('pin-hint').textContent)) { $('pin-hint').textContent = ''; $('pin-hint').className = 'hint'; } });
   if (pinForm) pinForm.addEventListener('submit', function (e) {
     e.preventDefault();
     var p1 = $('pin1').value, p2 = $('pin2').value, ph = $('pin-hint'), go = $('pin-go');
     var say = function (t, cls) { ph.textContent = t; ph.className = 'hint' + (cls ? ' ' + cls : ''); };
     if (p1.length < 4) { say('Use a PIN of at least 4 characters.', 'bad'); return; }
     if (p1 !== p2) { say('The two PINs don’t match. Type them again.', 'bad'); return; }
+    var weak = weakPin(p1, pinUser);
+    if (weak) { say(weak, 'bad'); return; }
+    if (!$('pin-ok').checked) { say('Tick “I’ll remember this PIN” first: it can’t be recovered if you forget it.', 'bad'); return; }
     if (!(window.crypto && crypto.subtle && window.TextEncoder)) { say('This browser can’t set your PIN here. Open “Rather create your account in the app?” below.', 'bad'); $('pin-alt').open = true; return; }
     go.disabled = true; go.textContent = 'Securing your PIN…'; say('');
     verifierFor(pinUser, p1).then(function (v) {
@@ -464,8 +507,9 @@ ${policyFooter(env)}
     }).then(function (d) {
       if (d.ok) {
         $('pin1').value = ''; $('pin2').value = '';
-        pinForm.hidden = true; $('steps-ready').hidden = false; $('keep-open').hidden = true;
-        setDone('Your account is ready. Sign in with your username and the PIN you just made.');
+        pinForm.hidden = true;
+        setDone('Your account is ready. One last step: add your school email.');
+        showEmail();
         return;
       }
       if (d.exists) { pinForm.hidden = true; $('steps-back').hidden = false; }
@@ -474,6 +518,34 @@ ${policyFooter(env)}
     }).catch(function () { say('Couldn’t reach the server. Try again.', 'bad'); go.disabled = false; go.textContent = 'Create my account'; });
   });
   function setDone(t) { var h = document.querySelector('#done .hint.ok'); if (h) h.textContent = t; }
+  // The school email: only the 6 digits are typed; the domain is fixed.
+  var DOMAIN = '${SCHOOL_DOMAIN}';
+  var emailForm = $('email-form'), sid = $('sid'), sidGo = $('sid-go'), sidHint = $('sid-hint');
+  function showEmail() { emailForm.hidden = false; $('keep-open').hidden = false; $('steps-ready').hidden = true; setTimeout(function () { try { sid.focus(); } catch (e) {} }, 50); }
+  function syncSid() {
+    var v = sid.value.replace(/\\D/g, '').slice(0, 6);
+    if (v !== sid.value) sid.value = v;
+    sidGo.disabled = v.length !== 6;
+    sidHint.className = 'hint';
+    sidHint.textContent = v.length === 6 ? 'Your email: ' + v + '@' + DOMAIN : v.length ? (6 - v.length) + ' more digit' + (v.length === 5 ? '' : 's') + '.' : 'Numbers only, exactly 6.';
+  }
+  if (sid) { sid.addEventListener('input', syncSid); syncSid(); }
+  if (emailForm) emailForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var v = sid.value;
+    if (!/^\\d{6}$/.test(v)) { sidHint.textContent = 'Type exactly 6 numbers.'; sidHint.className = 'hint bad'; return; }
+    sidGo.disabled = true; sidGo.textContent = 'Sending…';
+    fetch('/subscribe/email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session: session, studentId: v }) }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.ok) {
+        emailForm.hidden = true; $('keep-open').hidden = true; $('steps-ready').hidden = false;
+        var sent = $('email-sent'); sent.textContent = 'Sent: ' + d.email + '. The owner or an admin will email you the instructions there.'; sent.hidden = false;
+        setDone('Your account is ready. Sign in with your username and the PIN you just made.');
+        return;
+      }
+      sidHint.textContent = d.error || 'Couldn’t send it. Try again.'; sidHint.className = 'hint bad';
+      sidGo.disabled = false; sidGo.textContent = 'Send my email';
+    }).catch(function () { sidHint.textContent = 'Couldn’t reach the server. Try again.'; sidHint.className = 'hint bad'; sidGo.disabled = false; sidGo.textContent = 'Send my email'; });
+  });
   if (session) {
     show('wait');
     var tries = 0;
@@ -484,6 +556,7 @@ ${policyFooter(env)}
           $('done-user').textContent = d.user;
           Array.prototype.forEach.call(document.querySelectorAll('.u'), function (b) { b.textContent = d.user; });
           if (d.code) { $('code').textContent = d.code; $('pin-user').value = d.user; pinUser = d.user; $('pin-form').hidden = false; $('keep-open').hidden = false; }
+          else if (d.account && !d.email) showEmail();
           else if (d.account) $('steps-ready').hidden = false;
           else $('steps-back').hidden = false;
           show('done'); return;

@@ -120,10 +120,28 @@ try {
   await page.fill('#pin1', '246810'); await page.fill('#pin2', '246811'); await page.click('#pin-go');
   check('Two PINs that don’t match are refused', /don’t match/.test(await page.textContent('#pin-hint')), await page.textContent('#pin-hint'));
   await page.screenshot({ path: path.join(OUT, '02-paid-approved.png') });
-  await page.fill('#pin2', '246810'); await page.click('#pin-go');
+  check('A clear warning: they must remember the PIN, nobody can recover it; simple for them, hard to guess', await page.isVisible('#pin-warn') && /You must remember this PIN\./.test(await page.textContent('#pin-warn')) && /not even the owner/.test(await page.textContent('#pin-warn')) && /no 1234, 0000/.test(await page.textContent('#pin-warn')));
+  for (const weak of ['1234', '0000', '9876', '2008']) {
+    await page.fill('#pin1', weak); await page.fill('#pin2', weak); await page.click('#pin-go');
+    check('An easy-to-guess PIN (' + weak + ') is refused', /easy to guess|first ones people try|too easy/.test(await page.textContent('#pin-hint')) && await page.isVisible('#pin-form'), await page.textContent('#pin-hint'));
+  }
+  await page.fill('#pin1', '246810'); await page.fill('#pin2', '246810'); await page.click('#pin-go');
+  check('Without ticking “I’ll remember this PIN”, it doesn’t go through', /Tick “I’ll remember this PIN”/.test(await page.textContent('#pin-hint')) && await page.isVisible('#pin-form'), await page.textContent('#pin-hint'));
+  await page.check('#pin-ok');
+  await page.locator('#pin-form').screenshot({ path: path.join(OUT, '02a-pin-warning.png') });
+  await page.click('#pin-go');
+  const emailStep = await page.waitForFunction(() => !document.getElementById('email-form').hidden, null, { timeout: 20000 }).then(() => true, () => false);
+  check('The PIN creates the account; next: “Add your school email”', emailStep && await page.isHidden('#pin-form') && await page.isHidden('#steps-ready'), (await page.textContent('#done')).replace(/\s+/g, ' ').slice(0, 160));
+  check('The email box: digits only, the domain fixed as “@alseducation.onmicrosoft.com”', (await page.textContent('#sid-dom')) === '@alseducation.onmicrosoft.com' && (await page.getAttribute('#sid', 'maxlength')) === '6' && await page.isDisabled('#sid-go'));
+  await page.locator('#sid').pressSequentially('22a3b9xx29');
+  check('Letters are dropped as they type', (await page.inputValue('#sid')) === '223929' && /Your email: 223929@alseducation\.onmicrosoft\.com/.test(await page.textContent('#sid-hint')) && !(await page.isDisabled('#sid-go')), await page.inputValue('#sid'));
+  await page.locator('#sid').pressSequentially('77');
+  check('No more than 6 digits', (await page.inputValue('#sid')) === '223929', await page.inputValue('#sid'));
+  await page.locator('#email-form').screenshot({ path: path.join(OUT, '02b-school-email.png') });
+  await page.click('#sid-go');
   const made = await page.waitForFunction(() => !document.getElementById('steps-ready').hidden, null, { timeout: 20000 }).then(() => true, () => false);
-  check('Their own PIN creates the account; the page says to sign in with it', made && await page.isHidden('#pin-form') && await page.isHidden('#keep-open') && /account is ready/.test(await page.textContent('#done')), (await page.textContent('#done')).replace(/\s+/g, ' ').slice(0, 160));
-  await page.screenshot({ path: path.join(OUT, '02b-pin-made.png') });
+  check('Sent: the page confirms the email and says to sign in with the PIN', made && await page.isHidden('#email-form') && await page.isHidden('#keep-open') && /Sent: 223929@alseducation\.onmicrosoft\.com/.test(await page.textContent('#email-sent')) && /account is ready/.test(await page.textContent('#done')), (await page.textContent('#done')).replace(/\s+/g, ' ').slice(0, 200));
+  await page.screenshot({ path: path.join(OUT, '02c-pin-made.png') });
   check('…the payment was confirmed by Stripe’s signed webhook', webhooksSent === 1, String(webhooksSent));
 
   // 3: sign in to the console with the PIN they made (no code, no Create).
@@ -267,6 +285,28 @@ try {
   check('Owner’s Subscribers card: a “contributions” total, and “contributed $20” on their row', /\$20contributions/.test(card.totals.replace(/ /g, '')) && /contributed \$20/.test(card.row), JSON.stringify(card));
   await op.waitForTimeout(400);
   await op.screenshot({ path: path.join(OUT, '11-owner-contributions.png') });
+
+  // …and the owner's New subscribers card: the email, the Google Doc link, Email instructions.
+  await op.waitForFunction(() => { const b = document.getElementById('gpa-root-host').shadowRoot.querySelector('#gac-emails'); return b && !/Loading/.test(b.textContent); }, null, { timeout: 15000 }).catch(() => {});
+  const emRow = () => R(op, (r, u) => { const el = [...r.querySelectorAll('.gac-email-row')].find((x) => x.dataset.user === u); return el ? el.textContent.replace(/\s+/g, ' ').trim() : ''; }, NAME);
+  check('Owner: “New subscribers” shows their school email, not sent yet', /223929@alseducation\.onmicrosoft\.com/.test(await emRow()) && /Not sent yet/.test(await emRow()), await emRow());
+  check('…Email instructions waits for the Google Doc link', await R(op, (r) => { const row = r.querySelector('.gac-email-row'); return !!row && !row.querySelector('a[data-em="mail"]'); }));
+  const DOC = 'https://docs.google.com/document/d/1TestDocForInstructions/edit';
+  await op.fill(sr('#gac-emails-docurl'), DOC);
+  await op.click(sr('#gac-emails-doc button[type="submit"]'));
+  await op.waitForFunction(() => !!document.getElementById('gpa-root-host').shadowRoot.querySelector('.gac-email-row a[data-em="mail"]'), null, { timeout: 10000 }).catch(() => {});
+  const href = await R(op, (r, u) => { const el = [...r.querySelectorAll('.gac-email-row')].find((x) => x.dataset.user === u); const a = el && el.querySelector('a[data-em="mail"]'); return a ? a.getAttribute('href') : ''; }, NAME);
+  const mailOk = href.startsWith('mailto:223929%40alseducation.onmicrosoft.com?') && decodeURIComponent(href).includes(DOC) && decodeURIComponent(href).includes('Hi ' + NAME) && /subject=Saints%20Service/.test(href);
+  check('Email instructions: a mail to their school address with the Google Doc link and their username', mailOk, decodeURIComponent(href).slice(0, 220));
+  await R(op, (r) => { r.querySelector('#gac-emails-card').scrollIntoView({ block: 'start' }); });
+  await op.waitForTimeout(300);
+  await op.screenshot({ path: path.join(OUT, '12-owner-new-subscribers.png') });
+  // Tapping it (the mail app opens; here the navigation is stopped) marks it sent.
+  await op.evaluate(() => window.addEventListener('click', (e) => { if (e.composedPath().some((n) => n.tagName === 'A' && /^mailto:/.test(n.getAttribute('href') || ''))) e.preventDefault(); }, true));
+  await R(op, (r, u) => [...r.querySelectorAll('.gac-email-row')].find((x) => x.dataset.user === u).querySelector('a[data-em="mail"]').click(), NAME);
+  await op.waitForFunction((u) => { const el = [...document.getElementById('gpa-root-host').shadowRoot.querySelectorAll('.gac-email-row')].find((x) => x.dataset.user === u); return el && /Sent /.test(el.textContent); }, NAME, { timeout: 10000 }).catch(() => {});
+  check('…and it’s marked “Sent”, by the owner', /Sent \w+ \d+/.test(await emRow()) && /sent by viztrrx/.test(await emRow()), await emRow());
+  check('Their Subscribers row shows the email too', /223929@alseducation\.onmicrosoft\.com/.test(await R(op, (r, u) => { const el = [...r.querySelectorAll('.gac-subscr')].find((x) => x.dataset.user === u); return el ? el.textContent : ''; }, NAME)));
 
   for (const [n, p] of [['subscribe page', page], ['console', cp], ['owner console', op]]) check(`No page errors (${n})`, p._errors.length === 0, p._errors.slice(0, 2).join(' | '));
   await ctx.close(); await pc.close(); await oc.close();

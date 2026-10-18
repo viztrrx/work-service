@@ -421,3 +421,72 @@ test('subscribe: a paid-up name can’t be bought twice; a new subscriber makes 
     assert.notEqual(fresh.data.url, hold.url, 'a new checkout');
   } finally { st.restore(); }
 });
+
+test('subscribe: after the PIN, a new subscriber adds their school email (6 digits); the owner and admins see it and send the instructions', async () => {
+  const st = stubStripe();
+  try {
+    const t = setup();
+    await t.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: [] } } });
+    // The page: a must-remember warning, the checkbox, and the email box with the fixed domain.
+    const page = (await t.call('/subscribe/')).text;
+    assert.match(page, /You must remember this PIN\./);
+    assert.match(page, /Nobody can look it up or reset it for you, not even the owner/);
+    assert.match(page, /no 1234, 0000, 1111, 1212, your birthday/);
+    assert.match(page, /id="pin-ok"/);
+    assert.match(page, /<input id="sid" inputmode="numeric" pattern="\[0-9\]\{6\}" maxlength="6"/);
+    assert.match(page, /<span id="sid-dom">@alseducation\.onmicrosoft\.com<\/span>/);
+    // Pay for "sam".
+    await t.call('/subscribe/checkout', { method: 'POST', body: { user: 'sam', attempt: 's'.repeat(20) } });
+    const sid = [...st.sessions.keys()].pop();
+    st.pay(sid);
+    assert.equal((await t.call('/subscribe/status?session=' + sid)).data.approved, true);
+    const em = (studentId, session = sid) => t.call('/subscribe/email', { method: 'POST', body: { session, studentId } });
+    // Before the PIN: not yet.
+    assert.equal((await em('223929')).status, 409);
+    assert.equal((await t.call('/subscribe/account', { method: 'POST', body: { session: sid, verifier: 'e'.repeat(64) } })).status, 200);
+    // Only exactly 6 digits.
+    for (const bad of ['22392', '2239290', '22a929', '223929@alseducation.onmicrosoft.com', ' ', '', 223929.5]) {
+      const r = await em(bad);
+      assert.equal(r.status, 400, String(bad));
+      assert.match(r.data.error, /6 digits/);
+    }
+    assert.equal((await em('223929', 'cs_test_' + 'u'.repeat(20))).status, 404, 'unknown checkout');
+    const ok = await em('223929');
+    assert.equal(ok.status, 200, JSON.stringify(ok.data));
+    assert.equal(ok.data.email, '223929@alseducation.onmicrosoft.com');
+    assert.equal((await t.call('/subscribe/status?session=' + sid)).data.email, '223929@alseducation.onmicrosoft.com', 'the page knows it was sent');
+    assert.equal((await t.cfg()).subscriptions.find((x) => x.user === 'sam').email, '223929@alseducation.onmicrosoft.com', 'shown on the Subscribers row');
+    // The owner's list.
+    const adm = (body, headers = owner) => t.call('/admin/sub-emails', { method: 'POST', headers, body });
+    let l = await adm({ action: 'list' });
+    assert.equal(l.status, 200);
+    assert.deepEqual(l.data.emails.map((x) => [x.user, x.email, !!x.sentAt]), [['sam', '223929@alseducation.onmicrosoft.com', false]]);
+    assert.equal(l.data.doc, '');
+    // A typo can be fixed (it replaces the entry), up to 3 sends in all.
+    assert.equal((await em('223930')).status, 200);
+    assert.deepEqual((await adm({ action: 'list' })).data.emails.map((x) => x.email), ['223930@alseducation.onmicrosoft.com']);
+    assert.equal((await em('223931')).status, 200);
+    assert.equal((await em('223932')).status, 409, 'no endless changes');
+    // Who can see it: the owner and admins; not moderators, users, or nobody.
+    const v = (u) => (u + '0'.repeat(64)).slice(0, 64).replace(/[^0-9a-f]/g, 'a');
+    await t.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: ['ana', 'mo', 'joe'] } } });
+    for (const u of ['ana', 'mo', 'joe']) await t.call('/auth/register', { method: 'POST', body: { user: u, verifier: v(u) } });
+    await t.call('/admin/user/action', { method: 'POST', headers: owner, body: { u: 'ana', action: 'setrole', role: 'admin' } });
+    await t.call('/admin/user/action', { method: 'POST', headers: owner, body: { u: 'mo', action: 'setrole', role: 'moderator' } });
+    const tok = async (u) => (await t.call('/auth/login', { method: 'POST', body: { user: u, verifier: v(u), takeover: true } })).data.token;
+    assert.equal((await adm({ action: 'list' }, { 'X-GPA-Session': await tok('ana') })).status, 200, 'admin');
+    assert.equal((await adm({ action: 'list' }, { 'X-GPA-Session': await tok('mo') })).status, 403, 'moderator');
+    assert.equal((await adm({ action: 'list' }, { 'X-GPA-Session': (await t.call('/auth/login', { method: 'POST', body: { user: 'joe', verifier: v('joe'), takeover: true } })).data.token })).status, 403, 'user');
+    assert.equal((await adm({ action: 'list' }, {})).status, 401);
+    // The Google Doc link: only docs.google.com.
+    for (const bad of ['http://docs.google.com/document/d/x', 'https://evil.example/document', 'javascript:alert(1)', 'not a link']) assert.equal((await adm({ action: 'setdoc', doc: bad })).status, 400, bad);
+    const doc = 'https://docs.google.com/document/d/1AbCdEf/edit';
+    assert.equal((await adm({ action: 'setdoc', doc })).data.doc, doc);
+    // Marked as sent, with who sent it.
+    const sent = await adm({ action: 'sent', user: 'SAM' }, { 'X-GPA-Session': await tok('ana') });
+    assert.equal(sent.status, 200);
+    assert.deepEqual([!!sent.data.emails[0].sentAt, sent.data.emails[0].sentBy], [true, 'ana']);
+    assert.equal((await adm({ action: 'sent', user: 'nobody' })).status, 404);
+    assert.deepEqual((await adm({ action: 'remove', user: 'sam' })).data.emails, []);
+  } finally { st.restore(); }
+});

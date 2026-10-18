@@ -13,7 +13,11 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
-  **Free access** override in Security (owner, admins, moderators), **Playlists
+  **New subscribers' school email** (owner: "prompt them that it is mandatory
+  they remember this pin… after they create their own pin… add their email…
+  only allowed to type the 6 digit… sent to the admins via app (and
+  notifications)… send the instructions… thru the google docs"). Before
+  that: **Free access** override in Security (owner, admins, moderators), **Playlists
   for everyone** signed in, and contributions from **$6** (owner: "add a
   override button… owner/staff only", "don't make it owner only make it so
   everyone has access to it", "lower the price from $8 minimum to $6").
@@ -421,6 +425,24 @@ day, 14 days; not system notices), `trivia` (#public only). Memory only:
   `wireFreeAccess()` in Security (above Subscribers) and, for roles without
   `security.view` (moderators), in Moderation. Tests: worker.test.mjs "free
   access", subscribers.mjs step 8 (owner, admin, moderator).
+  **School email** (web/subscribe.js `#email-form`, `SCHOOL_DOMAIN`):
+  after `/subscribe/account`, the page asks for 6 digits →
+  `/subscribe/email {session, studentId}` (same proof as the PIN step;
+  needs `rec.account`; `SCHOOL_ID_RE`; 3 sends max; `checkoutLimited
+  ('subemail')`) stores `email` on the `subpay:` record, on
+  `config.subscriptions[name].email` and in `config.subEmails` (newest
+  first, 300), then `notifyOwner` (cat `newuser`, deep link `focus:
+  'emails'`) and `notifyUser` for each admin (`adminNames()` scans `acct:`;
+  admins only get it if they turned on their own alerts). `/subscribe/
+  status` returns `email`, so a reload goes back to the email step if it's
+  missing. The PIN step: red `#pin-warn`, required `#pin-ok` checkbox,
+  `weakPin()` in the page (the server only sees the verifier). Admin:
+  `/admin/sub-emails` (`users.manage`: owner + admins, not moderators)
+  list/setdoc (docs.google.com only, `config.instructionsDoc`)/sent/remove;
+  card `emailsCard()` + `wireSubEmails()` in Security above Free access;
+  Email instructions is a `mailto:` (no email service on the Worker) and
+  marks `sentAt`/`sentBy`. Tests: subscribe.test.mjs "school email",
+  subscribe.mjs step 2 and the owner card.
 
 ### 4.2 Chat
 All rooms live in `ChatRoom` DOs. The console polls every 3 s while Chat is
@@ -616,7 +638,7 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 ## 6. Testing
 
 ```bash
-npm test                                   # node --test tests/*.test.mjs (119 tests)
+npm test                                   # node --test tests/*.test.mjs (120 tests)
 npx wrangler deploy --dry-run --outdir /tmp/x   # bundle/config check, deploys nothing
 # Browser suites (Playwright vs local workerd), each takes an output dir for screenshots:
 node tests/browser/eaglercraft.e2e.mjs     # 83
@@ -642,7 +664,7 @@ node tests/browser/my-music.mjs            # 15
 node tests/browser/admin-app.mjs           # 20
 node tests/browser/playlists.mjs           # 23
 node tests/browser/mp3.mjs                 # 51 (+1 NOT RUN: real YouTube download; needs ffmpeg/ffprobe)
-node tests/browser/subscribe.mjs           # 38
+node tests/browser/subscribe.mjs           # 53
 node tests/browser/usage-meter.mjs         # 16
 node tests/browser/usage-meter-sizes.mjs   # 25
 node tests/browser/ask-photo-size.mjs      # 6

@@ -1,7 +1,7 @@
 import { webApp } from './web/handler.js';
 import { consoleApp } from './web/console/handler.js';
 import { policyPage, POLICY_PAGES } from './web/policies.js';
-import { subscribePage, subscribeReady, priceCents, displayCents, stripe, checkoutParams, contributionParams, CHECKOUT_TTL_S, contribCents, isContribution, periodEndMs, invoiceSubscription, stripeSignatureOk, SUB_NAME_RE, SESSION_RE, ATTEMPT_RE } from './web/subscribe.js';
+import { subscribePage, subscribeReady, priceCents, displayCents, stripe, checkoutParams, contributionParams, CHECKOUT_TTL_S, contribCents, isContribution, periodEndMs, invoiceSubscription, stripeSignatureOk, SUB_NAME_RE, SESSION_RE, ATTEMPT_RE, supportEmail, SCHOOL_DOMAIN } from './web/subscribe.js';
 import { parseYouTubeLink, videoDetails, rightsNote } from './web/mp3.js';
 import { readPlaylist, readLists, writeLists, newList, listSummary, publicList, searchYouTube, matchCacheKey, LISTS_MAX, MATCH_BATCH, MATCH_SCAN } from './web/playlists.js';
 import { audiusSearch, audiusStream, listLibrary, addToLibrary, removeFromLibrary, serveLibraryFile, audioKind, listMine, mineUsage, addToMine, removeFromMine, MINE_DAILY_UPLOADS } from './web/music.js';
@@ -452,6 +452,22 @@ const SUB_REMIND_MS = 3 * 24 * 3600 * 1000;
 // Playlists for everyone: per person a day (the owner and admins: 30 imports, no lookup cap).
 const LISTS_USER_IMPORTS = 10;
 const LISTS_USER_SEARCHES = 40;
+// New subscribers' school email: their 6-digit student number at this domain.
+const SCHOOL_ID_RE = /^\d{6}$/;
+// Names with the admin role (for alerts that go to the owner and admins).
+async function adminNames(kv) {
+  const out = [];
+  try {
+    let cursor;
+    for (let i = 0; i < 20; i++) {
+      const page = await kv.list({ prefix: 'acct:', cursor });
+      for (const k of page.keys) { const a = await kv.get(k.name, 'json'); if (a && a.role === 'admin') out.push(a.user || k.name.slice(5)); }
+      if (page.list_complete || !page.cursor) break;
+      cursor = page.cursor;
+    }
+  } catch (e) { /* best-effort */ }
+  return out;
+}
 // Free access with no end date (Admin → Security → Free access) ends here.
 const FREE_FOREVER = Date.UTC(9999, 0, 1);
 function addSubPeriod(from, period) {
@@ -1635,6 +1651,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       '/admin/access-requests/decide': { method: 'POST', perm: 'system.manage' },
       '/admin/subscriptions':          { method: 'POST', perm: 'system.manage' },
       '/admin/free-access':            { method: 'POST', perm: 'coadmin' },
+      '/admin/sub-emails':             { method: 'POST', perm: 'users.manage' },
       '/admin/invites':                { method: 'POST', perm: 'system.manage' },
       '/admin/heatmap':                { method: 'GET',  perm: 'users.view' },
       '/admin/weekly':                 { method: 'POST', perm: 'system.manage' },
@@ -1820,6 +1837,42 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       }
       return json({ error: 'action must be list, create or revoke' }, 400);
     }
+    // New subscribers' school emails (Admin → Security → New subscribers):
+    // the owner and admins see who paid and their email, keep the link to
+    // the Google Doc with the setup instructions, and mark who was sent them.
+    // POST { action: 'list' | 'setdoc' | 'sent' | 'remove', user, doc }.
+    if (url.pathname === '/admin/sub-emails') {
+      const kv = env.TELEMETRY;
+      let body = {};
+      try { body = JSON.parse(await req.text()) || {}; } catch (e) { return json({ error: 'invalid request' }, 400); }
+      const principal = await resolvePrincipal();
+      const by = principal.role === 'owner' ? OWNER : String(principal.user || principal.actor || principal.role).slice(0, 40);
+      const cfg = await getConfig(kv);
+      const list = Array.isArray(cfg.subEmails) ? cfg.subEmails : [];
+      const view = () => ({ ok: true, domain: SCHOOL_DOMAIN, doc: cfg.instructionsDoc || '', emails: (Array.isArray(cfg.subEmails) ? cfg.subEmails : []) });
+      const action = String(body.action || 'list');
+      if (action === 'list') return json(view());
+      if (action === 'setdoc') {
+        const doc = String(body.doc || '').trim();
+        if (doc) {
+          let u;
+          try { u = new URL(doc); } catch (e) { return json({ error: 'That isn’t a link.' }, 400); }
+          if (u.protocol !== 'https:' || u.hostname !== 'docs.google.com' || doc.length > 500) return json({ error: 'Paste a Google Docs link (https://docs.google.com/…).' }, 400);
+        }
+        cfg.instructionsDoc = doc;
+      } else {
+        const key = String(body.user || '').trim().toLowerCase();
+        const item = list.find((x) => x && String(x.user).toLowerCase() === key);
+        if (!item) return json({ error: 'Not in the list.' }, 404);
+        if (action === 'sent') { item.sentAt = Date.now(); item.sentBy = by; }
+        else if (action === 'remove') cfg.subEmails = list.filter((x) => x !== item);
+        else return json({ error: 'action must be list, setdoc, sent or remove' }, 400);
+      }
+      await kv.put('config', JSON.stringify(cfg));
+      await logAudit(kv, { route: url.pathname, action: 'subemail_' + action, target: body.user || null, admin: principal.role });
+      return json(view());
+    }
+
     // Free access (Admin → Security → Free access; moderators: Moderation):
     // the owner, admins and moderators can let someone in for free, whatever
     // their subscription says, with no end date or for a set time. It's a
@@ -3459,6 +3512,38 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           await noteSec('account_created', { user, note: 'subscribe page' });
           await notifyOwner(env, { cat: 'newuser', title: 'New account: ' + user, body: 'Set their PIN on the subscribe page after paying.', url: adminLink('users', { user }) }, url.origin).catch(() => {});
           return json({ ok: true, user });
+        }
+        // Right after making their PIN, a new subscriber adds their school
+        // email: only the 6-digit student number is typed; the domain is
+        // fixed. Same proof as /subscribe/account (only the buyer's page knows
+        // the checkout id), and only once the account exists. It goes to the
+        // owner and admins (alerts + Admin → Security → New subscribers), who
+        // send the setup instructions. A typo can be fixed twice.
+        if (url.pathname === '/subscribe/email' && req.method === 'POST') {
+          let body = {};
+          try { const raw = await req.text(); if (raw.length > 1024) throw 0; body = JSON.parse(raw) || {}; } catch (e) { return json({ ok: false, error: 'invalid request' }, 400); }
+          const id = String(body.session || '');
+          const sid = String(body.studentId || '').trim();
+          if (!SESSION_RE.test(id)) return json({ ok: false, error: 'invalid request' }, 400);
+          if (!SCHOOL_ID_RE.test(sid)) return json({ ok: false, error: 'Type the 6 digits of your school email (the numbers before @' + SCHOOL_DOMAIN + ').' }, 400);
+          if (await checkoutLimited('subemail')) return json({ ok: false, error: 'Too many tries. Wait a bit and try again.' }, 429);
+          const rec = await kv.get('subpay:' + id, 'json');
+          if (!rec || !rec.approved || rec.duplicate || rec.contribution || !SUB_NAME_RE.test(String(rec.user || ''))) return json({ ok: false, error: 'Unknown payment.' }, 404);
+          if (!rec.account) return json({ ok: false, error: 'Create your PIN first.' }, 409);
+          if ((rec.emailChanges || 0) >= 3) return json({ ok: false, error: 'Your email was already sent. To change it, email ' + supportEmail(env) + '.' }, 409);
+          const email = sid + '@' + SCHOOL_DOMAIN;
+          const user = rec.user, key = user.toLowerCase(), now = Date.now();
+          await kv.put('subpay:' + id, JSON.stringify({ ...rec, email, emailChanges: (rec.emailChanges || 0) + 1 }), { expirationTtl: 30 * 24 * 3600 });
+          const cfg = await getConfig(kv);
+          if (cfg.subscriptions && cfg.subscriptions[key]) cfg.subscriptions[key].email = email;
+          const list = Array.isArray(cfg.subEmails) ? cfg.subEmails.filter((x) => x && String(x.user).toLowerCase() !== key) : [];
+          cfg.subEmails = [{ user, email, at: now }, ...list].slice(0, 300);
+          await kv.put('config', JSON.stringify(cfg));
+          const changed = (rec.emailChanges || 0) > 0;
+          const alert = { title: (changed ? 'Email changed: ' : 'New subscriber email: ') + user, body: email + ' · Send them the setup instructions in Admin → Security → New subscribers.', url: adminLink('security', { focus: 'emails', user }), tag: 'subemail-' + key };
+          await notifyOwner(env, { cat: 'newuser', ...alert }, url.origin).catch(() => {});
+          for (const a of await adminNames(kv)) await notifyUser(env, a, alert, url.origin).catch(() => {});
+          return json({ ok: true, email });
         }
         if (url.pathname === '/subscribe/status' && req.method === 'GET') {
           const id = url.searchParams.get('session') || '';

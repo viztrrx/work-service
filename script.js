@@ -786,7 +786,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     { at: '2026-10-19T01:30:00-04:00', commit: '', title: 'Free access; Playlists for everyone; $6 contributions', parts: {
       admin: ['feature', 'Security → Free access: the owner, admins and moderators can let someone in for free, with no end date or for a set time (moderators find it in Moderation); the owner gets an alert when staff do'],
       music: ['feature', 'Playlists (Spotify / Apple Music → YouTube links) are open to everyone signed in, in the app or on the website; 40 new song lookups a day per person'],
-      console: ['change', 'Subscribe page: contributions start at $6'] } }
+      console: ['change', 'Subscribe page: contributions start at $6'] } },
+    { at: '2026-10-19T03:00:00-04:00', commit: '', title: 'New subscribers: PIN warning and school email', parts: {
+      console: ['feature', 'Subscribe page: a clear “you must remember this PIN” warning with a checkbox, easy-to-guess PINs refused, then the school email (6 digits @alseducation.onmicrosoft.com)'],
+      admin: ['feature', 'Security → New subscribers: each new subscriber’s school email, your instructions Google Doc link, and Email instructions (opens your mail app, then marks it sent); you and admins get an alert'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -2203,6 +2206,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gac-fold-head::after { content: ''; margin-left: 10px; width: 8px; height: 8px; flex-shrink: 0; border-right: 1.6px solid var(--gpa-sub); border-bottom: 1.6px solid var(--gpa-sub); transform: rotate(45deg); transition: transform var(--gps-t2) var(--gps-ease); }
       .gac-fold-head[aria-expanded="true"]::after { transform: rotate(225deg); }
       .gac-fold-body[hidden] { display: none !important; }
+      .gac-email-addr { color: var(--gpa-text); font-weight: 600; word-break: break-all; }
+      .gac-req-actions a.gps-btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+      .gac-emails-list .gac-req-actions { flex-wrap: wrap; }
+      .gac-emails-list .gac-req-actions > * { flex: 1 1 auto; }
       @media (prefers-reduced-motion: reduce) { .gac-fold-head::after { transition: none; } }
       .gac-subs-totals > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--gpa-border); border-radius: var(--gps-r2); background: var(--gpa-field); min-width: 0; }
       .gac-subs-totals b { font-size: 17px; font-variant-numeric: tabular-nums; color: var(--gpa-text); }
@@ -21256,6 +21263,57 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const empty = (title, desc) => gpxEmpty({ icon: 'overview', title, desc, cls: 'gac-empty' });
     // ---- Free access: the owner, admins and moderators let someone in for free ----
     // (Security for the owner and admins, Moderation for moderators.)
+    // ---- New subscribers' school emails (owner and admins): send the setup instructions ----
+    const emailsCard = () => card('New subscribers', `<div id="gac-emails"><p class="gps-hint">Loading…</p></div>`, 'send', 'gac-emails-card');
+    function wireSubEmails(root) {
+      const el = root.querySelector('#gac-emails');
+      if (!el) return;
+      const day = (ts) => new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' });
+      let data = null;
+      const mail = (x) => {
+        const subject = 'Saints Service: how to get started';
+        const text = 'Hi ' + x.user + ',\n\nThanks for subscribing to Saints Service! Here’s how to get the console on your computer:\n' + data.doc
+          + '\n\nThen sign in with your username (' + x.user + ') and the PIN you made after paying. Keep your PIN to yourself: nobody can look it up for you.\n\nSaints Service';
+        return 'mailto:' + encodeURIComponent(x.email) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(text);
+      };
+      const render = (d) => {
+        data = d;
+        const waiting = d.emails.filter((x) => !x.sentAt).length;
+        el.innerHTML = `<p class="gps-hint">After paying and making their PIN, new subscribers add their school email (the 6 numbers before @${esc(d.domain)}). Send each one the instructions for getting the console: <b>Email instructions</b> opens your mail app with the message and your Google Doc link filled in.</p>`
+          + `<form class="gac-subs-form" id="gac-emails-doc" autocomplete="off"><label class="gac-subs-wide">Instructions (Google Doc link)<input class="gpa-input" id="gac-emails-docurl" type="url" placeholder="https://docs.google.com/document/d/…" value="${esc(d.doc)}" maxlength="500"></label><button class="gps-btn" type="submit">Save link</button></form>`
+          + (d.doc ? '' : `<p class="gps-hint">Save the Google Doc link first; then the email buttons turn on.</p>`)
+          + (d.emails.length ? `<p class="gps-hint gac-emails-count">${waiting ? waiting + ' waiting for instructions' : 'Everyone has been sent the instructions'}</p><ul class="gac-acct-list gac-emails-list">` + d.emails.map((x) => `<li class="gac-acct gac-email-row" data-user="${esc(x.user)}"><div class="gac-acct-top"><span class="gac-req-name">${esc(x.user)}</span><span class="gac-req-badge ${x.sentAt ? '' : 'pending'}">${esc(x.sentAt ? 'Sent ' + day(x.sentAt) : 'Not sent yet')}</span></div>`
+            + `<div class="gac-req-meta"><b class="gac-email-addr">${esc(x.email)}</b> · added ${esc(day(x.at))}${x.sentAt && x.sentBy ? ' · sent by ' + esc(x.sentBy) : ''}</div>`
+            + `<div class="gac-req-actions">${d.doc ? `<a class="gps-btn${x.sentAt ? '' : ' primary'}" data-em="mail" href="${esc(mail(x))}">${x.sentAt ? 'Email again' : 'Email instructions'}</a>` : `<button class="gps-btn" type="button" disabled>Email instructions</button>`}<button class="gps-btn" data-em="copy" type="button">Copy email</button><button class="gps-btn" data-em="remove" type="button">Remove</button></div></li>`).join('') + `</ul>`
+            : `<p class="gps-hint">No new subscriber emails yet.</p>`);
+      };
+      const send = async (body) => { const r = await api('/admin/sub-emails', { method: 'POST', body }); render(r); return r; };
+      el.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const doc = el.querySelector('#gac-emails-docurl').value.trim();
+        try { await send({ action: 'setdoc', doc }); showToast(doc ? 'Instructions link saved.' : 'Instructions link removed.'); }
+        catch (err) { showToast(err.message, { type: 'danger' }); }
+      });
+      el.addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-em]');
+        if (!b) return;
+        const row = b.closest('.gac-email-row'), user = row.dataset.user;
+        const x = data.emails.find((y) => y.user === user);
+        if (b.dataset.em === 'mail') {
+          // The mail app opens from the link itself; this records that it was sent.
+          setTimeout(() => { send({ action: 'sent', user }).catch(() => {}); }, 300);
+          return;
+        }
+        if (b.dataset.em === 'copy') {
+          try { await navigator.clipboard.writeText(x.email); showToast('Copied ' + x.email + '.'); } catch (err) { showToast(x.email); }
+          return;
+        }
+        if (b.dataset.em === 'remove' && confirm('Remove ' + user + ' (' + x.email + ') from this list? Their account and subscription stay.')) {
+          try { await send({ action: 'remove', user }); } catch (err) { showToast(err.message, { type: 'danger' }); }
+        }
+      });
+      api('/admin/sub-emails', { method: 'POST', body: { action: 'list' } }).then(render, (err) => { el.innerHTML = '<p class="gps-hint">Couldn’t load: ' + esc(err.message) + '</p>'; });
+    }
     const freeCard = () => card('Free access', `<div id="gac-free"><p class="gps-hint">Loading…</p></div>`, 'star', 'gac-free-card');
     function wireFreeAccess(root, onChange) {
       const el = root.querySelector('#gac-free');
@@ -21551,6 +21609,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           + (isOwner() ? card('Phone app', `<div class="gac-allow-row"><span>Only you and admins can use the app</span><button class="gps-switch${d.config.appStaffOnly !== false ? ' primary' : ''}" id="gac-app-staff" type="button" aria-pressed="${d.config.appStaffOnly !== false}" aria-label="Only you and admins can use the app">Only you and admins can use the app</button></div>`
             + `<p class="gps-hint">The home-screen app (<code>/console/</code>) signs in with a name and PIN. With this on, only you and people with the <b>admin</b> role get in; everyone else is told to use the console on a computer. To make someone an admin: Users → their name → Role: admin → Change role (they sign in again once). Admins never need the admin token: the Admin panel opens from their role, and they can be signed in on their phone and a computer at the same time.</p>`, 'account', 'gac-app-card') : '')
           + (isOwner() ? card('Access requests', `<div id="gac-access-req"><p class="gps-hint">Loading…</p></div>`, 'key') : '')
+          + (can('users.manage') ? emailsCard() : '')
           + freeCard()
           + (isOwner() ? card('Subscribers', `<div id="gac-subs"><p class="gps-hint">Loading…</p></div>`, 'timer', 'gac-subs-card') : '')
           + (isOwner() ? card('Allowed users', `<p class="gps-hint">When on, only these usernames (and you) can create an account, sign in or use the console. Everyone else sees “Unable to create account”, and anyone already signed in who isn’t listed is signed out.</p>`
@@ -21569,6 +21628,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           + `<div id="gac-legacy-security"></div></aside></div>`;
         wireFold(b, 'gac-sec-events', 'gac_sec_events_open');
         wireFreeAccess(b, () => loadSubs());
+        wireSubEmails(b);
         // ---- Subscribers: paid access for a set time ----
         const subsEl = b.querySelector('#gac-subs');
         const fmtDay = (ts) => new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric', year: new Date(ts).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
@@ -21605,7 +21665,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
               const soon = s.active && s.expiresAt - Date.now() <= 3 * 864e5;
               const badge = s.free && s.active && s.forever ? 'Free · no end' : (s.auto && s.active ? 'Automatic · ' : s.free && s.active ? 'Free · ' : '') + (!s.active ? 'Ended' : s.daysLeft <= 1 ? 'Ends today' : s.daysLeft + ' days left');
               return `<li class="gac-acct gac-subscr${s.active ? '' : ' is-ended'}${soon ? ' is-soon' : ''}" data-user="${esc(s.user)}"><div class="gac-acct-top"><span class="gac-req-name">${esc(s.user)}</span><span class="gac-req-badge ${s.active && !soon ? 'pending' : ''}">${esc(badge)}</span></div>`
-                + `<div class="gac-req-meta">${s.active ? 'Since ' + esc(fmtDay(s.startedAt)) + (s.forever ? ' · no end' : ' · ends ' + esc(fmtDay(s.expiresAt))) + (s.free && s.freeBy ? ' · given by ' + esc(s.freeBy) : '') : 'Ended ' + esc(fmtDay(s.endedAt || s.expiresAt))}${lastPaid(s) ? ' · paid ' + esc(money(lastPaid(s))) : ''}${giftsBy(s.user) ? ' · contributed ' + esc(money(giftsBy(s.user))) : ''}${s.note ? ' · ' + esc(s.note) : ''}</div>`
+                + `<div class="gac-req-meta">${s.active ? 'Since ' + esc(fmtDay(s.startedAt)) + (s.forever ? ' · no end' : ' · ends ' + esc(fmtDay(s.expiresAt))) + (s.free && s.freeBy ? ' · given by ' + esc(s.freeBy) : '') : 'Ended ' + esc(fmtDay(s.endedAt || s.expiresAt))}${lastPaid(s) ? ' · paid ' + esc(money(lastPaid(s))) : ''}${giftsBy(s.user) ? ' · contributed ' + esc(money(giftsBy(s.user))) : ''}${s.email ? ' · ' + esc(s.email) : ''}${s.note ? ' · ' + esc(s.note) : ''}</div>`
                 + (s.free && s.active
                   ? `<div class="gac-req-actions"><button class="gps-btn" data-sub="end" type="button">End free access</button></div>`
                   : `<div class="gac-req-actions"><button class="gps-btn${s.active ? '' : ' primary'}" data-sub="renew" type="button">Renew +${esc(periods[subsPeriod] || '1 month')}</button>`
@@ -22133,6 +22193,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       }
       else if (sec === 'security' && p.focus === 'allow') await land(() => (user && byUser('#gac-allow-accts .gac-acct', user)) || gac.querySelector('#gac-sec-events'));
       else if (sec === 'security' && p.focus === 'events') await land(() => { const ev = gac.querySelector('#gac-sec-events'); const h = ev && ev.querySelector('.gac-fold-head'); if (h && h.getAttribute('aria-expanded') !== 'true') h.click(); return ev; });
+      else if (sec === 'security' && p.focus === 'emails') await land(() => { const box = gac.querySelector('#gac-emails'); if (!box || /Loading/.test(box.textContent)) return null; return (user && byUser('.gac-email-row', user)) || box.closest('.gac-card'); });
       else if (sec === 'security' && p.focus === 'free') await land(() => { const box = gac.querySelector('#gac-free'); if (!box || /Loading/.test(box.textContent)) return null; return (user && byUser('.gac-free-row', user)) || box.closest('.gac-card'); });
       else if (sec === 'security' && p.focus === 'subs') {
         await land(() => {
