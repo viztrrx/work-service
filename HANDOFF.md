@@ -12,8 +12,10 @@ list (rounds 1–3) was finished and pushed.
 
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
-  deployed (pushing to `main` deploys; see below). The last commit: the
-  subscribe page lets a **new subscriber pick their own PIN**, a paid-up
+  deployed (pushing to `main` deploys; see below). The last commit:
+  **YouTube to MP3** in Music → My music (owner only; owner's brief: a
+  real, tested FFmpeg converter that respects YouTube's rules). Before that:
+  the subscribe page lets a **new subscriber pick their own PIN**, a paid-up
   name can **only contribute, never pay twice**, and a note says
   contributions are only for subscribers (owner: "make it clear and make no
   mistakes"). Before that: **contributions** on the subscribe page (owner: "if they already have an
@@ -183,7 +185,7 @@ firstSeen, lastSeen, streak) · `mod:<name>` · `usage:<day>:<name>`,
 (lockouts) · `chat-photo-rate:*`, `chat-voice-rate:*` · `mylib:<name>`
 (a person's My music list), `mylib:total` (bytes of everyone's uploads),
 `mylib-rate:<day>:<name>` · `ytlists:<name>` (Playlists → YouTube links),
-`ytlists-rate:<day>:<name>`, `ytm:<hash>` (one song's YouTube answer, shared) · `subhold:<name>`, `subpay:<session>`, `substripe:<sub id>`, `stripe:evt:<id>`, `subco:*` (Subscribe page).
+`ytlists-rate:<day>:<name>`, `ytm:<hash>` (one song's YouTube answer, shared) · `ytmeta:<video id>`, `mp3chk:<hour>` (YouTube to MP3 link details, owner only) · `subhold:<name>`, `subpay:<session>`, `substripe:<sub id>`, `stripe:evt:<id>`, `subco:*` (Subscribe page).
 
 ### Inside the ChatRoom Durable Object (per room)
 Storage: `log` (newest 120 messages, a week), `reads` (read cursors),
@@ -449,6 +451,38 @@ account to any device. Caps in `web/music.js`: 50 songs / 300 MB each,
 `'mine'` is accepted by `/chat/send`. The owner/admins can delete anyone's
 upload by id (API only, no button). **Not verified against real Audius** (blocked from the dev
 container). Tests: `music.test.mjs`, `music.mjs`, `my-music.mjs`.
+**YouTube to MP3** (owner only; `#gpa-mp3`, a `.gpx-details` inside the My
+music panel; script.js "YouTube to MP3"; Worker part `web/mp3.js`):
+real FFmpeg in the browser, on a file the owner provides. **No YouTube
+download, by design**: YouTube has no download API and its terms forbid it,
+so a link only gets details from `GET /music/mp3/check?url=` (owner only:
+session role owner, admin token or `X-GPA-Owner`; `parseYouTubeLink`
+accepts watch/youtu.be/shorts/embed/live/music hosts, refuses playlist and
+channel links; `videos.list` with `YOUTUBE_API_KEY` only, cached
+`ytmeta:<id>` 12 h, 120/h `mp3chk:<hour>`) and the honest "get it from
+YouTube Studio" note (`rightsNote`). Conversion: `mp3LoadCore()` downloads
+`@ffmpeg/core@0.12.10` UMD (`ffmpeg-core.js` + `.wasm`, 31 MB) from jsDelivr
+then unpkg (`gpa_ffmpeg_base` in localStorage puts another copy first;
+tests use it), **refuses anything whose SHA-256 isn't `MP3_CORE`**, caches
+verified bytes in Cache Storage (`gpa-ffmpeg-0.12.10`), then
+`mp3Start()` runs `mp3WorkerMain` (stringified) in a blob Web Worker:
+`createFFmpegCore({ wasmBinary })`, ffprobe the input (no audio → error),
+`-map 0:a:0 -c:a libmp3lame -b:a <k>k` (+ `-ar 48000` above 48 kHz, `-ac 2`
+above stereo, ID3 title/artist), ffprobe the output. Progress = FFmpeg's
+`time` ÷ probed duration; Cancel/timeout (15 min; `gpa_mp3_timeout_ms`
+overrides for tests) terminate the worker. `mp3VerifyHere()` then checks the
+MP3 frame and decodes it with Web Audio (length must match) before Download
+/ Save are shown. Save = the normal `POST /music/mine/upload` (title, artist,
+duration; 25 MB cap → bigger MP3s are download-only; asks before a
+same-title duplicate); never the shared library. Owner check on the client:
+`sessionRole()==='owner'` or a stored admin token/owner code, confirmed by
+`/music/mp3/check` (403 hides it). Cleanup in `gpaCleanups`. ffmpeg.wasm is
+GPL-2.0-or-later, fetched at run time, not vendored; `@ffmpeg/core` is a
+devDependency only for the tests. Tests: `mp3.test.mjs` (stand-in YouTube
+API), `mp3.mjs` (real conversions; needs system `ffmpeg`/`ffprobe`; the
+real-YouTube case is reported NOT RUN on purpose). Possible next steps if
+asked: nothing server-side is needed; a Cloudflare Container would only be
+worth it for files too big for a phone's memory.
 **Playlists → YouTube links** (owner + admins; `web/playlists.js`, routes
 `/music/lists*` gated by `staff()`, KV `ytlists:<who>`): paste a Spotify /
 Apple Music playlist or album link → the Worker reads the song list
@@ -464,7 +498,8 @@ a browser is ignored), caching every answer in KV `ytm:<sha256 artist|title>`
 VEVO / official channel and rejects covers, sped-up, live etc. **Links only,
 nothing downloaded** — the owner first asked to rip the songs to MP3; that
 was declined (copyright) and this was the agreed alternative; don't add a
-download/convert step. **Never verified against the real Spotify, Apple
+download/convert step (YouTube to MP3, below, is separate: it converts the
+owner's own files and never downloads from YouTube/Spotify). **Never verified against the real Spotify, Apple
 Music or YouTube** (all blocked from the dev container); tests use
 stand-ins via `SPOTIFY_WEB`/`APPLE_MUSIC_WEB`/`YOUTUBE_API`. If the owner
 says a link "found no songs", the page format probably changed: start in
@@ -489,7 +524,8 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 
 | Commit | What |
 |---|---|
-| (this) | Subscribe page: own PIN after paying, no paying twice, contributions note |
+| (this) | YouTube to MP3 (owner): real FFmpeg in the browser, verified MP3, Save to My music |
+| `5098fca`, `f748097` | Subscribe page: own PIN after paying, no paying twice, contributions note |
 | `4944c8b` | Subscribe page: one-time contributions ($8+) from members |
 | `c9d49b1` | Refund policy: no refunds (billing errors only) |
 | `c9465ac` | Subscribe page: Terms, Refund & Cancellation, Privacy pages; contact email; renewal disclosure |
@@ -528,7 +564,7 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 ## 6. Testing
 
 ```bash
-npm test                                   # node --test tests/*.test.mjs (114 tests)
+npm test                                   # node --test tests/*.test.mjs (116 tests)
 npx wrangler deploy --dry-run --outdir /tmp/x   # bundle/config check, deploys nothing
 # Browser suites (Playwright vs local workerd), each takes an output dir for screenshots:
 node tests/browser/eaglercraft.e2e.mjs     # 83
@@ -553,6 +589,7 @@ node tests/browser/music.mjs               # 15
 node tests/browser/my-music.mjs            # 15
 node tests/browser/admin-app.mjs           # 20
 node tests/browser/playlists.mjs           # 21
+node tests/browser/mp3.mjs                 # 51 (+1 NOT RUN: real YouTube download; needs ffmpeg/ffprobe)
 node tests/browser/subscribe.mjs           # 36
 node tests/browser/usage-meter.mjs         # 16
 node tests/browser/usage-meter-sizes.mjs   # 25

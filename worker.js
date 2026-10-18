@@ -2,6 +2,7 @@ import { webApp } from './web/handler.js';
 import { consoleApp } from './web/console/handler.js';
 import { policyPage, POLICY_PAGES } from './web/policies.js';
 import { subscribePage, subscribeReady, priceCents, displayCents, stripe, checkoutParams, contributionParams, CHECKOUT_TTL_S, contribCents, isContribution, periodEndMs, invoiceSubscription, stripeSignatureOk, SUB_NAME_RE, SESSION_RE, ATTEMPT_RE } from './web/subscribe.js';
+import { parseYouTubeLink, videoDetails, rightsNote } from './web/mp3.js';
 import { readPlaylist, readLists, writeLists, newList, listSummary, publicList, searchYouTube, matchCacheKey, LISTS_MAX, MATCH_BATCH, MATCH_SCAN } from './web/playlists.js';
 import { audiusSearch, audiusStream, listLibrary, addToLibrary, removeFromLibrary, serveLibraryFile, audioKind, listMine, mineUsage, addToMine, removeFromMine, MINE_DAILY_UPLOADS } from './web/music.js';
 import { PUSH_CATEGORIES, vapidKeys, validSubscription, addSubscription, updateSubscription, removeSubscription, getSubscription, sendPush, notifyOwner, ownerTime, cleanCategories, anySubscriberWants,
@@ -3421,6 +3422,38 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           const track = await addToLibrary(env, form, who);
           await logAudit(kv, { route: url.pathname, action: 'music_upload', target: track.title + ' — ' + track.artist });
           return json({ ok: true, track });
+        }
+        // YouTube to MP3 (owner only; web/mp3.js). The conversion runs in the
+        // owner's browser on a file they provide; this only checks a YouTube
+        // link and reads its public details with the Worker's own key. It
+        // never downloads media.
+        if (url.pathname === '/music/mp3/check' && req.method === 'GET') {
+          const p = await resolvePrincipal();
+          const code = req.headers.get('X-GPA-Owner') || '';
+          const owner = (p && p.role === 'owner') || !!(env.OWNER_CODE && code && await timingSafeEqualStr(code, env.OWNER_CODE));
+          if (!owner) return json({ ok: false, ownerOnly: true, error: 'YouTube to MP3 is only for the owner.' }, 403);
+          const ytKey = String((env && env.YOUTUBE_API_KEY) || '').trim();
+          const raw = url.searchParams.get('url');
+          if (raw === null) return json({ ok: true, owner: true, canLookUp: !!ytKey });
+          const link = parseYouTubeLink(raw);
+          if (!link.ok) return json({ ok: false, error: link.error, playlist: !!link.playlist }, 400);
+          if (!kv) return json({ ok: false, error: 'storage not configured' }, 503);
+          // Lookups are cheap (1 unit each) but still capped: 120 an hour.
+          const rk = 'mp3chk:' + Math.floor(Date.now() / 3600e3);
+          const n = parseInt(await kv.get(rk), 10) || 0;
+          if (n >= 120) return json({ ok: false, error: 'That’s a lot of lookups this hour. Try again in a bit.' }, 429);
+          const base = { ok: true, link: { id: link.id, kind: link.kind, url: link.url, ignoredList: !!link.ignoredList } };
+          if (!ytKey) return json({ ...base, video: null, canLookUp: false, rights: rightsNote(null) });
+          const ck = 'ytmeta:' + link.id;
+          let video = await kv.get(ck, 'json');
+          if (!video) {
+            await kv.put(rk, String(n + 1), { expirationTtl: 2 * 3600 });
+            try { video = await videoDetails(env, ytKey, link.id); }
+            catch (e) { return json({ ...base, ok: false, error: e.message, video: null, rights: rightsNote(null) }, e.status || 502); }
+            if (!video) return json({ ...base, ok: false, error: 'YouTube has no public video with that link (it may be private or deleted).', video: null }, 404);
+            await kv.put(ck, JSON.stringify(video), { expirationTtl: 12 * 3600 });
+          }
+          return json({ ...base, video, canLookUp: true, rights: rightsNote(video) });
         }
         // Playlists → YouTube links (see web/playlists.js): the owner and
         // admins, in the phone app only. The YouTube key is the Worker secret

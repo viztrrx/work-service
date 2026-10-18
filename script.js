@@ -778,7 +778,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       console: ['feature', 'Subscribe page: a member who already pays and has an account can add a one-time contribution ($8 to $500) instead of subscribing again'],
       admin: ['feature', 'Subscribers: a contributions total and “contributed $X” on each member’s row'] } },
     { at: '2026-10-18T23:30:00-04:00', commit: '', title: 'Subscribe page: pick your own PIN; no paying twice', parts: {
-      console: ['feature', 'Subscribe page: after paying, a new subscriber picks their own PIN there and then just signs in; a name that’s already paid up can only contribute, never pay for the subscription again; a clear note that contributions are only for subscribers'] } }
+      console: ['feature', 'Subscribe page: after paying, a new subscriber picks their own PIN there and then just signs in; a name that’s already paid up can only contribute, never pay for the subscription again; a clear note that contributions are only for subscribers'] } },
+    { at: '2026-10-18T23:45:00-04:00', commit: '', title: 'YouTube to MP3 (owner)', parts: {
+      music: ['feature', 'My music → YouTube to MP3 (owner only): FFmpeg on your device turns a video or audio file you own into a verified MP3 (128–320 kbps) with real progress and Cancel, then Download MP3 or Save to My music; a YouTube link shows the video’s details and how to get its audio legitimately'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -899,6 +901,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     external: gpsSvg('<path d="M14 4.5h5.5V10M19.5 4.5L11 13M17 14v5.5H4.5V7H10"/>'),
     camera: gpsSvg('<path d="M4 8h3.5l1.8-2.5h5.4L16.5 8H20v11H4z"/><circle cx="12" cy="13.2" r="3.4"/>'),
     upload: gpsSvg('<path d="M12 15.5V4.5M7.5 9L12 4.5 16.5 9M4.5 15v4.5h15V15"/>'),
+    download: gpsSvg('<path d="M12 4.5v11M7.5 11L12 15.5 16.5 11M4.5 15v4.5h15V15"/>'),
     scan: gpsSvg('<path d="M4 8V4.5h3.5M16.5 4.5H20V8M20 16v3.5h-3.5M7.5 19.5H4V16M4 12h16"/>'),
     globe: gpsSvg('<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.6 2.4 3.9 5.2 3.9 8.5s-1.3 6.1-3.9 8.5c-2.6-2.4-3.9-5.2-3.9-8.5S9.4 5.9 12 3.5z"/>'),
     copy: gpsSvg('<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V5.5a1.5 1.5 0 0 0-1.5-1.5H6a1.5 1.5 0 0 0-1.5 1.5V14A1.5 1.5 0 0 0 6 15.5h2.5"/>'),
@@ -2048,6 +2051,46 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       /* Playlist → YouTube links */
       .gpa-lists-key { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 8px 0; padding: 10px 12px; border-radius: var(--gps-r2); border: 1px dashed var(--gpa-border); font-size: 12.5px; color: var(--gpa-sub); }
       .gpa-lists-key[hidden] { display: none; }
+      /* YouTube to MP3 (My music, owner only) */
+      /* The console's own collapsible (.gpx-details), plus: */
+      .gpa-mp3 { margin: 2px 0 6px; }
+      .gpa-mp3[hidden], .gpa-mp3 [hidden] { display: none !important; }
+      .gpx-details > summary.gpa-mp3-sum { color: var(--gpa-text); font-size: 13.5px; }
+      .gpa-mp3-sum:focus-visible { outline: 2px solid var(--gpa-accent); outline-offset: 2px; border-radius: var(--gps-r2); }
+      .gpx-details > summary.gpa-mp3-sum::after { margin-left: 10px; }
+      .gpa-mp3-sum .gpa-mp3-tag { margin-left: auto; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; color: var(--gpa-sub); border: 1px solid var(--gpa-border); }
+      .gpa-mp3-body { padding-top: 2px; display: flex; flex-direction: column; gap: 8px; }
+      .gpa-mp3-body .gpa-sub { margin: 0; }
+      .gpa-mp3-lbl { display: block; font-size: 12px; font-weight: 600; color: var(--gpa-sub); margin: 4px 0 -2px; }
+      .gpa-mp3-meta { display: flex; gap: 10px; align-items: center; padding: 8px; border-radius: var(--gps-r2); background: var(--gpa-panel); border: 1px solid var(--gpa-border); }
+      .gpa-mp3-meta[hidden], .gpa-mp3-note[hidden], .gpa-mp3-prog[hidden], .gpa-mp3-done[hidden] { display: none; }
+      .gpa-mp3-thumb { width: 80px; height: 45px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: var(--gpa-field); }
+      .gpa-mp3-mt { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+      .gpa-mp3-mt b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+      .gpa-mp3-mt span { font-size: 12px; color: var(--gpa-sub); }
+      .gpa-mp3-note { font-size: 12.5px; line-height: 1.45; color: var(--gpa-sub); padding: 9px 11px; border-radius: var(--gps-r2); border: 1px dashed var(--gpa-border); }
+      .gpa-mp3-note b { color: var(--gpa-text); }
+      .gpa-mp3-file { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+      .gpa-mp3-file .gpa-sub { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; }
+      .gpa-mp3-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+      .gpa-mp3-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--gpa-sub); min-width: 0; }
+      .gpa-mp3-grid .gpa-input { width: 100%; min-width: 0; box-sizing: border-box; }
+      .gpa-mp3-grid .gpa-mp3-qlab { grid-column: 1 / -1; }
+      .gpa-mp3-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+      .gpa-mp3-actions .gpa-btn { min-height: 40px; }
+      .gpa-mp3-prog { display: flex; align-items: center; gap: 10px; }
+      .gpa-mp3-bar { flex: 1; height: 8px; border-radius: 999px; background: var(--gpa-field); border: 1px solid var(--gpa-border); overflow: hidden; position: relative; }
+      .gpa-mp3-bar > i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--gpa-accent); border-radius: inherit; transition: width 0.25s linear; }
+      .gpa-mp3-bar.is-indeterminate > i { width: 30%; animation: gpa-mp3-slide 1.2s ease-in-out infinite; }
+      @keyframes gpa-mp3-slide { from { left: -30%; } to { left: 100%; } }
+      .gpa-mp3-pct { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--gpa-sub); min-width: 36px; text-align: right; }
+      .gpa-mp3-status.is-error { color: var(--gpa-danger, #e5484d); }
+      .gpa-mp3-done { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: var(--gps-r2); border: 1px solid color-mix(in srgb, var(--gpa-accent) 45%, var(--gpa-border)); background: var(--gpa-panel); }
+      .gpa-mp3-ok { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+      .gpa-mp3-ok svg { width: 18px; height: 18px; color: var(--gpa-accent); flex-shrink: 0; margin-top: 1px; }
+      .gpa-mp3-done audio { width: 100%; height: 36px; }
+      a.gpa-btn.gpa-mp3-dl { text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+      @media (prefers-reduced-motion: reduce) { .gpa-mp3-bar > i { transition: none; } .gpa-mp3-bar.is-indeterminate > i { animation: none; width: 100%; opacity: 0.45; } }
       .gpa-lists-view:empty, .gpa-lists-saved:empty, #gpa-lists-player:empty { display: none; }
       .gpa-yl-head { display: flex; gap: 12px; align-items: center; margin: 10px 0 8px; }
       .gpa-yl-art { width: 56px; height: 56px; border-radius: 10px; object-fit: cover; flex-shrink: 0; background: var(--gpa-field); }
@@ -3465,6 +3508,49 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
               <input type="file" id="gpa-mine-file" accept="audio/*,.mp3,.m4a,.aac,.ogg,.wav,.flac,.webm" multiple hidden />
             </div>
             <p class="gpa-sub">Upload songs from your computer. They're saved to your account, so they're here on any device when you sign in. Play one and tap 💬 to share it in chat; anyone there can stream it.</p>
+            <details id="gpa-mp3" class="gpx-details gpa-mp3" hidden>
+              <summary class="gpa-mp3-sum">${GPS_ICONS.music}<span>YouTube to MP3</span><span class="gpa-mp3-tag">Owner</span></summary>
+              <div class="gpa-mp3-body">
+                <p class="gpa-sub">Turn a video or audio file you own into an MP3, right on this device with FFmpeg. Nothing is uploaded unless you tap <b>Save to My music</b>.</p>
+                <label class="gpa-mp3-lbl" for="gpa-mp3-url">YouTube link (optional, for its details)</label>
+                <div class="gpa-row gpx-composer">
+                  <input id="gpa-mp3-url" class="gpa-input" type="url" inputmode="url" placeholder="youtube.com/watch?v=… or youtu.be/…" aria-label="YouTube link" autocomplete="off" spellcheck="false" />
+                  <button id="gpa-mp3-paste" class="gpa-btn" type="button">Paste</button>
+                </div>
+                <div id="gpa-mp3-link" class="gpa-sub" role="status" aria-live="polite"></div>
+                <div id="gpa-mp3-meta" class="gpa-mp3-meta" hidden></div>
+                <div id="gpa-mp3-rights" class="gpa-mp3-note" hidden></div>
+                <span class="gpa-mp3-lbl">Media file</span>
+                <div class="gpa-mp3-file">
+                  <button id="gpa-mp3-pick" class="gpa-btn" type="button">${gpxLbl('folder', 'Choose video or audio')}</button>
+                  <span id="gpa-mp3-file-info" class="gpa-sub">No file chosen. Up to 200 MB.</span>
+                  <input type="file" id="gpa-mp3-file" accept="video/*,audio/*,.mp4,.m4v,.mov,.webm,.mkv,.avi,.m4a,.aac,.mp3,.wav,.flac,.ogg,.opus" hidden />
+                </div>
+                <div class="gpa-mp3-grid">
+                  <label for="gpa-mp3-title">Title<input id="gpa-mp3-title" class="gpa-input" maxlength="140" autocomplete="off" /></label>
+                  <label for="gpa-mp3-artist">Artist<input id="gpa-mp3-artist" class="gpa-input" maxlength="80" autocomplete="off" /></label>
+                  <label for="gpa-mp3-q" class="gpa-mp3-qlab">MP3 quality<select id="gpa-mp3-q" class="gpa-input"><option value="128">128 kbps · smallest</option><option value="192" selected>192 kbps · recommended</option><option value="256">256 kbps</option><option value="320">320 kbps · largest</option></select></label>
+                </div>
+                <p class="gpa-sub" id="gpa-mp3-qnote">A higher bitrate can't add detail the source doesn't have; it only makes the file bigger.</p>
+                <div class="gpa-mp3-actions">
+                  <button id="gpa-mp3-go" class="gpa-btn primary" type="button" disabled>Convert to MP3</button>
+                  <button id="gpa-mp3-cancel" class="gpa-btn" type="button" hidden>Cancel</button>
+                </div>
+                <div id="gpa-mp3-prog" class="gpa-mp3-prog" hidden>
+                  <div class="gpa-mp3-bar" id="gpa-mp3-bar" role="progressbar" aria-label="Conversion progress" aria-valuemin="0" aria-valuemax="100"><i id="gpa-mp3-fill"></i></div>
+                  <span id="gpa-mp3-pct" class="gpa-mp3-pct"></span>
+                </div>
+                <div id="gpa-mp3-status" class="gpa-sub gpa-mp3-status" role="status" aria-live="polite"></div>
+                <div id="gpa-mp3-done" class="gpa-mp3-done" hidden>
+                  <div class="gpa-mp3-ok">${GPS_ICONS.check}<span id="gpa-mp3-result"></span></div>
+                  <audio id="gpa-mp3-preview" controls preload="metadata"></audio>
+                  <div class="gpa-mp3-actions">
+                    <a id="gpa-mp3-dl" class="gpa-btn primary gpa-mp3-dl" href="#" download>${gpxLbl('download', 'Download MP3')}</a>
+                    <button id="gpa-mp3-save" class="gpa-btn" type="button">${gpxLbl('upload', 'Save to My music')}</button>
+                  </div>
+                </div>
+              </div>
+            </details>
             <div id="gpa-mine-usage" class="gpa-sub"></div>
             <div id="gpa-mine-status" class="gpa-sub" role="status" aria-live="polite"></div>
             <div id="gpa-mine-list" class="gpa-tracks-wrap"></div>
@@ -10582,6 +10668,470 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     mineStatus.textContent = [ok ? `Added ${ok} ${ok === 1 ? 'song' : 'songs'}.` : '', failed].filter(Boolean).join(' ') || mineStatus.textContent;
   });
   panel.querySelectorAll('.gpx-src[data-src="mine"]').forEach((b) => b.addEventListener('click', loadMine));
+
+  // ---- YouTube to MP3 (owner only; the Worker's part is web/mp3.js) ---------
+  // Real FFmpeg converts a video or audio file the owner provides into an MP3
+  // on this device: the official ffmpeg.wasm core (0.12.10, single-thread,
+  // GPL-2.0-or-later) is downloaded from a CDN the first time, checked
+  // against the SHA-256 fingerprints below before anything runs, kept in the
+  // browser's cache, and run inside a Web Worker so the panel stays
+  // responsive. The media never goes to a server. A YouTube link is only
+  // checked for its public details (owner-only /music/mp3/check): YouTube
+  // doesn't let apps download media, so the file has to come from the owner
+  // (for their own videos, YouTube Studio → Download).
+  // The MP3 is offered only after two checks: FFmpeg's own ffprobe reads it
+  // back as an MP3 stream, and this browser decodes it to the same length.
+  // Progress is FFmpeg's (time processed ÷ the file's length), never made up.
+  const MP3_CORE = {
+    version: '0.12.10',
+    js: { file: 'ffmpeg-core.js', sha256: 'b266ab5b952555881dd6310663986994a182acb2b7ff25cf10a25f7a37ac2b21', bytes: 112059 },
+    wasm: { file: 'ffmpeg-core.wasm', sha256: '9f57947a5bd530d8f00c5b3f2cb2a3492faa7e5d823315342d6a8656d0a6b7b7', bytes: 32232419 }
+  };
+  const MP3_CDNS = ['https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/umd/', 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd/'];
+  const MP3_MAX_INPUT = 200 * 1024 * 1024;
+  const MP3_SAVE_MAX = 25 * 1024 * 1024;   // My music's per-song limit (web/music.js)
+  // Another copy of the same files can be named (tests serve them locally);
+  // they still have to match the fingerprints. Same for a shorter time limit.
+  const mp3Bases = () => { let b = ''; try { b = localStorage.getItem('gpa_ffmpeg_base') || ''; } catch (e) { /* ignore */ } return (/^https?:\/\/\S+\/$/.test(b) ? [b] : []).concat(MP3_CDNS); };
+  const mp3TimeoutMs = () => { let t = 0; try { t = Number(localStorage.getItem('gpa_mp3_timeout_ms')) || 0; } catch (e) { /* ignore */ } return t >= 1000 ? t : 15 * 60e3; };
+  const mp3 = {
+    box: panel.querySelector('#gpa-mp3'), url: panel.querySelector('#gpa-mp3-url'), paste: panel.querySelector('#gpa-mp3-paste'),
+    link: panel.querySelector('#gpa-mp3-link'), meta: panel.querySelector('#gpa-mp3-meta'), rights: panel.querySelector('#gpa-mp3-rights'),
+    pick: panel.querySelector('#gpa-mp3-pick'), file: panel.querySelector('#gpa-mp3-file'), fileInfo: panel.querySelector('#gpa-mp3-file-info'),
+    title: panel.querySelector('#gpa-mp3-title'), artist: panel.querySelector('#gpa-mp3-artist'), q: panel.querySelector('#gpa-mp3-q'),
+    go: panel.querySelector('#gpa-mp3-go'), cancel: panel.querySelector('#gpa-mp3-cancel'), prog: panel.querySelector('#gpa-mp3-prog'),
+    bar: panel.querySelector('#gpa-mp3-bar'), fill: panel.querySelector('#gpa-mp3-fill'), pct: panel.querySelector('#gpa-mp3-pct'),
+    status: panel.querySelector('#gpa-mp3-status'), done: panel.querySelector('#gpa-mp3-done'), result: panel.querySelector('#gpa-mp3-result'),
+    preview: panel.querySelector('#gpa-mp3-preview'), dl: panel.querySelector('#gpa-mp3-dl'), save: panel.querySelector('#gpa-mp3-save'),
+    chosen: null, job: null, out: null, outUrl: '', core: null, ownerOk: null, linkSeq: 0, linkTimer: null, titleAuto: true, artistAuto: true
+  };
+  const mp3Owner = () => sessionRole() === 'owner' || !!admGet(ADMIN_KEYS.TELE_TOKEN) || !!admGet(ADMIN_KEYS.OWNER_CODE);
+  const fmtSize = (b) => b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+  function mp3Say(text, error) {
+    mp3.status.textContent = text || '';
+    mp3.status.classList.toggle('is-error', !!error);
+    mp3.status.setAttribute('role', error ? 'alert' : 'status');
+  }
+  // Real progress only: a fraction when it's known, otherwise a moving bar.
+  function mp3Progress(frac, label) {
+    mp3.prog.hidden = false;
+    const known = typeof frac === 'number' && isFinite(frac);
+    mp3.bar.classList.toggle('is-indeterminate', !known);
+    if (known) {
+      const p = Math.max(0, Math.min(100, Math.round(frac * 100)));
+      mp3.fill.style.width = p + '%';
+      mp3.bar.setAttribute('aria-valuenow', String(p));
+      mp3.pct.textContent = p + '%';
+    } else {
+      mp3.fill.style.width = '';
+      mp3.bar.removeAttribute('aria-valuenow');
+      mp3.pct.textContent = '';
+    }
+    if (label) mp3.bar.setAttribute('aria-valuetext', label);
+  }
+  function mp3Busy(on) {
+    mp3.go.hidden = on;
+    mp3.cancel.hidden = !on;
+    [mp3.pick, mp3.q, mp3.title, mp3.artist].forEach((el) => { el.disabled = on; });
+    if (!on) { mp3.prog.hidden = true; mp3.go.disabled = !mp3.chosen; }
+  }
+  function mp3ClearResult() {
+    mp3.done.hidden = true;
+    try { mp3.preview.pause(); } catch (e) { /* ignore */ }
+    mp3.preview.removeAttribute('src');
+    if (mp3.outUrl) { URL.revokeObjectURL(mp3.outUrl); mp3.outUrl = ''; }
+    mp3.dl.setAttribute('href', '#');
+    mp3.out = null;
+  }
+
+  // Client-side check of a link (the Worker checks it again, web/mp3.js).
+  function mp3ParseLink(raw) {
+    const s0 = String(raw || '').trim();
+    if (!s0) return { ok: false, empty: true };
+    let u;
+    try { u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(s0) ? s0 : 'https://' + s0); } catch (e) { return { ok: false, error: 'That isn’t a link.' }; }
+    const host = u.hostname.toLowerCase().replace(/^(www|m|music)\./, '');
+    if (!/^https?:$/.test(u.protocol) || !['youtube.com', 'youtu.be', 'youtube-nocookie.com'].includes(host)) return { ok: false, error: 'That isn’t a YouTube link.' };
+    const parts = u.pathname.split('/').filter(Boolean);
+    let id = '';
+    if (host === 'youtu.be') id = parts[0] || '';
+    else if (parts[0] === 'watch') id = u.searchParams.get('v') || '';
+    else if (['shorts', 'embed', 'live', 'v', 'e'].includes(parts[0])) id = parts[1] || '';
+    else if (parts[0] === 'playlist' || (!parts.length && u.searchParams.get('list'))) return { ok: false, error: 'That’s a playlist link. Paste the link of one video.' };
+    else if (parts[0] && (parts[0][0] === '@' || ['channel', 'c', 'user'].includes(parts[0]))) return { ok: false, error: 'That’s a channel link. Paste the link of one video.' };
+    if (!id && u.searchParams.get('list')) return { ok: false, error: 'That’s a playlist link. Paste the link of one video.' };
+    return /^[A-Za-z0-9_-]{11}$/.test(id) ? { ok: true, id } : { ok: false, error: 'That YouTube link doesn’t point to a video.' };
+  }
+  async function mp3Api(path) {
+    const r = await fetch(musicBase() + withUser(path), { cache: 'no-store', headers: musicStaffHeaders() });
+    return { status: r.status, d: await r.json().catch(() => ({})) };
+  }
+  function mp3ShowRights(text) {
+    mp3.rights.hidden = !text;
+    mp3.rights.textContent = '';
+    if (!text) return;
+    const b = document.createElement('b'); b.textContent = 'Getting the audio: ';
+    mp3.rights.appendChild(b);
+    mp3.rights.appendChild(document.createTextNode(text));
+  }
+  async function mp3CheckLink() {
+    const seq = ++mp3.linkSeq;
+    const raw = mp3.url.value;
+    const p = mp3ParseLink(raw);
+    mp3.meta.hidden = true; mp3.meta.textContent = '';
+    if (p.empty) { mp3.link.textContent = ''; mp3ShowRights(''); return; }
+    if (!p.ok) { mp3.link.textContent = p.error; mp3ShowRights(''); return; }
+    mp3.link.textContent = 'Checking the link…';
+    let res;
+    try { res = await mp3Api('/music/mp3/check?url=' + encodeURIComponent(raw.trim())); }
+    catch (e) { if (seq === mp3.linkSeq) { mp3.link.textContent = 'Couldn’t reach the server to check the link.'; } return; }
+    if (seq !== mp3.linkSeq) return;   // a newer link was typed meanwhile
+    const d = res.d || {};
+    if (res.status === 403 && d.ownerOnly) { mp3Refresh(false); return; }
+    if (!d.ok && !d.link) { mp3.link.textContent = d.error || 'Couldn’t check that link.'; mp3ShowRights(''); return; }
+    const v = d.video;
+    mp3.link.textContent = (v ? 'YouTube video' : 'YouTube video ' + (d.link ? d.link.id : '')) + (d.link && d.link.ignoredList ? ' (the playlist part of the link is ignored)' : '') + (d.ok ? '' : ': ' + (d.error || '')) + (!v && d.canLookUp === false ? '. Its title and length show once YOUTUBE_API_KEY is set on the Worker.' : '');
+    if (v) {
+      if (v.thumb) { const img = document.createElement('img'); img.className = 'gpa-mp3-thumb'; img.alt = ''; img.src = v.thumb; img.onerror = () => img.remove(); mp3.meta.appendChild(img); }
+      const t = document.createElement('div'); t.className = 'gpa-mp3-mt';
+      const b = document.createElement('b'); b.textContent = v.title;
+      const m = document.createElement('span'); m.textContent = [v.channel, v.duration ? fmtDur(v.duration) : (v.live ? 'Live' : ''), v.license === 'creativeCommon' ? 'Creative Commons' : 'Standard YouTube license'].filter(Boolean).join(' · ');
+      t.appendChild(b); t.appendChild(m); mp3.meta.appendChild(t);
+      mp3.meta.hidden = false;
+      if (mp3.titleAuto || !mp3.title.value.trim()) { mp3.title.value = v.title.slice(0, 140); mp3.titleAuto = true; }
+      if (mp3.artistAuto || !mp3.artist.value.trim()) { mp3.artist.value = v.channel.replace(/\s*-\s*Topic$/, '').slice(0, 80); mp3.artistAuto = true; }
+    }
+    mp3ShowRights(d.rights || '');
+  }
+
+  // FFmpeg itself: downloaded once, checked, cached.
+  async function sha256Hex(buf) {
+    const h = await crypto.subtle.digest('SHA-256', buf);
+    return Array.prototype.map.call(new Uint8Array(h), (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  async function mp3Download(url, expect, onBytes, signal) {
+    const r = await fetch(url, { credentials: 'omit', mode: 'cors', signal });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (!r.body || !r.body.getReader) { const b = await r.arrayBuffer(); onBytes(b.byteLength); return b; }
+    const reader = r.body.getReader(), chunks = [];
+    let got = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value); got += value.length; onBytes(got);
+      if (got > expect + 1048576) { try { reader.cancel(); } catch (e) { /* ignore */ } throw new Error('unexpected size'); }
+    }
+    const out = new Uint8Array(got);
+    let o = 0;
+    chunks.forEach((c) => { out.set(c, o); o += c.length; });
+    return out.buffer;
+  }
+  async function mp3LoadCore(onBytes, signal) {
+    if (mp3.core) return mp3.core;
+    if (!(window.isSecureContext && window.crypto && crypto.subtle)) throw new Error('This page isn’t secure (https), so FFmpeg can’t be checked and won’t run here. Use the Agent Console app.');
+    let cache = null;
+    try { if (window.caches) cache = await caches.open('gpa-ffmpeg-' + MP3_CORE.version); } catch (e) { cache = null; }
+    const got = {};
+    let done = 0;
+    for (const part of ['js', 'wasm']) {
+      const meta = MP3_CORE[part];
+      const key = 'https://agent-console.invalid/ffmpeg/' + MP3_CORE.version + '/' + meta.file;
+      if (cache) {
+        try {
+          const hit = await cache.match(key);
+          if (hit) { const b = await hit.arrayBuffer(); if ((await sha256Hex(b)) === meta.sha256) { got[part] = b; done += meta.bytes; onBytes(done, true); continue; } await cache.delete(key); }
+        } catch (e) { /* fetch it instead */ }
+      }
+      let why = '';
+      for (const base of mp3Bases()) {
+        try {
+          const b = await mp3Download(base + meta.file, meta.bytes, (n) => onBytes(done + n, false), signal);
+          if ((await sha256Hex(b)) !== meta.sha256) { why = 'checksum'; continue; }
+          got[part] = b;
+          if (cache) { try { await cache.put(key, new Response(b.slice(0), { headers: { 'Content-Type': part === 'js' ? 'text/javascript' : 'application/wasm' } })); } catch (e) { /* no room: download again next time */ } }
+          break;
+        } catch (e) { if (signal && signal.aborted) throw e; why = why || 'network'; }
+      }
+      if (!got[part]) throw new Error(why === 'checksum' ? 'The FFmpeg download didn’t match its fingerprint, so it wasn’t run.' : 'Couldn’t download FFmpeg (31 MB, one time). Check your connection; some websites block it, so try the Agent Console app.');
+      done += meta.bytes;
+    }
+    mp3.core = got;
+    return got;
+  }
+
+  // Runs in the Web Worker (built from this function's source, so it can't
+  // see anything else in this file). FS paths are FFmpeg's in-memory files.
+  function mp3WorkerMain() {
+    let core = null;
+    const log = [];
+    const post = (m, t) => self.postMessage(m, t || []);
+    const probe = (name) => {
+      try { core.FS.unlink('probe.json'); } catch (e) { /* none yet */ }
+      core.ffprobe('-v', 'error', '-show_format', '-show_streams', '-of', 'json', name, '-o', 'probe.json');
+      core.reset();
+      let j = {};
+      try { j = JSON.parse(new TextDecoder().decode(core.FS.readFile('probe.json'))); } catch (e) { j = {}; }
+      try { core.FS.unlink('probe.json'); } catch (e) { /* ignore */ }
+      return j;
+    };
+    self.onmessage = async (e) => {
+      const m = e.data;
+      try {
+        self.importScripts(m.coreUrl);
+        core = await self.createFFmpegCore({ wasmBinary: m.wasm, mainScriptUrlOrBlob: m.coreUrl + '#' + btoa(JSON.stringify({ wasmURL: 'unused', workerURL: 'unused' })) });
+        core.setLogger((d) => { if (d && d.message) { log.push(String(d.message)); if (log.length > 80) log.shift(); } });
+        core.setProgress((p) => post({ type: 'progress', time: p.time }));
+        post({ type: 'stage', stage: 'probe' });
+        const inName = 'input.' + m.ext;
+        core.FS.writeFile(inName, new Uint8Array(m.input));
+        const pin = probe(inName);
+        const streams = Array.isArray(pin.streams) ? pin.streams : [];
+        const a = streams.find((s) => s.codec_type === 'audio');
+        const fmt = pin.format || {};
+        const info = { duration: Number(fmt.duration) || 0, format: String(fmt.format_name || ''), hasVideo: streams.some((s) => s.codec_type === 'video' && !(s.disposition && s.disposition.attached_pic)),
+          audio: a ? { codec: String(a.codec_name || ''), bitRate: Number(a.bit_rate) || 0, sampleRate: Number(a.sample_rate) || 0, channels: Number(a.channels) || 0 } : null };
+        post({ type: 'probe', info });
+        if (!streams.length) throw new Error('UNREADABLE');
+        if (!a) throw new Error('NOAUDIO');
+        const args = ['-hide_banner', '-nostdin', '-y', '-i', inName, '-map', '0:a:0', '-vn', '-sn', '-dn', '-map_metadata', '-1', '-c:a', 'libmp3lame', '-b:a', m.kbps + 'k'];
+        if (info.audio.sampleRate > 48000) args.push('-ar', '48000');
+        if (info.audio.channels > 2) args.push('-ac', '2');
+        if (m.title) args.push('-metadata', 'title=' + m.title);
+        if (m.artist) args.push('-metadata', 'artist=' + m.artist);
+        args.push('-id3v2_version', '3', 'output.mp3');
+        post({ type: 'stage', stage: 'convert' });
+        core.exec(...args);
+        const ret = core.ret;
+        core.reset();
+        try { core.FS.unlink(inName); } catch (er) { /* ignore */ }
+        if (ret !== 0) throw new Error('FFMPEG ' + ret);
+        post({ type: 'stage', stage: 'verify' });
+        const po = probe('output.mp3');
+        const os = (po.streams || []).find((s) => s.codec_type === 'audio');
+        const of = po.format || {};
+        const check = { codec: os ? String(os.codec_name || '') : '', format: String(of.format_name || ''), duration: Number(of.duration) || 0,
+          bitRate: Number(os && os.bit_rate) || Number(of.bit_rate) || 0, sampleRate: Number(os && os.sample_rate) || 0, channels: Number(os && os.channels) || 0 };
+        const out = core.FS.readFile('output.mp3');
+        try { core.FS.unlink('output.mp3'); } catch (er) { /* ignore */ }
+        post({ type: 'done', check, out: out.buffer }, [out.buffer]);
+      } catch (err) {
+        post({ type: 'error', code: String((err && err.message) || err), log: log.slice(-10) });
+      }
+    };
+  }
+
+  // One conversion = one Web Worker, ended when it finishes or is canceled
+  // (which also frees FFmpeg's memory).
+  function mp3Start(opts, on) {
+    let worker = null, timer = null, settled = false, coreUrl = '', workerUrl = '';
+    const ctl = new AbortController();
+    let rejectRun;
+    const finish = () => {
+      clearTimeout(timer);
+      try { ctl.abort(); } catch (e) { /* ignore */ }
+      if (worker) { try { worker.terminate(); } catch (e) { /* ignore */ } worker = null; }
+      if (coreUrl) URL.revokeObjectURL(coreUrl);
+      if (workerUrl) URL.revokeObjectURL(workerUrl);
+      coreUrl = workerUrl = '';
+    };
+    const promise = new Promise((resolve, reject) => {
+      rejectRun = (e) => { if (settled) return; settled = true; finish(); reject(e); };
+      const ok = (v) => { if (settled) return; settled = true; finish(); resolve(v); };
+      (async () => {
+        const core = await mp3LoadCore((n, cached) => on.fetch(n, cached), ctl.signal);
+        if (settled) return;
+        on.stage('read');
+        const input = await opts.file.arrayBuffer();
+        if (settled) return;
+        coreUrl = URL.createObjectURL(new Blob([core.js], { type: 'text/javascript' }));
+        workerUrl = URL.createObjectURL(new Blob(['(' + mp3WorkerMain.toString() + ')();'], { type: 'text/javascript' }));
+        try { worker = new Worker(workerUrl); }
+        catch (e) { throw new Error('This website doesn’t allow the converter to start. Use the Agent Console app.'); }
+        const limit = mp3TimeoutMs();
+        const limitText = limit < 60000 ? Math.round(limit / 1000) + ' seconds' : Math.round(limit / 60000) + ' minutes';
+        timer = setTimeout(() => rejectRun(Object.assign(new Error('The conversion took longer than ' + limitText + ' and was stopped. Try a shorter file.'), { timeout: true })), limit);
+        let heard = false;
+        worker.onmessage = (e) => {
+          const m = e.data || {};
+          heard = true;
+          if (m.type === 'stage') on.stage(m.stage);
+          else if (m.type === 'probe') on.probe(m.info);
+          else if (m.type === 'progress') on.progress(Number(m.time) || 0);
+          else if (m.type === 'done') ok({ check: m.check, out: m.out });
+          else if (m.type === 'error') {
+            const c = m.code || '';
+            const last = (m.log || []).filter((l) => /error|invalid|failed/i.test(l)).slice(-1)[0] || '';
+            rejectRun(new Error(c === 'NOAUDIO' ? 'This file has no audio track to convert.'
+              : c === 'UNREADABLE' || /^FFMPEG/.test(c) ? 'FFmpeg couldn’t read this file. It may be damaged, protected, or a format FFmpeg doesn’t know.' + (last ? ' (' + last.trim().slice(0, 140) + ')' : '')
+                : 'FFmpeg stopped: ' + c.slice(0, 160)));
+          }
+        };
+        // Before its first message, an error means FFmpeg never started (a
+        // website's security rules can block it); after, it ran out of room.
+        worker.onerror = (e) => { if (e && e.preventDefault) e.preventDefault(); rejectRun(new Error(heard ? 'FFmpeg stopped unexpectedly. The device may have run out of memory; try a smaller file.' : 'FFmpeg couldn’t start here. This website may block it; use the Agent Console app.')); };
+        worker.postMessage({ coreUrl, wasm: core.wasm, input, ext: opts.ext, kbps: opts.kbps, title: opts.title, artist: opts.artist }, [input]);
+      })().catch((e) => rejectRun(e));
+    });
+    return { promise, cancel: () => rejectRun(Object.assign(new Error('Canceled.'), { canceled: true })) };
+  }
+
+  // The second, independent check: this browser decodes the MP3.
+  async function mp3VerifyHere(buf, check) {
+    if (check.codec !== 'mp3' || !/mp3/.test(check.format) || !(check.duration > 0)) throw new Error('FFmpeg didn’t produce a valid MP3 (it read back as ' + (check.codec || 'nothing') + ').');
+    const b = new Uint8Array(buf);
+    let i = 0;
+    if (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) i = 10 + ((b[6] & 0x7f) << 21 | (b[7] & 0x7f) << 14 | (b[8] & 0x7f) << 7 | (b[9] & 0x7f));
+    if (!(b[i] === 0xff && (b[i + 1] & 0xe0) === 0xe0)) throw new Error('The output doesn’t start with an MP3 frame.');
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return { decoded: false };
+    const ctx = new AC();
+    try {
+      const audio = await new Promise((res, rej) => { const p = ctx.decodeAudioData(buf.slice(0), res, rej); if (p && p.then) p.then(res, rej); });
+      if (!(audio && audio.duration > 0) || Math.abs(audio.duration - check.duration) > Math.max(1.5, check.duration * 0.02)) throw new Error('This browser couldn’t play the MP3 back at its full length.');
+      return { decoded: true, seconds: audio.duration };
+    } finally { try { ctx.close(); } catch (e) { /* ignore */ } }
+  }
+
+  const mp3SafeName = (t) => (String(t || 'audio').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100) || 'audio') + '.mp3';
+  async function mp3Convert() {
+    const f = mp3.chosen;
+    if (!f || mp3.job) return;
+    mp3ClearResult();
+    const kbps = [128, 192, 256, 320].includes(Number(mp3.q.value)) ? Number(mp3.q.value) : 192;
+    const title = mp3.title.value.trim().slice(0, 140) || f.name.replace(/\.[^.]+$/, '');
+    const artist = mp3.artist.value.trim().slice(0, 80);
+    const ext = (/\.([A-Za-z0-9]{1,5})$/.exec(f.name) || [, 'bin'])[1].toLowerCase();
+    let duration = 0, source = null;
+    mp3Busy(true);
+    mp3Say('Starting…');
+    mp3Progress(null, 'Starting');
+    const job = mp3Start({ file: f, kbps, title, artist, ext }, {
+      fetch: (n, cached) => {
+        const total = MP3_CORE.js.bytes + MP3_CORE.wasm.bytes;
+        if (cached) { mp3Say('Loading FFmpeg…'); mp3Progress(null, 'Loading FFmpeg'); return; }
+        mp3Progress(n / total, 'Downloading FFmpeg');
+        mp3Say('Downloading FFmpeg (one time, ' + fmtSize(total) + '): ' + fmtSize(n));
+      },
+      stage: (st) => {
+        if (st === 'read') { mp3Say('Reading ' + f.name + '…'); mp3Progress(null, 'Reading the file'); }
+        if (st === 'probe') { mp3Say('Checking the file…'); mp3Progress(null, 'Checking the file'); }
+        if (st === 'convert') { mp3Say('Converting…'); mp3Progress(duration ? 0 : null, 'Converting'); }
+        if (st === 'verify') { mp3Say('Checking the MP3…'); mp3Progress(null, 'Checking the MP3'); }
+      },
+      probe: (info) => { duration = info.duration; source = info.audio; },
+      progress: (us) => {
+        const sec = us / 1e6;
+        if (duration > 0) { mp3Progress(Math.min(1, sec / duration), 'Converting'); mp3Say('Converting: ' + fmtDur(Math.min(sec, duration)) + ' of ' + fmtDur(duration)); }
+        else mp3Say('Converting: ' + fmtDur(sec) + ' done');
+      }
+    });
+    mp3.job = job;
+    try {
+      const { check, out } = await job.promise;
+      mp3Say('Checking the MP3 in this browser…');
+      const here = await mp3VerifyHere(out, check);
+      const blob = new Blob([out], { type: 'audio/mpeg' });
+      mp3.out = { blob, title, artist, duration: check.duration, kbps, name: mp3SafeName(title) };
+      mp3.outUrl = URL.createObjectURL(blob);
+      mp3.preview.src = mp3.outUrl;
+      mp3.dl.href = mp3.outUrl;
+      mp3.dl.setAttribute('download', mp3.out.name);
+      const parts = ['Verified MP3', fmtDur(check.duration), Math.round(check.bitRate / 1000) + ' kbps', (check.sampleRate / 1000) + ' kHz ' + (check.channels === 1 ? 'mono' : check.channels === 2 ? 'stereo' : check.channels + ' ch'), fmtSize(blob.size)];
+      mp3.result.textContent = parts.join(' · ') + (here.decoded ? '' : ' (this browser can’t double-check it)');
+      const tooBig = blob.size > MP3_SAVE_MAX;
+      mp3.save.disabled = tooBig || !currentUser;
+      mp3.save.innerHTML = gpxLbl('upload', 'Save to My music');
+      mp3.save.title = tooBig ? 'My music takes songs up to 25 MB. Pick a lower quality to save this one.' : !currentUser ? 'Sign in to save to My music.' : '';
+      mp3.done.hidden = false;
+      const srcNote = source && source.bitRate && kbps > source.bitRate / 1000 + 8 ? ' The source audio was about ' + Math.round(source.bitRate / 1000) + ' kbps, so ' + kbps + ' kbps can’t sound better than that; it’s just bigger.' : '';
+      mp3Say('Done.' + (tooBig ? ' It’s over 25 MB, so it can be downloaded but not saved to My music.' : '') + srcNote);
+    } catch (e) {
+      mp3Say(e.canceled ? 'Canceled. Nothing was saved.' : (e.message || 'The conversion failed.'), !e.canceled);
+    } finally {
+      mp3.job = null;
+      mp3Busy(false);
+    }
+  }
+  async function mp3Save() {
+    const o = mp3.out;
+    if (!o || mp3.save.disabled) return;
+    if (!currentUser) { mp3Say('Sign in to save to My music.', true); return; }
+    mp3.save.disabled = true;
+    try {
+      // Don't silently add a second copy of the same song.
+      try {
+        const d = await musicGet('/music/mine');
+        if ((d.tracks || []).some((t) => String(t.title).toLowerCase() === o.title.toLowerCase()) && !confirm('“' + o.title + '” is already in My music. Save another copy?')) { mp3.save.disabled = false; return; }
+      } catch (e) { /* the upload reports its own problems */ }
+      mp3Say('Saving to My music…');
+      const fd = new FormData();
+      fd.append('file', new File([o.blob], o.name, { type: 'audio/mpeg' }));
+      fd.append('title', o.title);
+      fd.append('artist', o.artist);
+      fd.append('duration', String(Math.round(o.duration)));
+      let r;
+      try { r = await fetch(musicBase() + withUser('/music/mine/upload'), { method: 'POST', headers: musicStaffHeaders(), body: fd }); }
+      catch (e) { throw new Error('Couldn’t reach the server, so it wasn’t saved. Check your connection and tap Save again.'); }
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || !d.ok) throw new Error(d.error || ('Saving failed (' + r.status + ')'));
+      mp3.save.innerHTML = gpxLbl('check', 'Saved to My music');
+      mp3Say('Saved to My music. It’s private to you unless you share it in chat.');
+      loadMine();
+    } catch (e) {
+      mp3.save.disabled = false;
+      mp3Say(e.message || 'Couldn’t save it.', true);
+    }
+  }
+  function mp3Choose(f) {
+    mp3ClearResult();
+    if (!f) return;
+    if (f.size > MP3_MAX_INPUT) { mp3.chosen = null; mp3.go.disabled = true; mp3.fileInfo.textContent = f.name + ' is ' + fmtSize(f.size) + '. The limit is 200 MB.'; mp3Say('That file is too big to convert on this device.', true); return; }
+    if (!f.size) { mp3.chosen = null; mp3.go.disabled = true; mp3.fileInfo.textContent = f.name + ' is empty.'; return; }
+    mp3.chosen = f;
+    mp3.fileInfo.textContent = f.name + ' · ' + fmtSize(f.size);
+    if (mp3.titleAuto || !mp3.title.value.trim()) { mp3.title.value = f.name.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim().slice(0, 140); mp3.titleAuto = true; }
+    mp3.go.disabled = false;
+    mp3Say('');
+  }
+  // Shown to the verified owner only; the Worker confirms it.
+  function mp3Refresh(force) {
+    const on = force === undefined ? mp3Owner() && mp3.ownerOk !== false : force;
+    if (force === false) mp3.ownerOk = false;
+    mp3.box.hidden = !on;
+    if (!on && mp3.job) mp3.job.cancel();
+  }
+  async function mp3Confirm() {
+    if (!mp3Owner()) { mp3Refresh(false); return; }
+    try {
+      const { status, d } = await mp3Api('/music/mp3/check');
+      if (status === 403 && d.ownerOnly) { mp3Refresh(false); return; }
+      if (status === 200 && d.owner) { mp3.ownerOk = true; mp3Refresh(true); }
+    } catch (e) { /* offline: the converter still works; the link check will say so */ }
+  }
+  mp3.url.addEventListener('input', () => { clearTimeout(mp3.linkTimer); mp3.linkTimer = setTimeout(mp3CheckLink, 400); });
+  mp3.url.addEventListener('paste', () => { clearTimeout(mp3.linkTimer); mp3.linkTimer = setTimeout(mp3CheckLink, 50); });
+  mp3.url.addEventListener('keydown', (e) => { if (e.key === 'Enter') { clearTimeout(mp3.linkTimer); mp3CheckLink(); } });
+  mp3.paste.addEventListener('click', async () => {
+    try {
+      const t = await navigator.clipboard.readText();
+      if (!t) throw new Error();
+      mp3.url.value = t.trim();
+      mp3CheckLink();
+    } catch (e) { mp3.url.focus(); mp3.link.textContent = 'Paste the link into the box (press and hold, or Ctrl/⌘+V).'; }
+  });
+  mp3.pick.addEventListener('click', () => mp3.file.click());
+  mp3.file.addEventListener('change', () => { const f = mp3.file.files && mp3.file.files[0]; mp3.file.value = ''; mp3Choose(f || null); });
+  mp3.title.addEventListener('input', () => { mp3.titleAuto = false; });
+  mp3.artist.addEventListener('input', () => { mp3.artistAuto = false; });
+  mp3.go.addEventListener('click', mp3Convert);
+  mp3.cancel.addEventListener('click', () => { if (mp3.job) mp3.job.cancel(); });
+  mp3.save.addEventListener('click', mp3Save);
+  mp3.dl.addEventListener('click', (e) => { if (!mp3.out) e.preventDefault(); });
+  mp3.box.addEventListener('toggle', () => { if (mp3.box.open) mp3Confirm(); });
+  gpaCleanups.push(() => { if (mp3.job) mp3.job.cancel(); mp3ClearResult(); mp3.core = null; });
+  panel.querySelectorAll('.gpx-src[data-src="mine"]').forEach((b) => b.addEventListener('click', () => { mp3Refresh(); if (mp3Owner()) mp3Confirm(); }));
+  // After start-up: the sign-in state is declared further down this file.
+  setTimeout(() => { mp3Refresh(); onSessionChange(() => { mp3.ownerOk = null; mp3Refresh(); }); }, 0);
 
   // ---- Playlists → YouTube links (owner and admins, app only; web/playlists.js) ----
   // The Worker reads the playlist's songs and finds each one's official

@@ -115,6 +115,11 @@ The Music tab needs no YouTube key and no sign-in:
     `SPOTIFY_CLIENT_SECRET` (a free app at developer.spotify.com) as Worker
     secrets. Apple Music playlists are read from their public page.
   - Up to 20 playlists per person, 200 songs each, 30 imports a day.
+- **YouTube to MP3** (you only, inside **My music**): turns a video or audio
+  file you own into an MP3 on your device with real FFmpeg, with **Download
+  MP3** and **Save to My music**. A YouTube link shows the video's details,
+  but its audio can't be fetched from the link; see
+  [YouTube to MP3](#mp3).
 - One **now-playing bar** plays every source with previous/next, seeking and
   iPhone lock-screen controls, and keeps playing on other tabs. **SoundCloud**
   links and **This device** (your own offline files) work as before, and
@@ -124,6 +129,82 @@ The Music tab needs no YouTube key and no sign-in:
 Owners can point at a different Audius gateway with the Worker variable
 `AUDIUS_API`. Checks: `node --test tests/music.test.mjs` and
 `node tests/browser/music.mjs`.
+
+## YouTube to MP3 (owner only) {#mp3}
+
+In **Music → My music**, you (the verified owner, and nobody else) get a
+collapsible **YouTube to MP3** section. It turns a video or audio file you
+own into a real MP3, on your device, and can save it to My music.
+
+**What a YouTube link does, and doesn't.** YouTube offers no download API,
+and its terms don't allow apps to fetch a video's media, so this tool never
+downloads anything from a YouTube link. Paste a link (watch, youtu.be,
+Shorts, live, music.youtube.com) and you get the video's title, channel,
+length and license from the YouTube Data API (with the Worker's
+`YOUTUBE_API_KEY`), plus how to get the audio legitimately: for your own
+videos, **YouTube Studio → Content → ⋮ → Download**, then choose that file.
+Playlist and channel links are refused with a reason; a video link that also
+names a playlist says the playlist part is ignored. The details also fill in
+the MP3's title and artist.
+
+**How it converts.**
+1. **Choose video or audio**: MP4, MOV, WebM, MKV, M4A, AAC, MP3, WAV,
+   FLAC, OGG/Opus and more, up to 200 MB.
+2. Pick the quality: 128, 192 (recommended), 256 or 320 kbps. If the source
+   audio was lower (say 128 kbps), the result says a higher bitrate can't
+   sound better, only bigger.
+3. **Convert to MP3**. The first time, the page downloads FFmpeg (the
+   official ffmpeg.wasm 0.12.10 build, 31 MB) from jsDelivr (unpkg as a
+   fallback), **checks both files against SHA-256 fingerprints pinned in
+   `script.js` before running anything**, and keeps them in the browser's
+   cache, so later conversions work offline. FFmpeg runs in a Web Worker on
+   your device; your media never goes to a server.
+4. The bar shows real progress: bytes while FFmpeg downloads, then FFmpeg's
+   own position in the file ("Converting: 1:41 of 3:00"). **Cancel** stops
+   it immediately and frees the memory; a conversion is stopped after 15
+   minutes.
+5. Before anything is offered, the MP3 is checked twice: FFmpeg's ffprobe
+   must read it back as MP3 audio, and the browser must decode it to the
+   same length. Then you get a player, **Download MP3** and **Save to My
+   music**.
+6. **Save to My music** uploads it like any of your songs (private to you
+   unless you share it in chat; never to the shared library), with its
+   title, artist and length, so it's on all your devices. It asks first if
+   a song with the same title is already there. My music's limits apply: 25
+   MB per song (an MP3 bigger than that can still be downloaded), 50 songs,
+   300 MB, 30 uploads a day.
+
+It works in the Agent Console app (`/console/`) and on most websites. Some
+websites' security rules block it (the section says so); use the app there.
+The page must be https.
+
+**Setup: nothing new.** No new Worker, KV namespace, R2 bucket or secret.
+`YOUTUBE_API_KEY` (already used by Playlists) only adds the link details;
+without it a link is still recognized. Pushing to `main` deploys it like
+everything else.
+
+**Worker route** (`web/mp3.js`, `worker.js`): `GET /music/mp3/check?url=…`,
+owner only (the owner's session, the admin token, or `X-GPA-Owner`; a typed
+name isn't enough). Without `url` it just confirms the owner. It parses the
+link (YouTube hosts only), calls `videos.list` (1 unit of the key's 10,000 a
+day), caches each video's details 12 hours (`ytmeta:<id>`), and allows 120
+lookups an hour (`mp3chk:<hour>`). It never fetches media and never returns
+the key.
+
+**FFmpeg's license.** ffmpeg.wasm's core is GPL-2.0-or-later. It isn't in
+this repository (it's downloaded at run time); `@ffmpeg/core` is only a dev
+dependency so the tests can serve the same files locally.
+
+**Checks:** `node --test tests/mp3.test.mjs` and `node tests/browser/mp3.mjs`
+(needs `ffmpeg`/`ffprobe` installed: it makes its own test media and checks
+the downloaded MP3 with them).
+
+**If something goes wrong:** "Couldn't download FFmpeg": the network or the
+website blocked jsDelivr/unpkg; try the app. "didn't match its
+fingerprint": the download was altered and was not run. "FFmpeg couldn't
+start here": the website blocks workers; use the app. "ran out of memory":
+try a smaller file (phones have less room). "no audio track": the file has
+only video.
 
 ## Admins and the phone app {#admins}
 
@@ -887,12 +968,15 @@ scripts/           build-eaglercraft.sh: builds the real EaglercraftX client int
                    (git-ignored) with the official build tool
 saints.js          Backup copy of an earlier script.js
 acp.js             Proxy build of the console
+web/               Worker modules: music.js (My music, shared library), playlists.js,
+                   mp3.js (YouTube to MP3 link checks), subscribe.js, policies.js,
+                   and the /app and /console/ web apps
 tests/             Worker unit tests (npm test); tests/browser/ holds the
                    Playwright checks for the Eaglercraft tab and screenshots
 docs/screenshots/  The screenshots used in this README
 ```
 
-No build step and no runtime dependencies. Wrangler is a dev dependency, used to deploy `worker.js` and to run it for the browser checks in `tests/browser/` (which also need Playwright).
+No build step and no runtime dependencies. Wrangler is a dev dependency, used to deploy `worker.js` and to run it for the browser checks in `tests/browser/` (which also need Playwright). `@ffmpeg/core` is a dev dependency only so `tests/browser/mp3.mjs` can serve FFmpeg locally; the console downloads the same files from a CDN at run time.
 
 * * *
 
