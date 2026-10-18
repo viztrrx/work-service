@@ -13,6 +13,9 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **PIN reset with a one-time code** + themed checkbox on the subscribe page
+  (owner: "make it so i can reset their pin incase any of them… forget it";
+  "style the check box button to make it match the theme"). Before that:
   **New subscribers' school email** (owner: "prompt them that it is mandatory
   they remember this pin… after they create their own pin… add their email…
   only allowed to type the 6 digit… sent to the admins via app (and
@@ -444,6 +447,20 @@ day, 14 days; not system notices), `trivia` (#public only). Memory only:
   Email instructions is a `mailto:` (no email service on the Worker) and
   marks `sentAt`/`sentBy`. Tests: subscribe.test.mjs "school email",
   subscribe.mjs step 2 and the owner card.
+  **PIN reset** (owner only): `/admin/user/action` `resetpin` →
+  `pinreset:<name>` `{code, until (7 days), by}` (KV TTL), bumps `epoch` and
+  clears sessions (signed out), returns the code; `resetcancel` deletes it.
+  `/auth/login`: a wrong verifier with a live reset → 403 `{inviteRequired,
+  pinReset}` until `body.invite` matches (timing-safe, wrong code counts
+  toward the login lockout), then the typed PIN's verifier replaces the old
+  one (new salt), the key is deleted, owner alert (cat `security`), normal
+  sign-in continues. The old PIN keeps working until then. The code only
+  reaches the owner (`authedLevel === 'owner'` in `allowAccounts` and
+  `/admin/user`). UI: Allowed users rows (Reset PIN → code, Copy code,
+  Cancel reset), Users → Actions; the sign-in code box relabels to "Reset
+  code (from the owner)". `release` (delete the account record) still
+  exists server-side but no button uses it. Tests: worker.test.mjs "PIN
+  reset", subscribe.mjs end.
 
 ### 4.2 Chat
 All rooms live in `ChatRoom` DOs. The console polls every 3 s while Chat is
@@ -639,7 +656,7 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 ## 6. Testing
 
 ```bash
-npm test                                   # node --test tests/*.test.mjs (120 tests)
+npm test                                   # node --test tests/*.test.mjs (121 tests)
 npx wrangler deploy --dry-run --outdir /tmp/x   # bundle/config check, deploys nothing
 # Browser suites (Playwright vs local workerd), each takes an output dir for screenshots:
 node tests/browser/eaglercraft.e2e.mjs     # 83
@@ -665,7 +682,7 @@ node tests/browser/my-music.mjs            # 15
 node tests/browser/admin-app.mjs           # 20
 node tests/browser/playlists.mjs           # 23
 node tests/browser/mp3.mjs                 # 51 (+1 NOT RUN: real YouTube download; needs ffmpeg/ffprobe)
-node tests/browser/subscribe.mjs           # 53
+node tests/browser/subscribe.mjs           # 57
 node tests/browser/usage-meter.mjs         # 16
 node tests/browser/usage-meter-sizes.mjs   # 25
 node tests/browser/ask-photo-size.mjs      # 6

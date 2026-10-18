@@ -1107,6 +1107,56 @@ test('free access: owner, admins and moderators can let someone in for free (no 
   assert.ok(acts.includes('free_give') && acts.includes('free_end'), acts.join(','));
 });
 
+test('PIN reset: the owner gets a one-time code; with it the person sets a new PIN and keeps their account', async () => {
+  const env = makeEnv(); const c = makeClient(env);
+  await signUp(c, 'lex');
+  const act = (body, headers = owner) => c.call('/admin/user/action', { method: 'POST', headers, body });
+  // Only the owner can reset (not the co-admin token, not an admin).
+  assert.equal((await act({ u: 'lex', action: 'resetpin' }, coadmin)).status, 403);
+  assert.equal((await act({ u: 'nobody', action: 'resetpin' })).status, 404);
+  const before = JSON.parse(await env.TELEMETRY.get('acct:lex'));
+  const r = await act({ u: 'lex', action: 'resetpin' });
+  assert.equal(r.status, 200);
+  assert.match(r.data.code, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+  assert.ok(r.data.until - Date.now() > 6.9 * 864e5);
+  // Signed out everywhere; the account (and its role, data) stays.
+  const mid = JSON.parse(await env.TELEMETRY.get('acct:lex'));
+  assert.deepEqual([mid.sessions.length, mid.epoch, mid.createdAt, mid.verifier], [0, (before.epoch || 0) + 1, before.createdAt, before.verifier]);
+  // The owner sees the pending code; an admin viewing the same user doesn't.
+  assert.equal((await c.call('/admin/user?u=lex', { headers: owner })).data.pinReset.code, r.data.code);
+  assert.equal((await c.call('/admin/user?u=lex', { headers: coadmin })).data.pinReset, null);
+  const login = (pin, extra = {}) => c.call('/auth/login', { method: 'POST', body: { user: 'lex', verifier: verifierFor('lex', pin), takeover: true, ...extra } });
+  // The old PIN still works until the code is used.
+  assert.equal((await login('1234')).status, 200);
+  // A new PIN without the code: asked for the code. A wrong code: refused (counts toward the lockout).
+  const ask = await login('8642');
+  assert.deepEqual([ask.status, ask.data.inviteRequired, ask.data.pinReset], [403, true, true]);
+  assert.match(ask.data.error, /reset this PIN/);
+  const wrong = await login('8642', { invite: 'AAAA-BBBB' });
+  assert.deepEqual([wrong.status, wrong.data.wrongInvite], [403, true]);
+  // The right code (any case or spacing) sets the new PIN and signs in.
+  const ok = await login('8642', { invite: r.data.code.toLowerCase().replace('-', ' ') });
+  assert.equal(ok.status, 200, JSON.stringify(ok.data));
+  assert.ok(ok.data.token);
+  const after = JSON.parse(await env.TELEMETRY.get('acct:lex'));
+  assert.equal(after.createdAt, before.createdAt, 'same account');
+  assert.equal(await env.TELEMETRY.get('pinreset:lex'), null, 'used up');
+  // Now only the new PIN works, and the code can't be used again.
+  assert.equal((await login('1234')).status, 401);
+  assert.equal((await login('9999', { invite: r.data.code })).status, 401);
+  assert.equal((await login('8642')).status, 200);
+  // Cancel: the code stops working.
+  const r2 = await act({ u: 'lex', action: 'resetpin' });
+  assert.equal((await act({ u: 'lex', action: 'resetcancel' })).status, 200);
+  assert.equal((await login('5555', { invite: r2.data.code })).status, 401);
+  // An expired code doesn't work either.
+  const r3 = await act({ u: 'lex', action: 'resetpin' });
+  const realNow = Date.now;
+  try { Date.now = () => realNow() + 8 * 864e5; assert.equal((await login('5555', { invite: r3.data.code })).status, 401); } finally { Date.now = realNow; }
+  // The owner's own account can't be reset here.
+  assert.equal((await act({ u: 'boss', action: 'resetpin' })).status, 400);
+});
+
 test('subscribers: month math keeps the day, or the month’s last day', async () => {
   const env = makeEnv(); const c = makeClient(env);
   const realNow = Date.now;

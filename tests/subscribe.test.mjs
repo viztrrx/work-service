@@ -430,7 +430,7 @@ test('subscribe: after the PIN, a new subscriber adds their school email (6 digi
     // The page: a must-remember warning, the checkbox, and the email box with the fixed domain.
     const page = (await t.call('/subscribe/')).text;
     assert.match(page, /You must remember this PIN\./);
-    assert.match(page, /Nobody can look it up or reset it for you, not even the owner/);
+    assert.match(page, /Nobody can look it up, not even the owner\. If you forget it, you’ll be locked out until you ask the owner to reset it\./);
     assert.match(page, /no 1234, 0000, 1111, 1212, your birthday/);
     assert.match(page, /id="pin-ok"/);
     assert.match(page, /<input id="sid" inputmode="numeric" pattern="\[0-9\]\{6\}" maxlength="6"/);

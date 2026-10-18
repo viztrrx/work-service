@@ -314,6 +314,29 @@ try {
   check('…and it’s marked “Sent”, by the owner', /Sent \w+ \d+/.test(await emRow()) && /sent by viztrrx/.test(await emRow()), await emRow());
   check('Their Subscribers row shows the email too', /223929@alseducation\.onmicrosoft\.com/.test(await R(op, (r, u) => { const el = [...r.querySelectorAll('.gac-subscr')].find((x) => x.dataset.user === u); return el ? el.textContent : ''; }, NAME)));
 
+  // The owner resets a forgotten PIN (Allowed users → Reset PIN): a one-time code.
+  await R(op, (r, u) => { window.confirm = () => true; const row = r.querySelector(`#gac-allow-accts .gac-acct[data-user="${u}"]`); row.scrollIntoView({ block: 'center' }); row.querySelector('[data-acct="resetpin"]').click(); }, NAME.toLowerCase());
+  await op.waitForFunction((u) => { const row = document.getElementById('gpa-root-host').shadowRoot.querySelector(`#gac-allow-accts .gac-acct[data-user="${u}"]`); return row && /PIN reset/.test(row.textContent); }, NAME.toLowerCase(), { timeout: 15000 }).catch(() => {});
+  const resetRow = await R(op, (r, u) => { const row = r.querySelector(`#gac-allow-accts .gac-acct[data-user="${u}"]`); if (row) row.scrollIntoView({ block: 'center' }); return row ? { text: row.textContent.replace(/\s+/g, ' '), code: (row.querySelector('.gac-invite-code') || {}).textContent || '' } : null; }, NAME.toLowerCase());
+  check('Owner: Reset PIN gives a one-time code with what to tell them; Copy code / Cancel reset', resetRow && /^[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(resetRow.code) && /a new PIN and this code, then tap Sign in/.test(resetRow.text) && /Copy code/.test(resetRow.text) && /Cancel reset/.test(resetRow.text), resetRow && resetRow.text.slice(0, 220));
+  await op.waitForTimeout(300);
+  await op.locator(`#gpa-root-host >> #gac-allow-accts .gac-acct[data-user="${NAME.toLowerCase()}"]`).screenshot({ path: path.join(OUT, '13-owner-reset-pin.png') });
+  // The subscriber forgot their PIN: on the sign-in screen they type a new one and the code.
+  await cp.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await cp.waitForFunction(() => document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-login').style.display !== 'none', null, { timeout: 25000 }).catch(() => {});
+  check('Their console is signed out by the reset', await R(cp, (r) => r.querySelector('#gpa-login').style.display !== 'none'));
+  await cp.fill(sr('#gpa-login-user'), NAME);
+  await cp.fill(sr('#gpa-login-pin'), '864213');
+  await cp.click(sr('#gpa-login-btn'));
+  await cp.waitForFunction(() => { const r = document.getElementById('gpa-root-host').shadowRoot; const w = r.querySelector('#gpa-login-invite-wrap'); return w && !w.hidden; }, null, { timeout: 15000 }).catch(() => {});
+  const askMsg = await R(cp, (r) => ({ box: !r.querySelector('#gpa-login-invite-wrap').hidden, msg: r.querySelector('#gpa-login-msg').textContent }));
+  const askLabel = await R(cp, (r) => r.querySelector('#gpa-login-invite-label').textContent);
+  check('A new PIN asks for the reset code: “The owner reset the PIN… type the new PIN and the reset code”', askMsg.box && /The owner reset the PIN for/.test(askMsg.msg) && askLabel === 'Reset code (from the owner)', JSON.stringify(askMsg) + ' ' + askLabel);
+  await cp.fill(sr('#gpa-login-invite'), resetRow ? resetRow.code : '');
+  await cp.screenshot({ path: path.join(OUT, '14-user-enters-reset-code.png') });
+  await cp.click(sr('#gpa-login-btn'));
+  const backIn = await cp.waitForFunction(() => document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-login').style.display === 'none', null, { timeout: 20000 }).then(() => true, () => false);
+  check('With the code, the new PIN works: they’re back in, same account (still subscribed)', backIn && await cp.waitForFunction(() => { const s2 = document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-substrip'); return s2 && !s2.hidden; }, null, { timeout: 25000 }).then(() => true, () => false), await R(cp, (r) => r.querySelector('#gpa-login-msg').textContent));
   for (const [n, p] of [['subscribe page', page], ['console', cp], ['owner console', op]]) check(`No page errors (${n})`, p._errors.length === 0, p._errors.slice(0, 2).join(' | '));
   await ctx.close(); await pc.close(); await oc.close();
 } finally {

@@ -789,7 +789,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       console: ['change', 'Subscribe page: contributions start at $6'] } },
     { at: '2026-10-19T03:00:00-04:00', commit: '', title: 'New subscribers: PIN warning and school email', parts: {
       console: ['feature', 'Subscribe page: a clear “you must remember this PIN” warning with a checkbox, easy-to-guess PINs refused, then the school email (6 digits @alseducation.onmicrosoft.com)'],
-      admin: ['feature', 'Security → New subscribers: each new subscriber’s school email, your instructions Google Doc link, and Email instructions (opens your mail app, then marks it sent); you and admins get an alert'] } }
+      admin: ['feature', 'Security → New subscribers: each new subscriber’s school email, your instructions Google Doc link, and Email instructions (opens your mail app, then marks it sent); you and admins get an alert'] } },
+    { at: '2026-10-19T04:00:00-04:00', commit: '', title: 'Reset a forgotten PIN safely', parts: {
+      admin: ['feature', 'Reset PIN (Allowed users rows and Users → Actions) now gives a one-time code: the person keeps their account and sets a new PIN at sign-in with it (7 days, one use); Cancel reset stops it'],
+      console: ['change', 'Sign-in asks for the owner’s reset code when a PIN was reset; the subscribe page’s checkbox matches the page’s style'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -3114,7 +3117,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         <label class="gpa-login-label" for="gpa-login-pin">PIN</label>
         <input id="gpa-login-pin" class="gpa-login-input" type="password" placeholder="••••••" autocomplete="off" />
         <div id="gpa-login-invite-wrap" hidden>
-          <label class="gpa-login-label" for="gpa-login-invite">Invite code</label>
+          <label class="gpa-login-label" for="gpa-login-invite" id="gpa-login-invite-label">Invite code</label>
           <input id="gpa-login-invite" class="gpa-login-input" placeholder="e.g. K7MQ-4X2P" autocomplete="off" autocapitalize="characters" spellcheck="false" />
         </div>
         <div id="gpa-login-msg" class="gpa-login-msg"></div>
@@ -16106,6 +16109,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     if (!r.ok && r.inviteRequired && inviteWrap) {
       // An invited name: show the code box (only now, so nobody else ever sees it).
       inviteWrap.hidden = false;
+      const lab = panel.querySelector('#gpa-login-invite-label');
+      if (lab) lab.textContent = r.pinReset ? 'Reset code (from the owner)' : 'Invite code';
       showLoginMsg(serverSessionError, true);
       try { panel.querySelector('#gpa-login-invite').focus(); } catch (e) { /* ignore */ }
       return;
@@ -16254,13 +16259,14 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           : r.status === 409 && r.data.inUse && r.data.sameComputer ? '“' + user + '” is already signed in on this computer' + (r.data.site ? ' on ' + r.data.site : '') + '.'
           : r.status === 409 && r.data.inUse ? '“' + user + '” is already signed in on another device. Sign out there first, or try again in about ' + (r.data.waitMin || 15) + ' min. The owner can also sign it out.'
             : r.status === 409 && r.data.exists ? 'That name is already taken.'
+              : r.status === 403 && r.data.inviteRequired && r.data.pinReset ? (r.data.wrongInvite ? 'That reset code isn’t right. Check it with the owner.' : 'The owner reset the PIN for “' + user + '”. Type the new PIN you want above and the reset code below, then tap Sign in.')
               : r.status === 403 && r.data.inviteRequired ? (r.data.wrongInvite ? 'That invite code isn’t right. Check it with the owner.' : '“' + user + '” needs its sign-up code (from your payment page, or the owner). Enter it below, then tap ＋ (create account) again.')
               : r.status === 403 && /reserved/.test(r.data.error || '') ? "This name is reserved for the console's owner."
                 : r.status === 403 && r.data.notAllowed ? ACCESS_DENIED_MSG
                   : r.status === 429 ? 'Too many attempts. Try again in a few minutes.'
                     : (r.data.error || ('HTTP ' + r.status));
         result = { ok: false, wrongPin: r.status === 401 || (r.status === 409 && !!r.data.exists), inUse: r.status === 409 && !!r.data.inUse,
-          sameComputer: r.status === 409 && !!r.data.sameComputer, site: (r.data && r.data.site) || '', inviteRequired: r.status === 403 && !!r.data.inviteRequired };
+          sameComputer: r.status === 409 && !!r.data.sameComputer, site: (r.data && r.data.site) || '', inviteRequired: r.status === 403 && !!r.data.inviteRequired, pinReset: r.status === 403 && !!r.data.pinReset };
       }
     } catch (e) {
       serverSessionStatus = 'offline';
@@ -21618,11 +21624,13 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             + `<div class="gac-allow-row"><span class="gps-hint" id="gac-allow-count">${((d.config.allowlist && d.config.allowlist.users) || []).length} listed</span><button class="gps-btn primary" id="gac-allow-save" type="button">Save list</button></div>`
             + `<p class="gps-hint">One sign-in per name: while this is on, each listed name works only with its PIN, on one device at a time (admins and you can use several). A second device is refused while the first was used in the last 15 minutes; signing out frees the name right away.</p>`
             + ((d.config.allowAccounts || []).length ? `<ul class="gac-acct-list" id="gac-allow-accts">` + d.config.allowAccounts.map((a) => `<li class="gac-acct" data-user="${esc(a.user)}"><div class="gac-acct-top"><span class="gac-req-name">${esc(a.user)}</span>`
-              + `<span class="gac-req-badge ${a.signedIn ? 'pending' : ''}">${a.signedIn ? 'Signed in' : a.claimed ? 'Signed out' : 'No PIN yet'}</span></div>`
-              + `<div class="gac-req-meta">${a.claimed ? (a.lastSeen ? 'Last used ' + ago(a.lastSeen) + (a.country && a.country !== '??' ? ' · ' + esc(a.country) : '') + (a.device ? ' · ' + esc(deviceName(a.device)) : '') : 'PIN set ' + (a.createdAt ? ago(a.createdAt) : ''))
+              + `<span class="gac-req-badge ${a.signedIn ? 'pending' : ''}">${a.pinReset ? 'PIN reset' : a.signedIn ? 'Signed in' : a.claimed ? 'Signed out' : 'No PIN yet'}</span></div>`
+              + `<div class="gac-req-meta">${a.pinReset ? `Reset code <code class="gac-invite-code">${esc(a.pinReset)}</code> · give it to ${esc(a.user)}: on the sign-in screen they type “${esc(a.user)}”, a <b>new</b> PIN and this code, then tap Sign in. Works once, for 7 days; their old PIN still works until then.`
+                : a.claimed ? (a.lastSeen ? 'Last used ' + ago(a.lastSeen) + (a.country && a.country !== '??' ? ' · ' + esc(a.country) : '') + (a.device ? ' · ' + esc(deviceName(a.device)) : '') : 'PIN set ' + (a.createdAt ? ago(a.createdAt) : ''))
                 : a.invite ? `Invite code <code class="gac-invite-code">${esc(a.invite)}</code> · only someone with this code can create “${esc(a.user)}”. Give it to them.`
                   : 'The first person to create this account sets its PIN. Make sure it’s them, or make an invite code.'}</div>`
-              + (a.claimed ? `<div class="gac-req-actions">${a.signedIn ? '<button class="gps-btn" data-acct="revokesessions" type="button">Sign out</button>' : ''}<button class="gps-btn" data-acct="release" type="button">Reset PIN</button></div>`
+              + (a.claimed && a.pinReset ? `<div class="gac-req-actions"><button class="gps-btn primary" data-acct="invite-copy" type="button">Copy code</button><button class="gps-btn" data-acct="resetcancel" type="button">Cancel reset</button></div>`
+                : a.claimed ? `<div class="gac-req-actions">${a.signedIn ? '<button class="gps-btn" data-acct="revokesessions" type="button">Sign out</button>' : ''}<button class="gps-btn" data-acct="resetpin" type="button">Reset PIN</button></div>`
                 : `<div class="gac-req-actions">${a.invite ? '<button class="gps-btn" data-acct="invite-copy" type="button">Copy code</button><button class="gps-btn" data-acct="invite-revoke" type="button">Remove code</button>' : '<button class="gps-btn" data-acct="invite-make" type="button">Make invite code</button>'}</div>`)
               + `</li>`).join('') + `</ul>` : ''), 'account') : '')
           + `<div id="gac-legacy-security"></div></aside></div>`;
@@ -21752,7 +21760,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           const user = btn.closest('.gac-acct').dataset.user, action = btn.dataset.acct;
           if (action === 'invite-copy') {
             const code = btn.closest('.gac-acct').querySelector('.gac-invite-code').textContent;
-            try { await navigator.clipboard.writeText(code); showToast('Copied ' + user + '’s invite code.'); } catch (err) { showToast(user + '’s invite code: ' + code); }
+            const what = btn.closest('.gac-acct').querySelector('.gac-req-badge').textContent === 'PIN reset' ? 'reset code' : 'invite code';
+            try { await navigator.clipboard.writeText(code); showToast('Copied ' + user + '’s ' + what + '.'); } catch (err) { showToast(user + '’s ' + what + ': ' + code); }
             return;
           }
           if (action === 'invite-make' || action === 'invite-revoke') {
@@ -21765,11 +21774,12 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             } catch (err) { btn.disabled = false; showToast(err.message, { type: 'danger' }); }
             return;
           }
-          if (action === 'release' && !confirm('Reset the PIN for “' + user + '”? They’re signed out, and the next person to create “' + user + '” sets a new PIN — make sure that’s them.')) return;
+          if (action === 'resetpin' && !confirm('Reset the PIN for “' + user + '”? You get a one-time code to give them; with it they set a new PIN at sign-in. They’re signed out now, and keep their account and everything in it.')) return;
+          if (action === 'resetcancel' && !confirm('Cancel the PIN reset for “' + user + '”? The code stops working; their old PIN still works.')) return;
           btn.disabled = true;
           try {
             await api('/admin/user/action', { method: 'POST', body: { u: user, action } });
-            showToast(action === 'release' ? user + ' can set a new PIN now.' : user + ' was signed out.');
+            showToast(action === 'resetpin' ? 'Reset code made for ' + user + '. Copy it and give it to them.' : action === 'resetcancel' ? user + '’s PIN reset was cancelled.' : user + ' was signed out.');
             RENDER.security().catch((err) => errorBox('security', err));
           } catch (err) { btn.disabled = false; showToast(err.message, { type: 'danger' }); }
         });
@@ -22107,9 +22117,11 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         + card('Actions', `<div class="gac-actions">`
           + (can('moderation.manage') ? `<button class="gps-btn" data-mod="${st.state === 'blocked' ? 'unblock' : 'block'}">${st.state === 'blocked' ? 'Unblock' : 'Block'}</button><button class="gps-btn" data-mod="mute" data-hours="1">Mute 1 hour</button><button class="gps-btn" data-mod="warn">Warn</button><button class="gps-btn" data-mod="${m.aiFrozen ? 'unfreezeai' : 'freezeai'}">${m.aiFrozen ? 'Unfreeze AI' : 'Freeze AI'}</button>${m.pending ? '<button class="gps-btn" data-mod="approve">Approve</button>' : ''}<button class="gps-btn" data-mod="kick">Sign out now</button>` : '')
           + (d.account && can('users.manage') ? '<button class="gps-btn" data-ua="revokesessions">Revoke sessions</button>' : '')
+          + (d.account && isOwner() && d.role !== 'owner' ? (d.pinReset ? '<button class="gps-btn" data-ua="resetcancel">Cancel PIN reset</button>' : '<button class="gps-btn" data-ua="resetpin">Reset PIN</button>') : '')
           + (d.account && can('users.suspend') ? `<button class="gps-btn" data-ua="${d.account.disabled ? 'enable' : 'disable'}">${d.account.disabled ? 'Enable account' : 'Disable account'}</button>` : '')
           + (can('users.delete') ? '<button class="gps-btn gps-btn-danger" data-ua="delete">Delete user…</button>' : '')
-          + `</div>`, 'users', 'gac-insp-actions')
+          + `</div>`
+          + (d.pinReset ? `<p class="gps-hint gac-reset-note">PIN reset code <code class="gac-invite-code">${esc(d.pinReset.code)}</code>: give it to ${esc(d.user)}. On the sign-in screen they type their username, a <b>new</b> PIN and this code, then tap Sign in. Works once, until ${esc(new Date(d.pinReset.until).toLocaleDateString([], { month: 'short', day: 'numeric' }))}.</p>` : ''), 'users', 'gac-insp-actions')
         + `</aside></div>`;
       box.querySelector('#gac-insp-close').addEventListener('click', () => { box.hidden = true; state.inspecting = null; });
       box.querySelectorAll('[data-ua]').forEach((b) => b.addEventListener('click', async () => {
@@ -22118,6 +22130,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         if (action === 'setrole') payload.role = box.querySelector('#gac-role').value;
         if (action === 'quota') box.querySelectorAll('[data-q]').forEach((i) => { payload[i.dataset.q] = i.dataset.q === 'allowedModels' ? i.value.split(',').map((x) => x.trim()).filter(Boolean) : i.value; });
         if (action === 'delete') { const c = await typedConfirm(b, key, 'Delete user'); if (!c) return; payload.confirm = c; }
+        if (action === 'resetpin' && !confirm('Reset the PIN for “' + d.user + '”? You get a one-time code to give them; with it they set a new PIN at sign-in. They’re signed out now, and keep their account and everything in it.')) return;
         try { await api('/admin/user/action', { method: 'POST', body: payload }); showToast('Done.'); if (action === 'delete') { box.hidden = true; RENDER.users(); } else openUser(key); }
         catch (e) { showToast(e.message, { type: 'danger' }); }
       }));

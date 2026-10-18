@@ -1372,6 +1372,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       return c.slice(0, 4) + '-' + c.slice(4);
     };
     const normInvite = (c) => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    // A PIN reset the owner started: { code, until, by } (7 days, one use).
+    const pinResetKey = (u) => 'pinreset:' + String(u || '').toLowerCase().slice(0, 40);
     const SUB_ENDED = 'Your subscription has ended. Ask the owner to renew it.';
     const subscriptionOf = (cfg, user) => {
       const u = String(user || '').trim().toLowerCase();
@@ -2141,7 +2143,28 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         const verifier = String(body.verifier || '');
         const acct = await getAcct(kv, user);
         if (!acct) return json({ ok: false, error: 'no account', missing: true }, 404);
-        const ok = await timingSafeEqualStr(await sha256hex(acct.salt + '|' + verifier), acct.verifier);
+        let ok = await timingSafeEqualStr(await sha256hex(acct.salt + '|' + verifier), acct.verifier);
+        // The owner reset this PIN (Admin → Reset PIN): the one-time reset
+        // code they gave the person sets the new PIN typed with it. The old
+        // PIN keeps working until then; the account and its data stay.
+        const reset = !ok && /^[0-9a-f]{64}$/.test(verifier) ? await kv.get(pinResetKey(acct.user), 'json') : null;
+        if (reset && reset.until > Date.now()) {
+          if (!body.invite) return json({ ok: false, error: 'The owner reset this PIN. Type the new PIN you want and the reset code they gave you.', inviteRequired: true, pinReset: true }, 403);
+          if (!(await timingSafeEqualStr(normInvite(body.invite), normInvite(reset.code)))) {
+            await noteFailure(kv, 'login', ip);
+            await noteSec('pinreset_wrong', { user: acct.user });
+            return json({ ok: false, error: 'That reset code isn’t right.', inviteRequired: true, pinReset: true, wrongInvite: true }, 403);
+          }
+          const salt = randHex(16);
+          acct.salt = salt;
+          acct.verifier = await sha256hex(salt + '|' + verifier);
+          acct.sessions = [];
+          await kv.put(acctKey(acct.user), JSON.stringify(acct));
+          await kv.delete(pinResetKey(acct.user));   // used up
+          await noteSec('pin_reset_done', { user: acct.user });
+          notify({ cat: 'security', title: acct.user + ' set a new PIN', body: 'With the reset code you gave them.', url: adminLink('security', { focus: 'allow', user: acct.user }) });
+          ok = true;
+        }
         if (!ok) {
           await noteFailure(kv, 'login', ip);
           await noteSec('login_failed', { user: acct.user });
@@ -4541,7 +4564,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           rollup: r || null, moderation: { ...modSafe, hasUnlockCode: !!unlock, effective: st }, quota: effQuota(mod, cfg),
           usage, memory: memCounts, security: security.slice(-40).reverse(), audit,
           assignedKey: !!(await kv.get('key:openai:' + u)),
-          flair: (cfg.flair && cfg.flair[u]) || null
+          flair: (cfg.flair && cfg.flair[u]) || null,
+          pinReset: await (async () => { const rs = a && authedLevel === 'owner' ? await kv.get(pinResetKey(u), 'json') : null; return rs && rs.until > Date.now() ? { code: rs.code, until: rs.until } : null; })()
         });
       }
 
@@ -4550,7 +4574,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         const u = String(body.u || '').toLowerCase().slice(0, 40);
         const action = String(body.action || '');
         if (!u) return json({ error: 'u required' }, 400);
-        const need = { setrole: 'owner', release: 'owner', delete: 'users.delete', disable: 'users.suspend', enable: 'users.suspend', revokesessions: 'users.manage', quota: 'ai.manage', flair: 'users.manage' }[action];
+        const need = { setrole: 'owner', release: 'owner', resetpin: 'owner', resetcancel: 'owner', delete: 'users.delete', disable: 'users.suspend', enable: 'users.suspend', revokesessions: 'users.manage', quota: 'ai.manage', flair: 'users.manage' }[action];
         if (!need) return json({ error: 'unknown action' }, 400);
         const denied = await guard(req, url, env, need);
         if (denied) return denied;
@@ -4609,6 +4633,22 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           await kv.put(key, JSON.stringify(cur));
           await logAudit(kv, { route: url.pathname, action: 'quota', target: u, meta: { before, after } });
           return json({ ok: true, quota: after });
+        }
+        if (action === 'resetpin') {
+          // A one-time code (7 days) that lets them set a new PIN at sign-in;
+          // they're signed out everywhere now. The account and data stay.
+          if (!a) return json({ error: 'no account' }, 404);
+          const code = makeInviteCode(), until = Date.now() + 7 * 864e5;
+          await kv.put(pinResetKey(u), JSON.stringify({ code, until, at: Date.now(), by: OWNER }), { expirationTtl: 7 * 24 * 3600 });
+          a.epoch = (a.epoch || 0) + 1; a.sessions = [];
+          await kv.put(acctKey(u), JSON.stringify(a));
+          await logAudit(kv, { route: url.pathname, action, target: u });
+          return json({ ok: true, code, until });
+        }
+        if (action === 'resetcancel') {
+          await kv.delete(pinResetKey(u));
+          await logAudit(kv, { route: url.pathname, action, target: u });
+          return json({ ok: true });
         }
         if (action === 'release') {
           if (!a) return json({ error: 'no account' }, 404);
@@ -4704,9 +4744,10 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
               const a = (accts.find((x) => String(x.value.user || '').toLowerCase() === u) || {}).value;
               const s = a && (a.sessions || [])[0];
               const inv = a ? null : await kv.get(inviteKey(u), 'json');
+              const rs = a && authedLevel === 'owner' ? await kv.get(pinResetKey(u), 'json') : null;   // the code is the owner's to give
               return { user: u, claimed: !!a, createdAt: a ? a.createdAt || 0 : 0, signedIn: !!(a && liveSession(a, Date.now())),
                 lastSeen: s ? s.lastSeen || s.createdAt || 0 : 0, country: s ? s.country || '' : '', device: s ? s.ua || '' : '',
-                invite: inv ? inv.code : '' };
+                invite: inv ? inv.code : '', pinReset: rs && rs.until > Date.now() ? rs.code : '' };
             })),
             blockedCountries: cfg.blockedCountries || [], allowedOrigins: cfg.allowedOrigins || []
           },

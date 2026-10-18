@@ -257,7 +257,12 @@ export function subscribePage(env, { ready, cents }) {
   .warn b { display: block; color: #fca5a5; margin-bottom: 4px; font-size: 14.5px; }
   .warn ul { margin: 6px 0 0; color: var(--sub); font-size: 13px; } .warn ul li::before { content: "•"; color: #fca5a5; }
   .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--text); margin: 14px 0 6px !important; cursor: pointer; }
-  .check input { width: 20px; height: 20px; flex: 0 0 20px; margin: 1px 0 0; padding: 0; accent-color: var(--teal); }
+  .check input { -webkit-appearance: none; appearance: none; position: relative; width: 22px; height: 22px; flex: 0 0 22px; margin: 0; padding: 0; border-radius: 7px; border: 1.5px solid var(--border); background: var(--field); cursor: pointer; transition: background .15s, border-color .15s, box-shadow .15s; }
+  .check input:hover { border-color: var(--violet); }
+  .check input:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(114,80,203,0.35); }
+  .check input:checked { border-color: transparent; background: var(--accent); box-shadow: 0 6px 16px -8px rgba(114,80,203,0.9); }
+  .check input:checked::after { content: ""; position: absolute; left: 7px; top: 3px; width: 5px; height: 10px; border: solid #fff; border-width: 0 2.4px 2.4px 0; transform: rotate(45deg); }
+  @media (prefers-reduced-motion: reduce) { .check input { transition: none; } }
   .email-box { display: flex; align-items: center; background: var(--field); border: 1px solid var(--border); border-radius: 12px; padding: 0 14px; }
   .email-box:focus-within { border-color: var(--violet); box-shadow: 0 0 0 3px rgba(114,80,203,0.25); }
   .email-box input { width: 7.2ch; flex: 0 0 auto; border: 0; background: none; box-shadow: none !important; padding: 13px 0; letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
@@ -317,7 +322,7 @@ export function subscribePage(env, { ready, cents }) {
     <form id="pin-form" hidden>
       <h2 class="pin-h">Create your PIN</h2>
       <p class="hint">You choose it, and you’ll use it with your username to sign in. Use at least 4 characters, and don’t share it.</p>
-      <div class="warn" role="note" id="pin-warn"><b>You must remember this PIN.</b>It’s the only way to sign in. Nobody can look it up or reset it for you, not even the owner, so if you forget it you won’t be able to get back in.
+      <div class="warn" role="note" id="pin-warn"><b>You must remember this PIN.</b>It’s the only way to sign in. Nobody can look it up, not even the owner. If you forget it, you’ll be locked out until you ask the owner to reset it.
         <ul><li>Make it simple enough that <b style="display:inline;color:inherit">you</b> will always remember it, and only you would know it.</li><li>Not easy to guess: no 1234, 0000, 1111, 1212, your birthday, your username or your student number.</li></ul></div>
       <label for="pin-user">Username</label>
       <input id="pin-user" autocomplete="username" readonly>

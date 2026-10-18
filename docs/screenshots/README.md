@@ -14,6 +14,7 @@ new subscriber and then the owner would see things.
 | [3-playlists](#3-playlists-everyone-signed-in) | Spotify / Apple Music playlist → YouTube links, for everyone |
 | [4-youtube-to-mp3](#4-youtube-to-mp3-owner) | The MP3 converter in Music → My music |
 | [5-subscribe-page](#5-subscribe-page) | The payment page and the $6 contribution box |
+| [6-pin-reset](#6-resetting-a-forgotten-pin-owner) | Resetting someone's forgotten PIN: your code, what they type |
 
 ---
 
@@ -54,8 +55,12 @@ Admin → Security → New subscribers.
 
 ## 1. A new subscriber after paying (close-ups)
 
-**Create your PIN.** The red box says they must remember it and nobody can
-reset it. Easy PINs (1234, 0000, 9876, a year…) are refused, and the
+**The checkbox** (styled like the rest of the page: teal-to-violet when ticked).
+
+<img src="1-new-subscriber/0-checkbox-close-up.png" width="420" alt="Ticked checkbox with the site's teal-to-violet gradient">
+
+**Create your PIN.** The red box says they must remember it, nobody can look
+it up, and if they forget it they're locked out until the owner resets it. Easy PINs (1234, 0000, 9876, a year…) are refused, and the
 checkbox must be ticked.
 
 <img src="1-new-subscriber/1-create-pin-warning.png" width="320" alt="Create your PIN with the must-remember warning and checkbox">
@@ -133,3 +138,21 @@ The payment page, and the contribution box for people who already
 subscribe (from $6).
 
 <img src="5-subscribe-page/1-subscribe.png" width="320" alt="Subscribe page"> <img src="5-subscribe-page/2-contribute-6-dollars.png" width="320" alt="Contribute box starting at $6">
+
+---
+
+## 6. Resetting a forgotten PIN (owner)
+
+**Admin → Security → Allowed users → Reset PIN** on their row (or **Reset
+PIN** in Admin → Users → their name → Actions). You get a one-time code and
+the exact words to tell them; **Copy code** or **Cancel reset**. They're
+signed out right away and keep their account, subscription and everything in it.
+
+<img src="6-pin-reset/1-owner-gets-reset-code.png" width="420" alt="Allowed users row with the reset code and Copy code / Cancel reset">
+
+**What they do:** on the sign-in screen, type their username and a **new**
+PIN and tap Sign in. The console asks for the **Reset code (from the owner)**.
+They type it, tap Sign in again, and they're back in with the new PIN. The
+code works once, for 7 days; their old PIN works until then.
+
+<img src="6-pin-reset/2-user-types-new-pin-and-code.png" width="640" alt="Sign-in screen asking for the reset code">
