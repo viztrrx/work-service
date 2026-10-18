@@ -1157,6 +1157,52 @@ test('PIN reset: the owner gets a one-time code; with it the person sets a new P
   assert.equal((await act({ u: 'boss', action: 'resetpin' })).status, 400);
 });
 
+test('Forgot PIN: the person asks from the sign-in screen with a new PIN; the owner approves (or denies); no code needed', async () => {
+  const env = makeEnv(); const c = makeClient(env);
+  const ua = { 'User-Agent': 'Mozilla/5.0 (iPhone) Safari' };
+  await signUp(c, 'ivy', '1234', { headers: ua });
+  const ask = (pin, headers = ua, ip = '1.2.3.4') => c.call('/auth/pin-request', { method: 'POST', headers, ip, body: { user: 'ivy', verifier: verifierFor('ivy', pin), note: 'it’s me' } });
+  const status = (ticket) => c.call('/auth/pin-request?user=ivy&ticket=' + ticket);
+  const act = (body, headers = owner) => c.call('/admin/user/action', { method: 'POST', headers, body });
+  // Unknown names and bad input.
+  assert.equal((await c.call('/auth/pin-request', { method: 'POST', body: { user: 'ghost', verifier: verifierFor('ghost', '1') } })).status, 404);
+  assert.equal((await c.call('/auth/pin-request', { method: 'POST', body: { user: 'ivy', verifier: '1234' } })).status, 400, 'only a verifier, never a PIN');
+  // From the device ivy uses: the owner sees that.
+  const r = await ask('7531');
+  assert.equal(r.status, 200);
+  assert.match(r.data.ticket, /^[0-9a-f]{32}$/);
+  assert.equal((await status(r.data.ticket)).data.status, 'pending');
+  assert.equal((await status('0'.repeat(32))).status, 404, 'someone else can’t watch the request');
+  await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: ['ivy'] } } });
+  const view = async () => (await c.call('/admin/security', { headers: owner })).data.config.allowAccounts.find((x) => x.user === 'ivy');
+  const pq = (await view()).pinRequest;
+  assert.deepEqual([pq.sameDevice, pq.note], [true, 'it’s me']);
+  await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: ['ivy', 'adm'] } } });
+  await signUp(c, 'adm');
+  await act({ u: 'adm', action: 'setrole', role: 'admin' });
+  const admTok = (await c.call('/auth/login', { method: 'POST', body: { user: 'adm', verifier: verifierFor('adm', '1234'), takeover: true } })).data.token;
+  const admSec = await c.call('/admin/security', { headers: sess(admTok) });
+  assert.equal(admSec.data.config.allowAccounts.find((x) => x.user === 'ivy').pinRequest, null, 'only the owner sees it, not admins');
+  // The old PIN works until the owner decides; only the owner can decide.
+  assert.equal((await act({ u: 'ivy', action: 'pinapprove' }, coadmin)).status, 403);
+  assert.equal((await act({ u: 'ivy', action: 'pinapprove' })).status, 200);
+  assert.equal((await status(r.data.ticket)).data.status, 'approved');
+  const login = (pin) => c.call('/auth/login', { method: 'POST', body: { user: 'ivy', verifier: verifierFor('ivy', pin), takeover: true } });
+  assert.equal((await login('7531')).status, 200, 'the new PIN works');
+  assert.equal((await login('1234')).status, 401, 'the old one doesn’t');
+  assert.equal((await act({ u: 'ivy', action: 'pinapprove' })).status, 404, 'nothing waiting any more');
+  // From a device ivy never used: flagged; the owner denies it; nothing changes.
+  const r2 = await ask('0909', { 'User-Agent': 'Mozilla/5.0 (Windows) Chrome' }, '9.9.9.9');
+  assert.deepEqual([(await view()).pinRequest.sameDevice, (await view()).pinRequest.sameBrowser], [false, false]);
+  assert.equal((await act({ u: 'ivy', action: 'pindeny' })).status, 200);
+  assert.equal((await status(r2.data.ticket)).data.status, 'denied');
+  assert.equal((await login('0909')).status, 401);
+  assert.equal((await login('7531')).status, 200);
+  // At most 5 requests an hour from one network.
+  for (let i = 0; i < 4; i++) await ask('2468');   // 1 earlier + 4 = 5 from this network
+  assert.equal((await ask('2468')).status, 429);
+});
+
 test('subscribers: month math keeps the day, or the month’s last day', async () => {
   const env = makeEnv(); const c = makeClient(env);
   const realNow = Date.now;

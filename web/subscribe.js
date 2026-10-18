@@ -340,7 +340,7 @@ export function subscribePage(env, { ready, cents }) {
     </form>
     <form id="email-form" hidden novalidate>
       <h2 class="pin-h">Add your school email</h2>
-      <p class="hint">Type only the 6 numbers of your school email. The owner and admins get it and send you the instructions for getting Saints Service on your computer.</p>
+      <p class="hint">Type only the 6 numbers of your school email. The owner shares the instructions for getting Saints Service with that school account, as a Google Doc.</p>
       <label for="sid">School email</label>
       <div class="email-box"><input id="sid" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off" spellcheck="false" placeholder="000000" aria-describedby="sid-dom"><span id="sid-dom">@${SCHOOL_DOMAIN}</span></div>
       <div id="sid-hint" class="hint" role="status" aria-live="polite"></div>
@@ -543,7 +543,7 @@ ${policyFooter(env)}
     fetch('/subscribe/email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session: session, studentId: v }) }).then(function (r) { return r.json(); }).then(function (d) {
       if (d.ok) {
         emailForm.hidden = true; $('keep-open').hidden = true; $('steps-ready').hidden = false;
-        var sent = $('email-sent'); sent.textContent = 'Sent: ' + d.email + '. The owner or an admin will email you the instructions there.'; sent.hidden = false;
+        var sent = $('email-sent'); sent.textContent = 'Sent: ' + d.email + '. Next time you’re at school, sign in at docs.google.com with that school account: the instructions for loading Saints Service will be in your Google Docs (shared with you).'; sent.hidden = false;
         setDone('Your account is ready. Sign in with your username and the PIN you just made.');
         return;
       }

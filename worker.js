@@ -2081,6 +2081,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         // token stops working on its next request (see resolvePrincipal).
         acct.sessions = oneDevice(cfg, acct) ? [fresh] : [fresh, ...(acct.sessions || [])].slice(0, 5);
         acct.lastLoginAt = now;
+        // Devices this name signed in from (for "Forgot PIN?" requests: is it their usual device?).
+        acct.known = [{ ipH: dev.ipH, uaH: dev.uaH, ua: fresh.ua, at: now }, ...(acct.known || []).filter((k) => !(k.ipH === dev.ipH && k.uaH === dev.uaH))].slice(0, 6);
         await kv.put(acctKey(acct.user), JSON.stringify(acct));
         return { token, exp: now + SESSION_MS };
       };
@@ -2130,6 +2132,45 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         await noteSec('account_created', { user });
         if (userLower !== OWNER) notify({ cat: 'newuser', title: 'New account: ' + user, body: 'Registered at ' + ownerTime(env) + (req.cf && req.cf.country ? ' · ' + req.cf.country : ''), url: adminLink('users', { user }) });
         return json({ ok: true, token: s.token, exp: s.exp, account: view(acct, roleOf(acct)) });
+      }
+
+      // "Forgot PIN?" on the sign-in screen: the person picks a new PIN (only
+      // its verifier is sent) and asks the owner, who approves or denies it in
+      // the Admin panel, seeing whether the request came from a device this
+      // name used before. Approved: that PIN is theirs, and the waiting
+      // screen signs them in. Nothing has to be passed between them. 24 h.
+      if (url.pathname === '/auth/pin-request' && req.method === 'POST') {
+        if (await isLockedOut(kv, 'login', ip)) return json({ ok: false, error: 'too many attempts — try again later' }, 429);
+        const body = await readJson();
+        const user = String(body.user || '').trim();
+        const verifier = String(body.verifier || '');
+        if (!USERNAME_RE.test(user) || !/^[0-9a-f]{64}$/.test(verifier)) return json({ ok: false, error: 'invalid request' }, 400);
+        if (!allowedUser(await getConfig(kv), user)) return json({ ok: false, error: ACCESS_DENIED, notAllowed: true }, 403);
+        const acct = await getAcct(kv, user);
+        if (!acct) return json({ ok: false, error: 'No account with that name yet. Use Create to make one.', missing: true }, 404);
+        if (String(acct.user).toLowerCase() === OWNER) return json({ ok: false, error: 'The owner resets their PIN with the owner code.' }, 400);
+        const rk = 'pinreq-rate:' + (await sha256hex('ip|' + ip)).slice(0, 24) + ':' + Math.floor(Date.now() / 3600e3);
+        const n = parseInt(await kv.get(rk), 10) || 0;
+        if (n >= 5) return json({ ok: false, error: 'Too many requests. Try again in an hour.' }, 429);
+        await kv.put(rk, String(n + 1), { expirationTtl: 2 * 3600 });
+        const dev = await deviceHashes();
+        const known = [...(acct.known || []), ...(acct.sessions || [])];
+        const sameDevice = known.some((k) => k.uaH === dev.uaH && k.ipH === dev.ipH);
+        const sameBrowser = sameDevice || known.some((k) => k.uaH === dev.uaH);
+        const salt = randHex(16), ticket = randHex(16);
+        const rec = { user: acct.user, salt, verifier: await sha256hex(salt + '|' + verifier), ticketH: await sha256hex(ticket), at: Date.now(), until: Date.now() + 24 * 3600e3,
+          status: 'pending', sameDevice, sameBrowser, ua: String(req.headers.get('User-Agent') || '').slice(0, 80), country: (req.cf && req.cf.country) || '??', note: String(body.note || '').replace(/\s+/g, ' ').trim().slice(0, 200) };
+        await kv.put('pinreq:' + acct.user.toLowerCase(), JSON.stringify(rec), { expirationTtl: 2 * 24 * 3600 });
+        await noteSec('pin_request', { user: acct.user, note: sameDevice ? 'usual device' : sameBrowser ? 'usual browser' : 'new device' });
+        notify({ cat: 'security', title: acct.user + ' forgot their PIN', body: (sameDevice ? 'From the device they usually use.' : sameBrowser ? 'From the same kind of browser they used before, on another network.' : 'From a device they haven’t used before: make sure it’s them.') + ' Approve or deny in Admin → Security → Allowed users.', url: adminLink('security', { focus: 'allow', user: acct.user }), urgent: true });
+        return json({ ok: true, ticket });
+      }
+      if (url.pathname === '/auth/pin-request' && req.method === 'GET') {
+        const user = String(url.searchParams.get('user') || '').trim().toLowerCase();
+        const ticket = String(url.searchParams.get('ticket') || '');
+        const rec = USERNAME_RE.test(user) ? await kv.get('pinreq:' + user, 'json') : null;
+        if (!rec || !/^[0-9a-f]{32}$/.test(ticket) || !(await timingSafeEqualStr(await sha256hex(ticket), rec.ticketH))) return json({ ok: false, status: 'gone' }, 404);
+        return json({ ok: true, status: rec.until < Date.now() && rec.status === 'pending' ? 'expired' : rec.status });
       }
 
       if (url.pathname === '/auth/login' && req.method === 'POST') {
@@ -3563,7 +3604,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           cfg.subEmails = [{ user, email, at: now }, ...list].slice(0, 300);
           await kv.put('config', JSON.stringify(cfg));
           const changed = (rec.emailChanges || 0) > 0;
-          const alert = { title: (changed ? 'Email changed: ' : 'New subscriber email: ') + user, body: email + ' · Send them the setup instructions in Admin → Security → New subscribers.', url: adminLink('security', { focus: 'emails', user }), tag: 'subemail-' + key };
+          const alert = { title: (changed ? 'Email changed: ' : 'New subscriber email: ') + user, body: email + ' · Share the setup Google Doc with them in Admin → Security → New subscribers.', url: adminLink('security', { focus: 'emails', user }), tag: 'subemail-' + key };
           await notifyOwner(env, { cat: 'newuser', ...alert }, url.origin).catch(() => {});
           for (const a of await adminNames(kv)) await notifyUser(env, a, alert, url.origin).catch(() => {});
           return json({ ok: true, email });
@@ -4574,7 +4615,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         const u = String(body.u || '').toLowerCase().slice(0, 40);
         const action = String(body.action || '');
         if (!u) return json({ error: 'u required' }, 400);
-        const need = { setrole: 'owner', release: 'owner', resetpin: 'owner', resetcancel: 'owner', delete: 'users.delete', disable: 'users.suspend', enable: 'users.suspend', revokesessions: 'users.manage', quota: 'ai.manage', flair: 'users.manage' }[action];
+        const need = { setrole: 'owner', release: 'owner', resetpin: 'owner', resetcancel: 'owner', pinapprove: 'owner', pindeny: 'owner', delete: 'users.delete', disable: 'users.suspend', enable: 'users.suspend', revokesessions: 'users.manage', quota: 'ai.manage', flair: 'users.manage' }[action];
         if (!need) return json({ error: 'unknown action' }, 400);
         const denied = await guard(req, url, env, need);
         if (denied) return denied;
@@ -4644,6 +4685,22 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           await kv.put(acctKey(u), JSON.stringify(a));
           await logAudit(kv, { route: url.pathname, action, target: u });
           return json({ ok: true, code, until });
+        }
+        if (action === 'pinapprove' || action === 'pindeny') {
+          // A "Forgot PIN?" request from the sign-in screen.
+          const rq = await kv.get('pinreq:' + u, 'json');
+          if (!rq || rq.status !== 'pending' || rq.until < Date.now()) return json({ error: 'No PIN request waiting for ' + u + '.' }, 404);
+          if (action === 'pinapprove') {
+            if (!a) return json({ error: 'no account' }, 404);
+            a.salt = rq.salt; a.verifier = rq.verifier;
+            a.epoch = (a.epoch || 0) + 1; a.sessions = [];
+            await kv.put(acctKey(u), JSON.stringify(a));
+            await kv.delete(pinResetKey(u));
+          }
+          rq.status = action === 'pinapprove' ? 'approved' : 'denied'; rq.decidedAt = Date.now();
+          await kv.put('pinreq:' + u, JSON.stringify(rq), { expirationTtl: 24 * 3600 });
+          await logAudit(kv, { route: url.pathname, action, target: u });
+          return json({ ok: true, status: rq.status });
         }
         if (action === 'resetcancel') {
           await kv.delete(pinResetKey(u));
@@ -4745,9 +4802,11 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
               const s = a && (a.sessions || [])[0];
               const inv = a ? null : await kv.get(inviteKey(u), 'json');
               const rs = a && authedLevel === 'owner' ? await kv.get(pinResetKey(u), 'json') : null;   // the code is the owner's to give
+              const pq = a && authedLevel === 'owner' ? await kv.get('pinreq:' + u, 'json') : null;
               return { user: u, claimed: !!a, createdAt: a ? a.createdAt || 0 : 0, signedIn: !!(a && liveSession(a, Date.now())),
                 lastSeen: s ? s.lastSeen || s.createdAt || 0 : 0, country: s ? s.country || '' : '', device: s ? s.ua || '' : '',
-                invite: inv ? inv.code : '', pinReset: rs && rs.until > Date.now() ? rs.code : '' };
+                invite: inv ? inv.code : '', pinReset: rs && rs.until > Date.now() ? rs.code : '',
+                pinRequest: pq && pq.status === 'pending' && pq.until > Date.now() ? { at: pq.at, sameDevice: !!pq.sameDevice, sameBrowser: !!pq.sameBrowser, ua: pq.ua, country: pq.country, note: pq.note || '' } : null };
             })),
             blockedCountries: cfg.blockedCountries || [], allowedOrigins: cfg.allowedOrigins || []
           },

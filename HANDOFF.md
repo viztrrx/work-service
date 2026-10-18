@@ -13,6 +13,12 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **Forgot PIN? from the sign-in screen** (owner: "what if i'm not able to
+  communicate with them at all… what's the best fix") + **instructions via
+  Google Docs** (owner: "make it say that they will have to login and check
+  their google docs when they log in at school at docs.google.com"), and a
+  fix: a console signed out from elsewhere showed "Blocked by the owner"
+  over the sign-in form on the next status poll. Before that:
   **PIN reset with a one-time code** + themed checkbox on the subscribe page
   (owner: "make it so i can reset their pin incase any of them… forget it";
   "style the check box button to make it match the theme"). Before that:
@@ -461,6 +467,23 @@ day, 14 days; not system notices), `trivia` (#public only). Memory only:
   code (from the owner)". `release` (delete the account record) still
   exists server-side but no button uses it. Tests: worker.test.mjs "PIN
   reset", subscribe.mjs end.
+  **Forgot PIN?** (sign-in screen, `#gpa-forgot`): `POST /auth/pin-request
+  {user, verifier, note}` stores `pinreq:<name>` `{salt, verifier (salted),
+  ticketH, until 24 h, status, sameDevice, sameBrowser, ua, country, note}`
+  (5/h per network, `pinreq-rate:`), owner alert (cat `security`, urgent).
+  "Usual device" = the request's ipH+uaH matches `acct.known` (last 6
+  devices, recorded in `issue()`) or a session; same uaH only = "same kind of
+  browser". The page polls `GET /auth/pin-request?user&ticket` (5 s, then
+  15 s) and on `approved` calls `serverFirstSignIn` with the PIN it kept in
+  memory. Owner: `/admin/user/action` `pinapprove` (copies the stored salt/
+  verifier, bumps epoch, clears sessions, clears any reset code) /
+  `pindeny`; shown on Allowed users rows (`pinRequest`, owner only).
+  Instructions wording: subscribers are told to check Google Docs at
+  docs.google.com at school; the New subscribers card's **Share the Doc**
+  (`data-em="share"`) copies the email and opens the Doc, marks `sentAt`.
+  Status fix: `applyStatus` returns early (no overlay) when `notAllowed`
+  and nobody is signed in. Tests: worker.test.mjs "Forgot PIN",
+  subscribe.mjs end.
 
 ### 4.2 Chat
 All rooms live in `ChatRoom` DOs. The console polls every 3 s while Chat is
@@ -656,7 +679,7 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 ## 6. Testing
 
 ```bash
-npm test                                   # node --test tests/*.test.mjs (121 tests)
+npm test                                   # node --test tests/*.test.mjs (122 tests)
 npx wrangler deploy --dry-run --outdir /tmp/x   # bundle/config check, deploys nothing
 # Browser suites (Playwright vs local workerd), each takes an output dir for screenshots:
 node tests/browser/eaglercraft.e2e.mjs     # 83
@@ -682,7 +705,7 @@ node tests/browser/my-music.mjs            # 15
 node tests/browser/admin-app.mjs           # 20
 node tests/browser/playlists.mjs           # 23
 node tests/browser/mp3.mjs                 # 51 (+1 NOT RUN: real YouTube download; needs ffmpeg/ffprobe)
-node tests/browser/subscribe.mjs           # 57
+node tests/browser/subscribe.mjs           # 63
 node tests/browser/usage-meter.mjs         # 16
 node tests/browser/usage-meter-sizes.mjs   # 25
 node tests/browser/ask-photo-size.mjs      # 6

@@ -789,10 +789,13 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       console: ['change', 'Subscribe page: contributions start at $6'] } },
     { at: '2026-10-19T03:00:00-04:00', commit: '', title: 'New subscribers: PIN warning and school email', parts: {
       console: ['feature', 'Subscribe page: a clear “you must remember this PIN” warning with a checkbox, easy-to-guess PINs refused, then the school email (6 digits @alseducation.onmicrosoft.com)'],
-      admin: ['feature', 'Security → New subscribers: each new subscriber’s school email, your instructions Google Doc link, and Email instructions (opens your mail app, then marks it sent); you and admins get an alert'] } },
+      admin: ['feature', 'Security → New subscribers: each new subscriber’s school email, your instructions Google Doc link, and Share the Doc (copies their email and opens the Doc to share it with them); you and admins get an alert'] } },
     { at: '2026-10-19T04:00:00-04:00', commit: '', title: 'Reset a forgotten PIN safely', parts: {
       admin: ['feature', 'Reset PIN (Allowed users rows and Users → Actions) now gives a one-time code: the person keeps their account and sets a new PIN at sign-in with it (7 days, one use); Cancel reset stops it'],
-      console: ['change', 'Sign-in asks for the owner’s reset code when a PIN was reset; the subscribe page’s checkbox matches the page’s style'] } }
+      console: ['change', 'Sign-in asks for the owner’s reset code when a PIN was reset; the subscribe page’s checkbox matches the page’s style'] } },
+    { at: '2026-10-19T05:00:00-04:00', commit: '', title: 'Forgot PIN? from the sign-in screen; instructions via Google Docs', parts: {
+      console: ['feature', 'Sign-in: Forgot PIN? sends a new PIN to the owner; once approved, the waiting screen signs in by itself (no code to pass along). Signed out from elsewhere, the sign-in screen is no longer covered by “Blocked by the owner”'],
+      admin: ['feature', 'Allowed users: Forgot PIN requests with the device they came from (usual device or not), Approve new PIN / Deny; New subscribers: Share the Doc (subscribers check Google Docs at school)'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -3135,9 +3138,24 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           <textarea id="gpa-req-msg" class="gpa-login-input gpa-req-msg" rows="2" maxlength="300" placeholder="e.g. It's Josue from 3rd period"></textarea>
           <button id="gpa-req-send" class="gpa-login-primary gpa-req-send" type="button">Send request</button>
         </div>
+        <div id="gpa-forgot" class="gpa-login-request" hidden>
+          <div class="gpa-login-request-head">${GPS_ICONS.key}<span>Forgot your PIN?</span></div>
+          <p class="gpa-login-request-text" id="gpa-forgot-text">Pick a new PIN and send it to the owner. When they approve it, you’re signed in with it right here. Keep this open.</p>
+          <div id="gpa-forgot-form">
+            <label class="gpa-login-label" for="gpa-forgot-pin">New PIN</label>
+            <input id="gpa-forgot-pin" class="gpa-login-input" type="password" placeholder="••••••" autocomplete="off" />
+            <label class="gpa-login-label" for="gpa-forgot-pin2">Type it again</label>
+            <input id="gpa-forgot-pin2" class="gpa-login-input" type="password" placeholder="••••••" autocomplete="off" />
+            <label class="gpa-login-label" for="gpa-forgot-note">Message to the owner (optional)</label>
+            <input id="gpa-forgot-note" class="gpa-login-input" maxlength="200" placeholder="e.g. It's Josue, I forgot my PIN" autocomplete="off" />
+            <button id="gpa-forgot-send" class="gpa-login-primary gpa-req-send" type="button">Send to the owner</button>
+          </div>
+          <div id="gpa-forgot-wait" class="gpa-forgot-wait" hidden><span class="gpa-forgot-spin" aria-hidden="true"></span><span id="gpa-forgot-status" role="status" aria-live="polite">Waiting for the owner to approve…</span></div>
+          <button id="gpa-forgot-back" class="gpa-login-link gpa-forgot-back" type="button">Back to sign in</button>
+        </div>
         <button id="gpa-login-btn" class="gpa-login-primary">Sign in</button>
         <div class="gpa-login-actions">
-          <button id="gpa-login-restore" class="gpa-login-link">Transfer access code</button>
+          <button id="gpa-login-forgot" class="gpa-login-link" type="button">Forgot PIN?</button><span class="gpa-login-sep">·</span><button id="gpa-login-restore" class="gpa-login-link">Transfer access code</button>
         </div>
         <div class="gpa-login-footer">
           <div class="gpa-login-legal">
@@ -6088,6 +6106,13 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         text-underline-offset: 2px;
       }
       .gpa-login-sep { color: var(--gpa-border); font-size: 11px; margin: 0 6px; }
+      .gpa-forgot-wait { display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; font-size: 12px; color: var(--gpa-text); }
+      .gpa-forgot-wait[hidden] { display: none; }
+      .gpa-login-card [hidden] { display: none !important; }
+      .gpa-forgot-spin { width: 16px; height: 16px; flex: 0 0 16px; border-radius: 50%; border: 2px solid var(--gpa-border); border-top-color: var(--gpa-accent); animation: gpaForgotSpin 0.9s linear infinite; }
+      @keyframes gpaForgotSpin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .gpa-forgot-spin { animation: none; } }
+      .gpa-forgot-back { display: block; margin: 10px auto 0; }
       .gpa-login-footer {
         margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--gpa-border);
         font-size: 10.5px; color: var(--gpa-sub); line-height: 1.5;
@@ -16446,6 +16471,75 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     return { v: 1, user: currentUser || 'export', updatedAt: Date.now(), data: collectState() };
   }
 
+  // ---- Forgot PIN? Ask the owner from the sign-in screen ----
+  // The new PIN's verifier goes to the owner, who approves or denies it in the
+  // Admin panel (seeing whether this is the name's usual device). Approved:
+  // this screen signs in with the new PIN by itself, so nothing has to be
+  // passed along between them.
+  (function forgotPin() {
+    const box = panel.querySelector('#gpa-forgot'), form = panel.querySelector('#gpa-forgot-form');
+    const wait = panel.querySelector('#gpa-forgot-wait'), status = panel.querySelector('#gpa-forgot-status');
+    const normal = [panel.querySelector('.gpa-login-label[for="gpa-login-pin"]'), loginPinInput, panel.querySelector('#gpa-login-invite-wrap'), panel.querySelector('#gpa-login-btn'), panel.querySelector('.gpa-login-actions')];
+    let timer = 0, polls = 0, waiting = null;
+    const show = (on) => {
+      box.hidden = !on;
+      normal.forEach((el) => { if (el && el.id !== 'gpa-login-invite-wrap') el.hidden = on; else if (el && on) el.hidden = true; });
+      if (!on) { clearTimeout(timer); waiting = null; form.hidden = false; wait.hidden = true; }
+    };
+    const say = (t, bad) => showLoginMsg(t, !!bad);
+    panel.querySelector('#gpa-login-forgot').addEventListener('click', () => {
+      hideAccessRequest();
+      if (!loginUserInput.value.trim()) { say('Type your username first, then tap Forgot PIN?', true); loginUserInput.focus(); return; }
+      say('');
+      show(true);
+      try { panel.querySelector('#gpa-forgot-pin').focus(); } catch (e) { /* ignore */ }
+    });
+    panel.querySelector('#gpa-forgot-back').addEventListener('click', () => { show(false); say(''); });
+    const poll = async () => {
+      if (!waiting) return;
+      polls++;
+      try {
+        const r = await fetch(AUTH_BASE() + '/auth/pin-request?user=' + encodeURIComponent(waiting.user) + '&ticket=' + waiting.ticket, { cache: 'no-store' });
+        const d = await r.json().catch(() => ({}));
+        if (d.status === 'approved') {
+          const { user, pin } = waiting;
+          show(false);
+          loginUserInput.value = user; loginPinInput.value = pin;
+          say('The owner approved your new PIN. Signing in…');
+          await serverFirstSignIn(user, pin, false);
+          return;
+        }
+        if (d.status === 'denied') { wait.hidden = true; form.hidden = false; waiting = null; say('The owner didn’t approve this. Ask them, or try again.', true); return; }
+        if (d.status === 'expired' || d.status === 'gone') { wait.hidden = true; form.hidden = false; waiting = null; say('The request ran out (24 hours). Send it again.', true); return; }
+      } catch (e) { /* offline for a moment: keep waiting */ }
+      if (polls > 360) { status.textContent = 'Still waiting. You can close this and tap Forgot PIN? again later.'; return; }
+      timer = setTimeout(poll, polls < 30 ? 5000 : 15000);
+    };
+    panel.querySelector('#gpa-forgot-send').addEventListener('click', async () => {
+      const user = loginUserInput.value.trim();
+      const p1 = panel.querySelector('#gpa-forgot-pin').value, p2 = panel.querySelector('#gpa-forgot-pin2').value;
+      if (p1.length < 4) { say('Use a PIN of at least 4 characters.', true); return; }
+      if (p1 !== p2) { say('The two PINs don’t match.', true); return; }
+      if (!AUTH_BASE()) { say('Can’t reach the server.', true); return; }
+      const btn = panel.querySelector('#gpa-forgot-send');
+      btn.disabled = true; say('Sending…');
+      try {
+        const verifier = await serverVerifier(user, p1);
+        const r = await fetch(AUTH_BASE() + '/auth/pin-request', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ user, verifier, note: panel.querySelector('#gpa-forgot-note').value }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || !d.ticket) { say(d.error || 'Couldn’t send it. Try again.', true); return; }
+        panel.querySelector('#gpa-forgot-pin').value = ''; panel.querySelector('#gpa-forgot-pin2').value = '';
+        waiting = { user, pin: p1, ticket: d.ticket };
+        polls = 0;
+        form.hidden = true; wait.hidden = false;
+        status.textContent = 'Sent. Waiting for the owner to approve… You’ll be signed in here as soon as they do.';
+        say('');
+        timer = setTimeout(poll, 4000);
+      } catch (e) { say('Couldn’t reach the server. Try again.', true); }
+      finally { btn.disabled = false; }
+    });
+  })();
+
   panel.querySelector('#gpa-login-restore').addEventListener('click', async () => {
     const code = prompt('Paste the sync code copied from your other device:');
     if (!code) return;
@@ -20508,6 +20602,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       return;
     }
     if (s.notAllowed && currentUser) { hideModOverlay(); signOutWith(s.subscriptionEnded && s.reason ? s.reason : ACCESS_DENIED_MSG, true); return; }
+    // Already on the sign-in screen (e.g. signed out from elsewhere): "not
+    // allowed / no session" isn't a block, so don't cover the sign-in form
+    // with "Blocked by the owner".
+    if (s.notAllowed && !currentUser) { hideModOverlay(); return; }
     if (s.yourStats && typeof renderYourStats === 'function') renderYourStats(s.yourStats);
     if ('usage' in s) renderUsageMeter(s.usage);
     if ('subscription' in s) renderSubStrip(s.subscription);
@@ -21276,21 +21374,15 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       if (!el) return;
       const day = (ts) => new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' });
       let data = null;
-      const mail = (x) => {
-        const subject = 'Saints Service: how to get started';
-        const text = 'Hi ' + x.user + ',\n\nThanks for subscribing to Saints Service! Here’s how to get the console on your computer:\n' + data.doc
-          + '\n\nThen sign in with your username (' + x.user + ') and the PIN you made after paying. Keep your PIN to yourself: nobody can look it up for you.\n\nSaints Service';
-        return 'mailto:' + encodeURIComponent(x.email) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(text);
-      };
       const render = (d) => {
         data = d;
         const waiting = d.emails.filter((x) => !x.sentAt).length;
-        el.innerHTML = `<p class="gps-hint">After paying and making their PIN, new subscribers add their school email (the 6 numbers before @${esc(d.domain)}). Send each one the instructions for getting the console: <b>Email instructions</b> opens your mail app with the message and your Google Doc link filled in.</p>`
+        el.innerHTML = `<p class="gps-hint">After paying and making their PIN, new subscribers add their school email (the 6 numbers before @${esc(d.domain)}). They’re told to sign in at docs.google.com at school and look in their Google Docs, so <b>share your instructions Doc with each one</b>: <b>Share the Doc</b> copies their email and opens your Doc; in Google Docs tap <b>Share</b>, paste the email, and tap <b>Send</b>. It shows up under “Shared with me” for them.</p>`
           + `<form class="gac-subs-form" id="gac-emails-doc" autocomplete="off"><label class="gac-subs-wide">Instructions (Google Doc link)<input class="gpa-input" id="gac-emails-docurl" type="url" placeholder="https://docs.google.com/document/d/…" value="${esc(d.doc)}" maxlength="500"></label><button class="gps-btn" type="submit">Save link</button></form>`
-          + (d.doc ? '' : `<p class="gps-hint">Save the Google Doc link first; then the email buttons turn on.</p>`)
-          + (d.emails.length ? `<p class="gps-hint gac-emails-count">${waiting ? waiting + ' waiting for instructions' : 'Everyone has been sent the instructions'}</p><ul class="gac-acct-list gac-emails-list">` + d.emails.map((x) => `<li class="gac-acct gac-email-row" data-user="${esc(x.user)}"><div class="gac-acct-top"><span class="gac-req-name">${esc(x.user)}</span><span class="gac-req-badge ${x.sentAt ? '' : 'pending'}">${esc(x.sentAt ? 'Sent ' + day(x.sentAt) : 'Not sent yet')}</span></div>`
-            + `<div class="gac-req-meta"><b class="gac-email-addr">${esc(x.email)}</b> · added ${esc(day(x.at))}${x.sentAt && x.sentBy ? ' · sent by ' + esc(x.sentBy) : ''}</div>`
-            + `<div class="gac-req-actions">${d.doc ? `<a class="gps-btn${x.sentAt ? '' : ' primary'}" data-em="mail" href="${esc(mail(x))}">${x.sentAt ? 'Email again' : 'Email instructions'}</a>` : `<button class="gps-btn" type="button" disabled>Email instructions</button>`}<button class="gps-btn" data-em="copy" type="button">Copy email</button><button class="gps-btn" data-em="remove" type="button">Remove</button></div></li>`).join('') + `</ul>`
+          + (d.doc ? '' : `<p class="gps-hint">Save the Google Doc link first; then the Share buttons turn on.</p>`)
+          + (d.emails.length ? `<p class="gps-hint gac-emails-count">${waiting ? waiting + ' waiting for the Doc' : 'The Doc is shared with everyone'}</p><ul class="gac-acct-list gac-emails-list">` + d.emails.map((x) => `<li class="gac-acct gac-email-row" data-user="${esc(x.user)}"><div class="gac-acct-top"><span class="gac-req-name">${esc(x.user)}</span><span class="gac-req-badge ${x.sentAt ? '' : 'pending'}">${esc(x.sentAt ? 'Shared ' + day(x.sentAt) : 'Not shared yet')}</span></div>`
+            + `<div class="gac-req-meta"><b class="gac-email-addr">${esc(x.email)}</b> · added ${esc(day(x.at))}${x.sentAt && x.sentBy ? ' · shared by ' + esc(x.sentBy) : ''}</div>`
+            + `<div class="gac-req-actions">${d.doc ? `<a class="gps-btn${x.sentAt ? '' : ' primary'}" data-em="share" href="${esc(d.doc)}" target="_blank" rel="noopener">${x.sentAt ? 'Open the Doc again' : 'Share the Doc'}</a>` : `<button class="gps-btn" type="button" disabled>Share the Doc</button>`}<button class="gps-btn" data-em="copy" type="button">Copy email</button><button class="gps-btn" data-em="remove" type="button">Remove</button></div></li>`).join('') + `</ul>`
             : `<p class="gps-hint">No new subscriber emails yet.</p>`);
       };
       const send = async (body) => { const r = await api('/admin/sub-emails', { method: 'POST', body }); render(r); return r; };
@@ -21305,8 +21397,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         if (!b) return;
         const row = b.closest('.gac-email-row'), user = row.dataset.user;
         const x = data.emails.find((y) => y.user === user);
-        if (b.dataset.em === 'mail') {
-          // The mail app opens from the link itself; this records that it was sent.
+        if (b.dataset.em === 'share') {
+          // The Doc opens from the link itself; their email goes on the clipboard
+          // to paste into Google Docs' Share box, and it's marked as shared.
+          try { await navigator.clipboard.writeText(x.email); showToast('Copied ' + x.email + '. In the Doc: Share → paste → Send.'); } catch (err) { showToast('Share the Doc with ' + x.email + '.'); }
           setTimeout(() => { send({ action: 'sent', user }).catch(() => {}); }, 300);
           return;
         }
@@ -21624,12 +21718,14 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             + `<div class="gac-allow-row"><span class="gps-hint" id="gac-allow-count">${((d.config.allowlist && d.config.allowlist.users) || []).length} listed</span><button class="gps-btn primary" id="gac-allow-save" type="button">Save list</button></div>`
             + `<p class="gps-hint">One sign-in per name: while this is on, each listed name works only with its PIN, on one device at a time (admins and you can use several). A second device is refused while the first was used in the last 15 minutes; signing out frees the name right away.</p>`
             + ((d.config.allowAccounts || []).length ? `<ul class="gac-acct-list" id="gac-allow-accts">` + d.config.allowAccounts.map((a) => `<li class="gac-acct" data-user="${esc(a.user)}"><div class="gac-acct-top"><span class="gac-req-name">${esc(a.user)}</span>`
-              + `<span class="gac-req-badge ${a.signedIn ? 'pending' : ''}">${a.pinReset ? 'PIN reset' : a.signedIn ? 'Signed in' : a.claimed ? 'Signed out' : 'No PIN yet'}</span></div>`
-              + `<div class="gac-req-meta">${a.pinReset ? `Reset code <code class="gac-invite-code">${esc(a.pinReset)}</code> · give it to ${esc(a.user)}: on the sign-in screen they type “${esc(a.user)}”, a <b>new</b> PIN and this code, then tap Sign in. Works once, for 7 days; their old PIN still works until then.`
+              + `<span class="gac-req-badge ${a.signedIn || a.pinRequest ? 'pending' : ''}">${a.pinRequest ? 'Forgot PIN' : a.pinReset ? 'PIN reset' : a.signedIn ? 'Signed in' : a.claimed ? 'Signed out' : 'No PIN yet'}</span></div>`
+              + `<div class="gac-req-meta">${a.pinRequest ? `<b>Asked for a new PIN</b> ${esc(ago(a.pinRequest.at))} from <b>${a.pinRequest.sameDevice ? 'the device they usually use' : a.pinRequest.sameBrowser ? 'the same kind of browser, another network' : 'a device they haven’t used before'}</b> (${esc(deviceName(a.pinRequest.ua))}${a.pinRequest.country && a.pinRequest.country !== '??' ? ' · ' + esc(a.pinRequest.country) : ''})${a.pinRequest.note ? ': “' + esc(a.pinRequest.note) + '”' : ''}. Approve and their screen signs in with the PIN they picked.`
+                : a.pinReset ? `Reset code <code class="gac-invite-code">${esc(a.pinReset)}</code> · give it to ${esc(a.user)}: on the sign-in screen they type “${esc(a.user)}”, a <b>new</b> PIN and this code, then tap Sign in. Works once, for 7 days; their old PIN still works until then.`
                 : a.claimed ? (a.lastSeen ? 'Last used ' + ago(a.lastSeen) + (a.country && a.country !== '??' ? ' · ' + esc(a.country) : '') + (a.device ? ' · ' + esc(deviceName(a.device)) : '') : 'PIN set ' + (a.createdAt ? ago(a.createdAt) : ''))
                 : a.invite ? `Invite code <code class="gac-invite-code">${esc(a.invite)}</code> · only someone with this code can create “${esc(a.user)}”. Give it to them.`
                   : 'The first person to create this account sets its PIN. Make sure it’s them, or make an invite code.'}</div>`
-              + (a.claimed && a.pinReset ? `<div class="gac-req-actions"><button class="gps-btn primary" data-acct="invite-copy" type="button">Copy code</button><button class="gps-btn" data-acct="resetcancel" type="button">Cancel reset</button></div>`
+              + (a.claimed && a.pinRequest ? `<div class="gac-req-actions"><button class="gps-btn primary" data-acct="pinapprove" type="button">Approve new PIN</button><button class="gps-btn" data-acct="pindeny" type="button">Deny</button></div>`
+                : a.claimed && a.pinReset ? `<div class="gac-req-actions"><button class="gps-btn primary" data-acct="invite-copy" type="button">Copy code</button><button class="gps-btn" data-acct="resetcancel" type="button">Cancel reset</button></div>`
                 : a.claimed ? `<div class="gac-req-actions">${a.signedIn ? '<button class="gps-btn" data-acct="revokesessions" type="button">Sign out</button>' : ''}<button class="gps-btn" data-acct="resetpin" type="button">Reset PIN</button></div>`
                 : `<div class="gac-req-actions">${a.invite ? '<button class="gps-btn" data-acct="invite-copy" type="button">Copy code</button><button class="gps-btn" data-acct="invite-revoke" type="button">Remove code</button>' : '<button class="gps-btn" data-acct="invite-make" type="button">Make invite code</button>'}</div>`)
               + `</li>`).join('') + `</ul>` : ''), 'account') : '')
@@ -21775,11 +21871,12 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             return;
           }
           if (action === 'resetpin' && !confirm('Reset the PIN for “' + user + '”? You get a one-time code to give them; with it they set a new PIN at sign-in. They’re signed out now, and keep their account and everything in it.')) return;
+          if (action === 'pinapprove' && !confirm('Approve the new PIN for “' + user + '”? Only do this if you’re sure the request is theirs.')) return;
           if (action === 'resetcancel' && !confirm('Cancel the PIN reset for “' + user + '”? The code stops working; their old PIN still works.')) return;
           btn.disabled = true;
           try {
             await api('/admin/user/action', { method: 'POST', body: { u: user, action } });
-            showToast(action === 'resetpin' ? 'Reset code made for ' + user + '. Copy it and give it to them.' : action === 'resetcancel' ? user + '’s PIN reset was cancelled.' : user + ' was signed out.');
+            showToast(action === 'pinapprove' ? user + '’s new PIN is approved. Their screen signs in by itself.' : action === 'pindeny' ? user + '’s PIN request was denied.' : action === 'resetpin' ? 'Reset code made for ' + user + '. Copy it and give it to them.' : action === 'resetcancel' ? user + '’s PIN reset was cancelled.' : user + ' was signed out.');
             RENDER.security().catch((err) => errorBox('security', err));
           } catch (err) { btn.disabled = false; showToast(err.message, { type: 'danger' }); }
         });

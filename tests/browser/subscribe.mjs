@@ -145,7 +145,7 @@ try {
   await walk('4-email-typed');
   await page.click('#sid-go');
   const made = await page.waitForFunction(() => !document.getElementById('steps-ready').hidden, null, { timeout: 20000 }).then(() => true, () => false);
-  check('Sent: the page confirms the email and says to sign in with the PIN', made && await page.isHidden('#email-form') && await page.isHidden('#keep-open') && /Sent: 223929@alseducation\.onmicrosoft\.com/.test(await page.textContent('#email-sent')) && /account is ready/.test(await page.textContent('#done')), (await page.textContent('#done')).replace(/\s+/g, ' ').slice(0, 200));
+  check('Sent: the page confirms the email, says to check Google Docs at school (docs.google.com), and to sign in with the PIN', made && await page.isHidden('#email-form') && await page.isHidden('#keep-open') && /Sent: 223929@alseducation\.onmicrosoft\.com/.test(await page.textContent('#email-sent')) && /sign in at docs\.google\.com with that school account: the instructions for loading Saints Service will be in your Google Docs/.test(await page.textContent('#email-sent')) && /account is ready/.test(await page.textContent('#done')), (await page.textContent('#done')).replace(/\s+/g, ' ').slice(0, 200));
   await page.screenshot({ path: path.join(OUT, '02c-pin-made.png') });
   await walk('5-all-done');
   check('…the payment was confirmed by Stripe’s signed webhook', webhooksSent === 1, String(webhooksSent));
@@ -295,23 +295,22 @@ try {
   // …and the owner's New subscribers card: the email, the Google Doc link, Email instructions.
   await op.waitForFunction(() => { const b = document.getElementById('gpa-root-host').shadowRoot.querySelector('#gac-emails'); return b && !/Loading/.test(b.textContent); }, null, { timeout: 15000 }).catch(() => {});
   const emRow = () => R(op, (r, u) => { const el = [...r.querySelectorAll('.gac-email-row')].find((x) => x.dataset.user === u); return el ? el.textContent.replace(/\s+/g, ' ').trim() : ''; }, NAME);
-  check('Owner: “New subscribers” shows their school email, not sent yet', /223929@alseducation\.onmicrosoft\.com/.test(await emRow()) && /Not sent yet/.test(await emRow()), await emRow());
-  check('…Email instructions waits for the Google Doc link', await R(op, (r) => { const row = r.querySelector('.gac-email-row'); return !!row && !row.querySelector('a[data-em="mail"]'); }));
+  check('Owner: “New subscribers” shows their school email, not shared yet', /223929@alseducation\.onmicrosoft\.com/.test(await emRow()) && /Not shared yet/.test(await emRow()), await emRow());
+  check('…Share the Doc waits for the Google Doc link', await R(op, (r) => { const row = r.querySelector('.gac-email-row'); return !!row && !row.querySelector('a[data-em="share"]'); }));
   const DOC = 'https://docs.google.com/document/d/1TestDocForInstructions/edit';
   await op.fill(sr('#gac-emails-docurl'), DOC);
   await op.click(sr('#gac-emails-doc button[type="submit"]'));
-  await op.waitForFunction(() => !!document.getElementById('gpa-root-host').shadowRoot.querySelector('.gac-email-row a[data-em="mail"]'), null, { timeout: 10000 }).catch(() => {});
-  const href = await R(op, (r, u) => { const el = [...r.querySelectorAll('.gac-email-row')].find((x) => x.dataset.user === u); const a = el && el.querySelector('a[data-em="mail"]'); return a ? a.getAttribute('href') : ''; }, NAME);
-  const mailOk = href.startsWith('mailto:223929%40alseducation.onmicrosoft.com?') && decodeURIComponent(href).includes(DOC) && decodeURIComponent(href).includes('Hi ' + NAME) && /subject=Saints%20Service/.test(href);
-  check('Email instructions: a mail to their school address with the Google Doc link and their username', mailOk, decodeURIComponent(href).slice(0, 220));
+  await op.waitForFunction(() => !!document.getElementById('gpa-root-host').shadowRoot.querySelector('.gac-email-row a[data-em="share"]'), null, { timeout: 10000 }).catch(() => {});
+  const share = await R(op, (r, u) => { const el = [...r.querySelectorAll('.gac-email-row')].find((x) => x.dataset.user === u); const a = el && el.querySelector('a[data-em="share"]'); return a ? { href: a.getAttribute('href'), target: a.getAttribute('target'), text: a.textContent } : {}; }, NAME);
+  check('Share the Doc: opens your Google Doc (new tab) to share it with them; the card explains Share → paste → Send', share.href === DOC && share.target === '_blank' && share.text === 'Share the Doc' && /Share<\/b>, paste the email/.test(await R(op, (r) => r.querySelector('#gac-emails').innerHTML)), JSON.stringify(share));
   await R(op, (r) => { r.querySelector('#gac-emails-card').scrollIntoView({ block: 'start' }); });
   await op.waitForTimeout(300);
   await op.screenshot({ path: path.join(OUT, '12-owner-new-subscribers.png') });
-  // Tapping it (the mail app opens; here the navigation is stopped) marks it sent.
-  await op.evaluate(() => window.addEventListener('click', (e) => { if (e.composedPath().some((n) => n.tagName === 'A' && /^mailto:/.test(n.getAttribute('href') || ''))) e.preventDefault(); }, true));
-  await R(op, (r, u) => [...r.querySelectorAll('.gac-email-row')].find((x) => x.dataset.user === u).querySelector('a[data-em="mail"]').click(), NAME);
-  await op.waitForFunction((u) => { const el = [...document.getElementById('gpa-root-host').shadowRoot.querySelectorAll('.gac-email-row')].find((x) => x.dataset.user === u); return el && /Sent /.test(el.textContent); }, NAME, { timeout: 10000 }).catch(() => {});
-  check('…and it’s marked “Sent”, by the owner', /Sent \w+ \d+/.test(await emRow()) && /sent by viztrrx/.test(await emRow()), await emRow());
+  // Tapping it (the Doc opens in a new tab; here that's stopped) copies their email and marks it shared.
+  await op.evaluate(() => window.addEventListener('click', (e) => { if (e.composedPath().some((n) => n.tagName === 'A' && n.getAttribute && n.getAttribute('data-em') === 'share')) e.preventDefault(); }, true));
+  await R(op, (r, u) => [...r.querySelectorAll('.gac-email-row')].find((x) => x.dataset.user === u).querySelector('a[data-em="share"]').click(), NAME);
+  await op.waitForFunction((u) => { const el = [...document.getElementById('gpa-root-host').shadowRoot.querySelectorAll('.gac-email-row')].find((x) => x.dataset.user === u); return el && /Shared /.test(el.textContent); }, NAME, { timeout: 10000 }).catch(() => {});
+  check('…and it’s marked “Shared”, by the owner', /Shared \w+ \d+/.test(await emRow()) && /shared by viztrrx/.test(await emRow()), await emRow());
   check('Their Subscribers row shows the email too', /223929@alseducation\.onmicrosoft\.com/.test(await R(op, (r, u) => { const el = [...r.querySelectorAll('.gac-subscr')].find((x) => x.dataset.user === u); return el ? el.textContent : ''; }, NAME)));
 
   // The owner resets a forgotten PIN (Allowed users → Reset PIN): a one-time code.
@@ -337,6 +336,36 @@ try {
   await cp.click(sr('#gpa-login-btn'));
   const backIn = await cp.waitForFunction(() => document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-login').style.display === 'none', null, { timeout: 20000 }).then(() => true, () => false);
   check('With the code, the new PIN works: they’re back in, same account (still subscribed)', backIn && await cp.waitForFunction(() => { const s2 = document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-substrip'); return s2 && !s2.hidden; }, null, { timeout: 25000 }).then(() => true, () => false), await R(cp, (r) => r.querySelector('#gpa-login-msg').textContent));
+  // Forgot PIN, and the owner can't reach them: they ask from the sign-in screen; the owner approves.
+  await admin('/admin/user/action', { u: NAME.toLowerCase(), action: 'revokesessions' });
+  await cp.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await cp.waitForFunction(() => document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-login').style.display !== 'none', null, { timeout: 25000 }).catch(() => {});
+  await cp.waitForTimeout(17000);   // past a status check while signed out
+  check('Signed out from elsewhere, the sign-in screen isn’t covered by “Blocked by the owner”', await R(cp, (r) => !/Blocked by the owner/.test(r.textContent.replace(r.querySelector('#gpa-login').textContent, '')) && ![...r.querySelectorAll('div')].some((d) => d.style && d.style.zIndex === '2147483000' && d.style.display !== 'none')));
+  await cp.fill(sr('#gpa-login-user'), NAME);
+  await cp.click(sr('#gpa-login-forgot'));
+  check('Sign-in has “Forgot PIN?”: a new PIN (twice), a message, “Send to the owner”', await R(cp, (r) => !r.querySelector('#gpa-forgot').hidden && r.querySelector('#gpa-login-pin').hidden && r.querySelector('#gpa-login-btn').hidden && !!r.querySelector('#gpa-forgot-send')));
+  await cp.fill(sr('#gpa-forgot-pin'), '975310'); await cp.fill(sr('#gpa-forgot-pin2'), '975310');
+  await cp.fill(sr('#gpa-forgot-note'), 'It’s me, I forgot it');
+  await cp.screenshot({ path: path.join(OUT, '15-forgot-pin-form.png') });
+  await cp.click(sr('#gpa-forgot-send'));
+  const waitingShown = await cp.waitForFunction(() => { const r = document.getElementById('gpa-root-host').shadowRoot; return !r.querySelector('#gpa-forgot-wait').hidden && /Waiting for the owner/.test(r.querySelector('#gpa-forgot-status').textContent); }, null, { timeout: 15000 }).then(() => true, () => false);
+  check('Sent: “Waiting for the owner to approve… you’ll be signed in here”', waitingShown, await R(cp, (r) => r.querySelector('#gpa-login-msg').textContent + ' | ' + r.querySelector('#gpa-forgot-status').textContent));
+  await cp.screenshot({ path: path.join(OUT, '16-forgot-pin-waiting.png') });
+  // The owner: Security → Allowed users shows the request, from their usual device.
+  await R(op, (root) => { root.querySelector('.gps-tab[data-asec="overview"]').click(); });
+  await op.waitForTimeout(800);
+  await R(op, (root) => root.querySelector('.gps-tab[data-asec="security"]').click());
+  await op.waitForFunction((u) => { const row = document.getElementById('gpa-root-host').shadowRoot.querySelector(`#gac-allow-accts .gac-acct[data-user="${u}"]`); return row && /Forgot PIN/.test(row.textContent); }, NAME.toLowerCase(), { timeout: 15000 }).catch(() => {});
+  const reqRow = await R(op, (r, u) => { const row = r.querySelector(`#gac-allow-accts .gac-acct[data-user="${u}"]`); if (row) row.scrollIntoView({ block: 'center' }); return row ? row.textContent.replace(/\s+/g, ' ') : ''; }, NAME.toLowerCase());
+  check('Owner: the row says “Forgot PIN”, from the device they usually use, with their message; Approve / Deny', /Forgot PIN/.test(reqRow) && /the device they usually use/.test(reqRow) && /It’s me, I forgot it/.test(reqRow) && /Approve new PIN/.test(reqRow) && /Deny/.test(reqRow), reqRow.slice(0, 260));
+  await op.waitForTimeout(300);
+  await op.locator(`#gpa-root-host >> #gac-allow-accts .gac-acct[data-user="${NAME.toLowerCase()}"]`).screenshot({ path: path.join(OUT, '17-owner-approves-pin.png') });
+  await R(op, (r, u) => { window.confirm = () => true; r.querySelector(`#gac-allow-accts .gac-acct[data-user="${u}"] [data-acct="pinapprove"]`).click(); }, NAME.toLowerCase());
+  const autoIn = await cp.waitForFunction(() => document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-login').style.display === 'none', null, { timeout: 30000 }).then(() => true, () => false);
+  check('Approved: their waiting screen signs in by itself with the new PIN (nothing passed between them)', autoIn, await R(cp, (r) => r.querySelector('#gpa-login-msg').textContent));
+  const newPinOk = await fetch(env.workerUrl + '/admin/user?u=' + NAME.toLowerCase(), { headers: { Authorization: 'Bearer ' + ADMIN } }).then((r) => r.json());
+  check('…and the account is the same one (created earlier, still theirs)', newPinOk && newPinOk.account && newPinOk.account.createdAt > 0 && newPinOk.account.createdAt < Date.now() - 30e3, JSON.stringify(newPinOk && newPinOk.account && { createdAt: newPinOk.account.createdAt }));
   for (const [n, p] of [['subscribe page', page], ['console', cp], ['owner console', op]]) check(`No page errors (${n})`, p._errors.length === 0, p._errors.slice(0, 2).join(' | '));
   await ctx.close(); await pc.close(); await oc.close();
 } finally {

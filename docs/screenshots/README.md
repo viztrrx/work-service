@@ -14,7 +14,7 @@ new subscriber and then the owner would see things.
 | [3-playlists](#3-playlists-everyone-signed-in) | Spotify / Apple Music playlist → YouTube links, for everyone |
 | [4-youtube-to-mp3](#4-youtube-to-mp3-owner) | The MP3 converter in Music → My music |
 | [5-subscribe-page](#5-subscribe-page) | The payment page and the $6 contribution box |
-| [6-pin-reset](#6-resetting-a-forgotten-pin-owner) | Resetting someone's forgotten PIN: your code, what they type |
+| [6-pin-reset](#6-resetting-a-forgotten-pin-owner) | Forgotten PINs: **Forgot PIN?** request + your Approve (no contact needed), or a reset code |
 
 ---
 
@@ -44,8 +44,10 @@ Letters and a 7th digit can't be typed.
 
 <img src="0-subscriber-walkthrough/step-4-email-typed.png" width="320" alt="Step 4: 223929 typed">
 
-**Step 5: done.** "Sent: 223929@alseducation.onmicrosoft.com. The owner or an
-admin will email you the instructions there." and how to sign in. At the
+**Step 5: done.** "Sent: 223929@alseducation.onmicrosoft.com. Next time you're
+at school, sign in at docs.google.com with that school account: the
+instructions for loading Saints Service will be in your Google Docs (shared
+with you)." and how to sign in. At the
 same moment you (and your admins) get the alert and it appears in
 Admin → Security → New subscribers.
 
@@ -83,8 +85,9 @@ checkbox must be ticked.
 ## 2. Admin → Security (owner, admins, moderators)
 
 **New subscribers** (owner and admins): each new subscriber's school email,
-your instructions Google Doc link, **Email instructions** (opens your mail
-app with the Doc link filled in, then marks it Sent), Copy email, Remove.
+your instructions Google Doc link, **Share the Doc** (copies their email and
+opens your Doc; in Google Docs: Share → paste → Send; then it's marked
+Shared), Copy email, Remove.
 
 <img src="2-admin-security/1-new-subscribers-card.png" width="640" alt="New subscribers card with an email and the Google Doc link">
 
@@ -156,3 +159,19 @@ They type it, tap Sign in again, and they're back in with the new PIN. The
 code works once, for 7 days; their old PIN works until then.
 
 <img src="6-pin-reset/2-user-types-new-pin-and-code.png" width="640" alt="Sign-in screen asking for the reset code">
+
+**When you can't reach them at all: "Forgot PIN?"** They type their username,
+tap **Forgot PIN?**, pick a new PIN, add a message, and tap **Send to the
+owner**.
+
+<img src="6-pin-reset/3-forgot-pin-request.png" width="640" alt="Forgot your PIN? form on the sign-in screen">
+
+Their screen waits for you, and signs them in by itself once you approve.
+
+<img src="6-pin-reset/4-forgot-pin-waiting.png" width="640" alt="Waiting for the owner to approve">
+
+**Your side** (Admin → Security → Allowed users, plus a phone alert): the
+request, whether it came from **the device they usually use**, their message,
+and **Approve new PIN** / **Deny**.
+
+<img src="6-pin-reset/5-owner-approves.png" width="420" alt="Allowed users row: Forgot PIN, from the device they usually use, Approve new PIN / Deny">
