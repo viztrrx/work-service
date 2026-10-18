@@ -222,11 +222,12 @@ email (`viztrrx@gmail.com`; change it with a Cloudflare **Text** variable
 `SUPPORT_EMAIL`). By the pay button the page says the buyer agrees to the
 Terms and the Refund policy and will be charged the price today and every
 month until they cancel, and Stripe's checkout repeats that above its own
-button. The refund policy: cancel any time and keep access to the end of the
-paid month; full refund if asked within 7 days of any charge; duplicate,
-mistaken, unauthorized or after-cancel charges always refunded. **What you
-promise there:** answer emails within 2 business days, cancel within 1
-business day, send approved refunds within 3 business days (in Stripe:
+button. The refund policy (owner: "put no refunds"): **no refunds**; cancel
+any time and keep access to the end of the paid month; only billing errors
+(duplicate, wrong amount, unauthorized, charged after asking to cancel) are
+refunded, or where the law requires it. **What you promise there:** answer
+emails within 2 business days, cancel within 1 business day, refund billing
+errors within 3 business days (in Stripe:
 Payments → the payment → Refund, then Subscriptions → Cancel immediately),
 and email subscribers 30 days before a price change. In Stripe, **Settings →
 Business → Public details**, put the three page addresses in the Terms,

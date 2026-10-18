@@ -293,7 +293,8 @@ day, 14 days; not system notices), `trivia` (#public only). Memory only:
   page (`policyFooter` in subscribe.js) with the contact email
   (`supportEmail(env)`); the auto-renewal sentence by the pay button; Checkout
   `custom_text.submit.message` repeats it on Stripe's page. Refund window
-  `REFUND_DAYS` = 7 (subscribe.js); effective date `POLICY_EFFECTIVE`
+  **no refunds** (owner: "put no refunds"), only billing errors or where the
+  law requires; effective date `POLICY_EFFECTIVE`
   (policies.js) — change it when the wording changes. The privacy page
   describes what the app really stores (salted PIN verifier hash, hashed
   IP/UA, country, sessions, content; Stripe/Cloudflare/push services as
@@ -447,7 +448,8 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 
 | Commit | What |
 |---|---|
-| (this) | Subscribe page: Terms, Refund & Cancellation, Privacy pages; contact email; renewal disclosure |
+| (this) | Refund policy: no refunds (billing errors only) |
+| `c9465ac` | Subscribe page: Terms, Refund & Cancellation, Privacy pages; contact email; renewal disclosure |
 | `c196301` | Subscribe page: "Saints Service", the planet icon and its colors |
 | `81430fa` | Subscribe page hardening: API version, price ID, idempotency, failed payments |
 | `96545d4` | Subscribe page: pay monthly with Stripe, approved automatically |

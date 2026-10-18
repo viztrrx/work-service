@@ -35,8 +35,6 @@ export const money = (cents) => '$' + (cents / 100).toFixed(2);
 export const subscribeReady = (env) => !!(env && env.STRIPE_SECRET_KEY);
 export const priceId = (env) => (/^price_[A-Za-z0-9]{4,80}$/.test(String((env && env.STRIPE_PRICE_ID) || '').trim()) ? String(env.STRIPE_PRICE_ID).trim() : '');
 export const ATTEMPT_RE = /^[a-z0-9]{16,40}$/;
-// Days after a charge a customer can ask for a full refund (web/policies.js).
-export const REFUND_DAYS = 7;
 export const SUPPORT_EMAIL_DEFAULT = 'viztrrx@gmail.com';
 export const supportEmail = (env) => {
   const e = String((env && env.SUPPORT_EMAIL) || '').trim();
@@ -91,7 +89,7 @@ export function checkoutParams(env, origin, user) {
     cancel_url: origin + '/subscribe/?canceled=1',
     allow_promotion_codes: 'false',
     // Shown above Stripe's Subscribe button: how it renews and how to cancel.
-    custom_text: { submit: { message: 'Renews automatically every month until you cancel. Cancel any time; you keep access until the end of the month you paid for. Refunds within ' + REFUND_DAYS + ' days of a charge. Help: ' + supportEmail(env) } }
+    custom_text: { submit: { message: 'Renews automatically every month until you cancel. Cancel any time; you keep access until the end of the month you paid for. Payments are non-refundable, except billing errors. Help: ' + supportEmail(env) } }
   };
 }
 
@@ -229,12 +227,12 @@ export function subscribePage(env, { ready, cents }) {
     <h1>Subscribe</h1>
     <div class="price">${esc(price)} <small>/ month</small></div>
     <p class="cur">US dollars · billed monthly until you cancel</p>
-    <ul><li>Full access to Saints Service</li><li>Your username is approved as soon as your payment goes through</li><li>Cancel any time · refund within ${REFUND_DAYS} days of a charge</li></ul>
+    <ul><li>Full access to Saints Service</li><li>Your username is approved as soon as your payment goes through</li><li>Cancel any time · access lasts to the end of the month you paid for</li></ul>
     <label for="user">Username you’ll sign in with</label>
     <input id="user" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="40" placeholder="e.g. jsmith" inputmode="text">
     <div id="hint" class="hint" role="status" aria-live="polite">Letters, numbers, dot, dash or underscore.</div>
     <button id="pay" type="button" disabled>Continue to payment</button>
-    <p class="terms">By continuing, you agree to the <a href="/subscribe/terms">Terms of Service</a> and the <a href="/subscribe/refunds">Refund &amp; Cancellation Policy</a>. You’ll be charged ${esc(price)} USD today and then every month until you cancel. You can cancel any time${portal ? ` <a href="${esc(portal)}" target="_blank" rel="noopener">online</a> or` : ''} by emailing <a href="mailto:${esc(supportEmail(env))}">${esc(supportEmail(env))}</a>.</p>
+    <p class="terms">By continuing, you agree to the <a href="/subscribe/terms">Terms of Service</a> and the <a href="/subscribe/refunds">Refund &amp; Cancellation Policy</a>. You’ll be charged ${esc(price)} USD today and then every month until you cancel. Payments are non-refundable. You can cancel any time${portal ? ` <a href="${esc(portal)}" target="_blank" rel="noopener">online</a> or` : ''} by emailing <a href="mailto:${esc(supportEmail(env))}">${esc(supportEmail(env))}</a>.</p>
     <p class="small">You’ll choose how to pay (card, Apple Pay, Google Pay, Cash App Pay…) on Stripe’s secure page.${portal ? ` · <a href="${esc(portal)}" target="_blank" rel="noopener">Manage or cancel a subscription</a>` : ''}</p>
   </section>
 

@@ -234,13 +234,15 @@ test('subscribe: Terms, Refund & Cancellation and Privacy pages; contact email; 
     const page = (await t.call('/subscribe/')).text;
     for (const href of ['/subscribe/terms', '/subscribe/refunds', '/subscribe/privacy']) assert.ok(page.includes(`href="${href}"`), 'footer links ' + href);
     assert.match(page, /mailto:viztrrx@gmail\.com/, 'contact email');
-    assert.match(page, /charged \$13\.80 USD today and then every month until you cancel/, 'auto-renewal disclosure by the button');
+    assert.match(page, /charged \$13\.80 USD today and then every month until you cancel\. Payments are non-refundable\./, 'auto-renewal and no-refund disclosure by the button');
     const refunds = await t.call('/subscribe/refunds');
     assert.equal(refunds.status, 200);
     assert.equal(refunds.headers.get('X-Frame-Options'), 'DENY');
     assert.match(refunds.text, /<h1>Refund &amp; Cancellation Policy<\/h1>/);
     assert.match(refunds.text, /\$13\.80 USD a month/);
-    assert.match(refunds.text, /within 7 days of a charge/);
+    assert.match(refunds.text, /All payments are final and non-refundable/);
+    assert.match(refunds.text, /Billing errors are the only exception/);
+    assert.ok(!/7 days|7-day/.test(refunds.text), 'no refund window any more');
     assert.match(refunds.text, /How to cancel/);
     assert.match((await t.call('/subscribe/terms')).text, /<h1>Terms of Service<\/h1>[\s\S]*Acceptable use/);
     assert.match((await t.call('/subscribe/privacy/')).text, /<h1>Privacy Policy<\/h1>[\s\S]*don’t sell/);
@@ -262,6 +264,6 @@ test('subscribe: Terms, Refund & Cancellation and Privacy pages; contact email; 
     // Stripe's checkout shows the renewal terms above its pay button.
     await t.call('/subscribe/checkout', { method: 'POST', body: { user: 'kim' } });
     const sent = st.calls.find((c) => new URL(c.url).pathname === '/v1/checkout/sessions' && c.method === 'POST');
-    assert.match(decodeURIComponent(sent.body.replace(/\+/g, ' ')), /custom_text\[submit\]\[message\]=Renews automatically every month until you cancel/);
+    assert.match(decodeURIComponent(sent.body.replace(/\+/g, ' ')), /custom_text\[submit\]\[message\]=Renews automatically every month until you cancel\..*non-refundable/);
   } finally { st.restore(); }
 });

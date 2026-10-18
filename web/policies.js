@@ -5,12 +5,12 @@
 // terms and a privacy policy. Plain static pages in the subscribe page's
 // look; the price comes from the same place the subscribe page gets it.
 //
-// The commitments here (reply within 2 business days, cancel within 1,
-// refund within 3, the REFUND_DAYS window in subscribe.js) are the owner's to
-// keep. Update POLICY_EFFECTIVE when any of it changes.
-import { money, priceCents, supportEmail, portalUrl, policyFooter, REFUND_DAYS } from './subscribe.js';
+// No refunds (the owner's choice), except billing errors and where the law
+// requires one. The commitments here (reply within 2 business days, cancel
+// within 1, fix billing errors within 3) are the owner's to keep. Update
+// POLICY_EFFECTIVE when any of it changes.
+import { money, priceCents, supportEmail, portalUrl, policyFooter } from './subscribe.js';
 
-export { REFUND_DAYS };
 export const POLICY_EFFECTIVE = 'October 18, 2026';
 export const POLICY_PAGES = { terms: 'Terms of Service', refunds: 'Refund & Cancellation Policy', privacy: 'Privacy Policy' };
 
@@ -31,7 +31,7 @@ function body(env, kind, price) {
     <div class="sum">
       <p><b>${price} USD a month</b>, charged automatically each month until you cancel.</p>
       <p><b>Cancel any time.</b> You won’t be charged again, and you keep access until the end of the month you’ve paid for.</p>
-      <p><b>${REFUND_DAYS}-day refund.</b> Ask within ${REFUND_DAYS} days of any charge and we’ll refund that charge in full.</p>
+      <p><b>No refunds.</b> Payments are non-refundable, including for unused time, except for billing errors (see below).</p>
     </div>
     <h2>1. Your subscription and billing</h2>
     <p>Saints Service is a monthly subscription. When you subscribe you’re charged <b>${price} USD</b> right away, and then the same amount every month on the same day of the month (your renewal date) until you cancel. Any sales tax that applies is shown before you pay. Payments are processed by Stripe; we never see or store your full card number.</p>
@@ -39,16 +39,12 @@ function body(env, kind, price) {
     <ul>${cancelWays(env)}</ul>
     <p>To avoid the next charge, cancel before your renewal date. If you asked us to cancel before your renewal date and a renewal still goes through, we refund it in full.</p>
     <p>After you cancel there are no more charges. Your access continues until the end of the period you’ve already paid for, then ends. You can subscribe again at any time with the same username.</p>
-    <h2>3. Refunds</h2>
-    <ul>
-      <li><b>${REFUND_DAYS}-day refund:</b> if you’re not happy, email ${mailto} within ${REFUND_DAYS} days of a charge (your first payment or any renewal) and we’ll refund that charge in full. A refunded charge ends the subscription and access right away.</li>
-      <li><b>Always refunded, whenever you tell us:</b> duplicate charges, billing errors, charges you didn’t authorize, and charges made after you asked to cancel.</li>
-      <li><b>Service problems:</b> if Saints Service is unavailable for more than 3 days in a row because of a problem on our side, we’ll refund the affected days on request.</li>
-      <li><b>Otherwise:</b> after ${REFUND_DAYS} days a charge isn’t refundable, and we don’t give partial refunds for unused days in a month, except as described here or where the law requires it.</li>
-    </ul>
-    <p>Approved refunds are sent within 3 business days to the original payment method through Stripe. Your bank may take 5–10 business days to show it.</p>
+    <h2>3. No refunds</h2>
+    <p><b>All payments are final and non-refundable.</b> This includes your first payment, renewals, and any unused part of a month after you cancel. When you cancel, you simply aren’t charged again, and you keep access until the end of the month you’ve paid for.</p>
+    <p><b>Billing errors are the only exception.</b> We refund in full, whenever you tell us: duplicate charges, charges for the wrong amount, charges you didn’t authorize, and renewals charged after you asked us to cancel. We also give a refund wherever the law requires one.</p>
+    <p>Billing-error refunds are sent within 3 business days to the original payment method through Stripe. Your bank may take 5–10 business days to show it.</p>
     <h2>4. If we end your access</h2>
-    <p>If we suspend or close an account for breaking our <a href="/subscribe/terms">Terms of Service</a>, the current month isn’t refunded, except where the law requires it. If we stop offering Saints Service, or end your subscription for any other reason, we refund the unused part of your current month.</p>
+    <p>If we suspend or close an account for breaking our <a href="/subscribe/terms">Terms of Service</a>, the subscription is canceled and the current month isn’t refunded. If we stop offering Saints Service, we’ll cancel all subscriptions so no one is charged again, and tell subscribers by email.</p>
     <h2>5. Price changes</h2>
     <p>If the price changes, we’ll email you at the address you used at checkout at least 30 days before it applies. The new price starts at your first renewal after that notice, and you can cancel before then.</p>
     <h2>6. Questions and billing disputes</h2>
@@ -65,7 +61,7 @@ function body(env, kind, price) {
       <li>For security, an account may be limited to one signed-in device at a time.</li>
     </ul>
     <h2>3. Subscription, billing and cancellation</h2>
-    <p>The subscription costs ${price} USD a month. It renews and is charged automatically every month until you cancel. You can cancel any time; you keep access until the end of the month you’ve paid for. Cancellation, refunds and price changes are covered by our <a href="/subscribe/refunds">Refund &amp; Cancellation Policy</a>, which is part of these terms.</p>
+    <p>The subscription costs ${price} USD a month. It renews and is charged automatically every month until you cancel. You can cancel any time; you keep access until the end of the month you’ve paid for. Payments are non-refundable except for billing errors. Cancellation, refunds and price changes are covered by our <a href="/subscribe/refunds">Refund &amp; Cancellation Policy</a>, which is part of these terms.</p>
     <h2>4. Acceptable use</h2>
     <p>Don’t use Saints Service to:</p>
     <ul>
