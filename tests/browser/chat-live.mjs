@@ -139,6 +139,9 @@ try {
   // dub: double-tap on the phone.
   await openTab(dub.page, 'chat');
   await waitText(dub.page, '#gpa-chat-log', new RegExp(MSG), 10000);
+  // Let the log finish its first redraws; a double-tap split across two
+  // redraws lands on two different message elements.
+  await dub.page.waitForTimeout(600);
   const dbox = await dub.page.locator(sr(msgSel(MSG) + ' .body')).boundingBox();
   await dub.page.touchscreen.tap(dbox.x + 12, dbox.y + 6);
   await dub.page.waitForTimeout(90);

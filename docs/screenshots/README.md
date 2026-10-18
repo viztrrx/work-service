@@ -14,6 +14,7 @@ new subscriber and then the owner would see things.
 | [3-playlists](#3-playlists-everyone-signed-in) | Spotify / Apple Music playlist → YouTube links, for everyone |
 | [4-youtube-to-mp3](#4-youtube-to-mp3-owner) | The MP3 converter in Music → My music |
 | [5-subscribe-page](#5-subscribe-page) | The payment page and the $6 contribution box |
+| [9-fold-top-card](#9-fold-the-top-card) | **New:** the Ask AI card (and every tab's top card) folds to a thin bar |
 | [8-opens-centered](#8-opens-small-and-centered) | **New:** injected into a website: only the sign-in card shows; signed in, a centered window |
 | [7-student-number-and-locks](#7-student-numbers-forgot-pin-and-locked-devices) | **New:** the required student-number screen, Forgot PIN by student number, locked devices, your Sign-in help card |
 | [6-pin-reset](#6-resetting-a-forgotten-pin-owner) | Forgotten PINs: **Forgot PIN?** request + your Approve (no contact needed), or a reset code |
@@ -240,3 +241,18 @@ Signed in, the console is a **centered window** (about 60% of the page),
 not the whole screen. (Here the required student-number screen is on top.)
 
 <img src="8-opens-centered/4-signed-in-centered.png" width="640" alt="Signed-in console as a centered window">
+
+---
+
+## 9. Fold the top card
+
+Every tab's top card has a small arrow in its top-right corner. **Open**
+(Ask AI takes about half the window):
+
+<img src="9-fold-top-card/1-ask-card-open.png" width="640" alt="Ask AI card open">
+
+**Folded:** a thin bar with the title, **New chat** and **Study settings**;
+the answers get the rest of the window. Tap the arrow to open it again. Each
+tab remembers its choice after a reload.
+
+<img src="9-fold-top-card/2-ask-card-folded.png" width="640" alt="Ask AI card folded to a thin bar">

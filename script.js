@@ -818,7 +818,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     { at: '2026-10-19T08:00:00-04:00', commit: '', title: 'Now called Saints Service, with the planet icon', parts: {
       console: ['change', 'The console is now called Saints Service everywhere; on the sign-in card the planet icon replaces ＋ and does the same thing (create an account)'] } },
     { at: '2026-10-19T08:30:00-04:00', commit: '', title: 'No way in without the server', parts: {
-      console: ['fix', 'Signing in or creating an account (planet icon) is refused when the server can’t be reached, and a saved sign-in only comes back after the server checks it, so blocking the server or faking browser data can’t open the console'] } }
+      console: ['fix', 'Signing in or creating an account (planet icon) is refused when the server can’t be reached, and a saved sign-in only comes back after the server checks it, so blocking the server or faking browser data can’t open the console'] } },
+    { at: '2026-10-19T09:00:00-04:00', commit: '', title: 'Fold the top card', parts: {
+      console: ['feature', 'Every tab’s top card (Ask AI, Music, Chat…) has an arrow to fold it into a thin bar with just its title and buttons, so answers get the room; each tab remembers it'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -1005,8 +1007,15 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   };
   // Hero: scene + copy + actions. `actions` is raw markup that usually holds
   // the pane's real primary buttons (moved here, ids unchanged).
+  // Each tab's top card can be folded into a slim bar (title + its buttons),
+  // so the content below (an AI answer, a list) gets the room. Remembered
+  // per tab on this device.
+  const HERO_FOLD_KEY = 'gpa_hero_folded';
+  function heroFolds() { try { return JSON.parse(localStorage.getItem(HERO_FOLD_KEY) || '{}') || {}; } catch (e) { return {}; } }
+  const heroFoldBtn = (folded) => `<button type="button" class="gpx-fold" aria-expanded="${folded ? 'false' : 'true'}" title="${folded ? 'Show the full card' : 'Collapse this card'}" aria-label="${folded ? 'Expand' : 'Collapse'}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg></button>`;
   function gpxHero(o) {
-    return `<section class="gpx-hero" data-room="${o.room}" data-state="idle">`
+    const folded = !!heroFolds()[o.room];
+    return `<section class="gpx-hero${folded ? ' is-folded' : ''}" data-room="${o.room}" data-state="idle">${heroFoldBtn(folded)}`
       + `<div class="gpx-visual" aria-hidden="true">${o.scene || GPX_SCENES[o.room] || ''}<div class="gpx-floor"></div></div>`
       + `<div class="gpx-copy">`
       + `<div class="gpx-status" role="status" aria-live="polite"><i></i><span class="gpx-status-t">${o.status || 'Ready'}</span></div>`
@@ -1175,6 +1184,21 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         box-shadow: var(--gps-e2);
         transition: border-color var(--gps-t3) ease;
       }
+      /* Fold button (top right) and the folded bar */
+      .gpx-fold { position: absolute; top: 8px; right: 8px; z-index: 3; width: 30px; height: 30px; display: grid; place-items: center; padding: 0;
+        border-radius: 999px; border: 1px solid var(--gpa-border); background: color-mix(in srgb, var(--gpa-card-bg) 85%, transparent); color: var(--gpa-sub); cursor: pointer;
+        transition: color var(--gps-t2, 160ms) ease, border-color var(--gps-t2, 160ms) ease; }
+      .gpx-fold:hover { color: var(--gpa-text); border-color: color-mix(in srgb, var(--gpa-accent) 45%, var(--gpa-border)); }
+      .gpx-fold:focus-visible { outline: 2px solid var(--gpa-accent); outline-offset: 2px; }
+      .gpx-fold svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform var(--gps-t2, 160ms) ease; }
+      .gpx-hero.is-folded .gpx-fold svg { transform: rotate(180deg); }
+      .gpx-hero.is-folded { grid-template-columns: minmax(0, 1fr) !important; padding: 8px 46px 8px 14px !important; gap: 0; }
+      .gpx-hero.is-folded .gpx-visual, .gpx-hero.is-folded .gpx-desc, .gpx-hero.is-folded .gpx-meta, .gpx-hero.is-folded .gvh, .gpx-hero.is-folded .gpx-status { display: none !important; }
+      .gpx-hero.is-folded .gpx-copy { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+      .gpx-hero.is-folded .gpx-title { font-size: 15px; margin: 0; order: 0 !important; }
+      .gpx-hero.is-folded .gpx-actions { margin: 0; gap: 6px; }
+      .gpx-hero.is-folded .gpx-actions .gpa-btn { min-height: 30px; padding: 4px 10px; font-size: 12.5px; }
+      @media (prefers-reduced-motion: reduce) { .gpx-fold svg { transition: none; } }
       .gpx-hero[data-state="working"] { border-color: color-mix(in srgb, var(--gpa-accent) 55%, var(--gpa-border)); }
       .gpx-hero[data-state="error"] { border-color: color-mix(in srgb, var(--gpx-err) 55%, var(--gpa-border)); }
       .gpx-visual {
@@ -3105,6 +3129,20 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   const panel = document.createElement('div');
   panel.className = 'gpa-panel' + (APP_MODE ? ' gpa-app' : ' gpa-injected');
   particleWrap.appendChild(panel);
+  // Fold / unfold a tab's top card (see gpxHero).
+  panel.addEventListener('click', (e) => {
+    const btn = e.target.closest && e.target.closest('.gpx-fold');
+    if (!btn) return;
+    const hero = btn.closest('.gpx-hero');
+    const folded = !hero.classList.contains('is-folded');
+    hero.classList.toggle('is-folded', folded);
+    btn.setAttribute('aria-expanded', String(!folded));
+    btn.setAttribute('aria-label', folded ? 'Expand' : 'Collapse');
+    btn.title = folded ? 'Show the full card' : 'Collapse this card';
+    const all = heroFolds();
+    if (folded) all[hero.dataset.room] = 1; else delete all[hero.dataset.room];
+    try { localStorage.setItem(HERO_FOLD_KEY, JSON.stringify(all)); } catch (err) { /* ignore */ }
+  });
 
   panel.innerHTML = `
     <div class="gpa-header" id="gpa-drag">
@@ -3249,7 +3287,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
 
       <div class="gpa-pane" data-pane="welcome">
         <div class="gpx-room gpa-welcome-flow">
-          <section class="gpx-hero gpx-hero-welcome" data-room="welcome" data-state="idle">
+          <section class="gpx-hero gpx-hero-welcome${heroFolds().welcome ? ' is-folded' : ''}" data-room="welcome" data-state="idle">${heroFoldBtn(!!heroFolds().welcome)}
             <div class="gpx-visual" aria-hidden="true">
               <div class="gv gv-orb"><i></i><i></i><span></span></div>
               <canvas id="gpa-welcome-3d" width="140" height="140" style="display:none;"></canvas>

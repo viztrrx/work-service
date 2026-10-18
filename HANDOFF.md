@@ -13,6 +13,21 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **Fold the top card** (owner, with a screenshot of Ask AI: "make it so
+  it is collapsible because on computer it covers the interface not letting
+  me see a good view of the answers"): every tab's hero (`gpxHero()` and the
+  welcome hero) gets a `.gpx-fold` arrow button (top-right). Folded
+  (`.gpx-hero.is-folded`) hides `.gpx-visual`, `.gpx-desc`, `.gpx-meta`,
+  `.gvh` and `.gpx-status` and keeps the title and its action buttons
+  inline (Ask AI: New chat, Study settings); 397 → 71 px in the test. One
+  delegated click handler on `panel`; state per room in localStorage
+  `gpa_hero_folded` (`{room: true}`), so it survives re-renders and reloads.
+  Test: signin-help.mjs (fold, reload, unfold). Screenshots:
+  docs/screenshots/9-fold-top-card. Same commit: chat-live.mjs's "dub
+  double-taps" check failed every run (also without this change): it tapped
+  the instant the message appeared, while the log was still redrawing, so the
+  two taps hit two different elements. It now waits 600 ms first (23/23
+  twice). Before that:
   **Fail closed** (owner: "make sure the planet icon replacing the plus
   doesn't bypass the approved users so no one brute forces their way in or
   finds a way in"): the icon calls `doSignUp` like ＋ did (server register:
@@ -731,7 +746,8 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 
 | Commit | What |
 |---|---|
-| (this) | YouTube to MP3 (owner): real FFmpeg in the browser, verified MP3, Save to My music |
+| (this) | Fold the top card (Ask AI and every tab) |
+| (earlier) | YouTube to MP3 (owner): real FFmpeg in the browser, verified MP3, Save to My music |
 | `5098fca`, `f748097` | Subscribe page: own PIN after paying, no paying twice, contributions note |
 | `4944c8b` | Subscribe page: one-time contributions ($8+) from members |
 | `c9d49b1` | Refund policy: no refunds (billing errors only) |
