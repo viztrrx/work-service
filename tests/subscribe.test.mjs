@@ -90,6 +90,7 @@ test('subscribe: Stripe pieces (signature, periods, price)', async () => {
 test('subscribe: pay → approved as a monthly subscriber; sign-up code; renewals; cancel', async () => {
   const st = stubStripe();
   const t = setup();
+  const paid = (c) => c.subscriptions.filter((x) => !x.auto);
   try {
     await t.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: ['old'] } } });
     // The page.
@@ -99,7 +100,11 @@ test('subscribe: pay → approved as a monthly subscriber; sign-up code; renewal
     assert.equal(page.headers.get('X-Frame-Options'), 'DENY');
     // Names.
     assert.equal((await t.call('/subscribe/check?user=boss')).data.ok, false, 'the owner’s name');
-    assert.equal((await t.call('/subscribe/check?user=old')).data.ok, false, 'already approved');
+    // "old" is on Allowed users without a subscription: an automatic month (to the 1st), so they may pay.
+    const old = (await t.call('/subscribe/check?user=old')).data;
+    assert.equal(old.ok, true, 'on an automatic month: may subscribe');
+    assert.match(old.note, /has free access until .+ Subscribing starts your paid month now/);
+    assert.equal(old.canContribute, undefined, 'not a paying subscriber, so no contribution');
     assert.equal((await t.call('/subscribe/check?user=bad%20name')).data.ok, false);
     assert.equal((await t.call('/subscribe/check?user=newkid')).data.ok, true);
     // Checkout.
@@ -114,18 +119,18 @@ test('subscribe: pay → approved as a monthly subscriber; sign-up code; renewal
     assert.equal((await t.call('/subscribe/check?user=newkid')).data.ok, false);
     // Not paid yet: not approved.
     assert.equal((await t.call('/subscribe/status?session=' + sid)).data.pending, true);
-    assert.equal((await t.cfg()).subscriptions.length, 0);
+    assert.equal(paid(await t.cfg()).length, 0);
     // A forged webhook (wrong secret) changes nothing.
     const forged = await t.hook({ id: 'evt_x', type: 'checkout.session.completed', data: { object: { ...st.sessions.get(sid), status: 'complete', payment_status: 'paid', subscription: 'sub_123' } } }, { secret: 'whsec_wrong' });
     assert.equal(forged.status, 400);
-    assert.equal((await t.cfg()).subscriptions.length, 0);
+    assert.equal(paid(await t.cfg()).length, 0);
     // Stripe: paid.
     const s = st.pay(sid);
     const ok = await t.hook({ id: 'evt_1', type: 'checkout.session.completed', data: { object: s } });
     assert.equal(ok.status, 200);
     let c = await t.cfg();
-    assert.equal(c.subscriptions.length, 1);
-    const sub = c.subscriptions[0];
+    assert.equal(paid(c).length, 1);
+    const sub = paid(c)[0];
     assert.equal(sub.user, 'NewKid');
     assert.equal(sub.active, true);
     assert.ok(sub.expiresAt > Date.now() + 30 * DAY, 'until the paid period ends (+1 day grace)');
@@ -151,21 +156,21 @@ test('subscribe: pay → approved as a monthly subscriber; sign-up code; renewal
     const end2 = Math.floor((Date.now() + 61 * DAY) / 1000);
     await t.hook({ id: 'evt_2', type: 'invoice.paid', data: { object: { id: 'in_2', object: 'invoice', billing_reason: 'subscription_cycle', amount_paid: 1380, parent: { subscription_details: { subscription: 'sub_123', metadata: { user: 'NewKid' } } }, lines: { data: [{ period: { end: end2 } }] } } } });
     c = await t.cfg();
-    assert.equal(c.subscriptions[0].expiresAt, end2 * 1000 + DAY);
+    assert.equal(paid(c)[0].expiresAt, end2 * 1000 + DAY);
     assert.deepEqual(c.ledger.map((x) => x.amount), [13.8, 13.8]);
     // The first invoice (subscription_create) is the checkout payment: not counted twice.
     await t.hook({ id: 'evt_3', type: 'invoice.paid', data: { object: { id: 'in_1', object: 'invoice', billing_reason: 'subscription_create', amount_paid: 1380, parent: { subscription_details: { subscription: 'sub_123', metadata: { user: 'NewKid' } } }, lines: { data: [{ period: { end: end2 } }] } } } });
     assert.equal((await t.cfg()).ledger.length, 2);
     // They turn off renewal: still active until the end, but no longer renewing.
     await t.hook({ id: 'evt_4', type: 'customer.subscription.updated', data: { object: { id: 'sub_123', object: 'subscription', cancel_at_period_end: true, metadata: { user: 'NewKid' } } } });
-    assert.equal((await t.cfg()).subscriptions[0].autoRenew, false);
-    assert.equal((await t.cfg()).subscriptions[0].active, true);
+    assert.equal(paid(await t.cfg())[0].autoRenew, false);
+    assert.equal(paid(await t.cfg())[0].active, true);
     // The subscription ends: access ends at the next sweep (within 5 minutes).
     await t.hook({ id: 'evt_5', type: 'customer.subscription.deleted', data: { object: { id: 'sub_123', object: 'subscription', metadata: { user: 'NewKid' } } } });
     await worker.scheduled({ cron: '*/5 * * * *' }, t.env, { waitUntil() {} });
     await new Promise((r) => setTimeout(r, 50));
     c = await t.cfg();
-    assert.equal(c.subscriptions[0].active, false);
+    assert.equal(paid(c)[0].active, false);
     assert.ok(!(await t.call('/admin/config/view', { headers: owner })).data.config.allowlist.users.includes('newkid'), 'off Allowed users');
   } finally { st.restore(); }
 });

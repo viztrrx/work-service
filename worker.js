@@ -460,16 +460,77 @@ function addSubPeriod(from, period) {
   t.setUTCDate(Math.min(day, last));
   return t.getTime();
 }
+// The owner's rule for Allowed users: a name on the list that was never made
+// a subscriber gets one automatically, from the 1st of this month to the 1st
+// of next (owner's time zone), and it ends like any other (taken off the
+// list, signed out) unless the owner renews it or the person pays. Staff
+// (admins, moderators) and the owner stay unlimited. A name that ever had a
+// subscription is left alone: it needs a Renew, so an old copy of the list
+// can't hand out a free month.
+function zonedParts(ts, tz) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23' })
+    .formatToParts(new Date(ts)).map((x) => [x.type, x.value]));
+  return { y: +p.year, m: +p.month, d: +p.day, h: +p.hour % 24, mi: +p.minute, s: +p.second };
+}
+// Midnight on the 1st of month m (1-12; 13 = January next year) in tz, as a timestamp.
+function zonedMonthStart(y, m, tz) {
+  const want = Date.UTC(y, m - 1, 1);
+  let t = want;
+  for (let i = 0; i < 3; i++) {   // settle on the zone's offset at that moment (DST)
+    const p = zonedParts(t, tz);
+    t += want - Date.UTC(p.y, p.m - 1, p.d, p.h, p.mi, p.s);
+  }
+  return t;
+}
+function monthBounds(now, tz) {
+  const p = zonedParts(now, tz);
+  return { start: zonedMonthStart(p.y, p.m, tz), end: zonedMonthStart(p.y, p.m + 1, tz) };
+}
+async function isStaffName(kv, key) {
+  try { const a = await kv.get('acct:' + key, 'json'); return !!a && (ROLE_RANK_V2[a.role] || 0) >= 1; } catch (e) { return false; }
+}
+// Adds the automatic month for listed names that never had a subscription.
+// Changes cfg in place; returns the names added (the caller saves cfg).
+async function autoSubscribeListed(env, cfg, now = Date.now()) {
+  const kv = env && env.TELEMETRY;
+  const a = cfg && cfg.allowlist;
+  if (!kv || !a || !a.on || !Array.isArray(a.users) || !a.users.length) return [];
+  cfg.subscriptions = cfg.subscriptions && typeof cfg.subscriptions === 'object' ? cfg.subscriptions : {};
+  const owner = String((env && env.OWNER) || 'viztrrx').toLowerCase();
+  const { start, end } = monthBounds(now, (env && env.OWNER_TZ) || 'America/New_York');
+  const added = [];
+  for (const key of a.users) {
+    const k = String(key || '').toLowerCase();
+    if (!k || k === owner || cfg.subscriptions[k]) continue;
+    if (await isStaffName(kv, k)) continue;
+    let user = k;
+    try { const acct = await kv.get('acct:' + k, 'json'); if (acct && acct.user) user = acct.user; } catch (e) { /* the list's spelling */ }
+    cfg.subscriptions[k] = { user, startedAt: start, expiresAt: end, period: '1m', note: 'Automatic: on Allowed users', auto: true, history: [{ at: now, action: 'auto', period: '1m', from: start }] };
+    added.push(user);
+  }
+  return added;
+}
+// Several alerts at once become one ("5 subscriptions ended: …").
+async function notifySubs(env, items, one, many) {
+  if (!items.length) return;
+  if (items.length <= 3) { for (const x of items) await notifyOwner(env, one(x)).catch(() => {}); return; }
+  await notifyOwner(env, many(items)).catch(() => {});
+}
 async function sweepSubscriptions(env, now = Date.now()) {
   const kv = env && env.TELEMETRY;
-  if (!kv) return { ended: [], reminded: [] };
+  if (!kv) return { ended: [], reminded: [], added: [] };
   const cfg = await kv.get('config', 'json');
-  const subs = cfg && cfg.subscriptions;
-  if (!subs || !Object.keys(subs).length) return { ended: [], reminded: [] };
+  if (!cfg) return { ended: [], reminded: [], added: [] };
+  const added = await autoSubscribeListed(env, cfg, now);
+  const subs = cfg.subscriptions;
+  if (!subs || !Object.keys(subs).length) return { ended: [], reminded: [], added };
   const ended = [], reminded = [];
+  let dropped = 0;
   for (const [key, s] of Object.entries(subs)) {
     if (!s || s.ended) continue;
     if (s.expiresAt <= now) {
+      // Made an admin or moderator after getting the automatic month: staff stay unlimited.
+      if (s.auto && await isStaffName(kv, key)) { delete subs[key]; dropped++; continue; }
       s.ended = true; s.endedAt = now;
       if (cfg.allowlist && Array.isArray(cfg.allowlist.users)) cfg.allowlist.users = cfg.allowlist.users.filter((u) => u !== key);
       ended.push(s.user);
@@ -478,16 +539,17 @@ async function sweepSubscriptions(env, now = Date.now()) {
       reminded.push(s);
     }
   }
-  if (!ended.length && !reminded.length) return { ended, reminded: [] };
+  if (!ended.length && !reminded.length && !added.length && !dropped) return { ended, reminded: [], added };
   await kv.put('config', JSON.stringify(cfg));
   const when = (ts) => new Date(ts).toLocaleString('en-US', { timeZone: (env && env.OWNER_TZ) || 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-  for (const u of ended) {
-    await notifyOwner(env, { cat: 'subs', title: u + '’s subscription ended', body: u + ' was taken off your allowed users and can’t sign in until you renew it.', url: adminLink('security', { focus: 'subs', user: u }) }).catch(() => {});
-  }
-  for (const s of reminded) {
-    await notifyOwner(env, { cat: 'subs', title: s.user + '’s subscription ends soon', body: 'Ends ' + when(s.expiresAt) + '. Renew it in Admin → Security → Subscribers.', url: adminLink('security', { focus: 'subs', user: s.user }) }).catch(() => {});
-  }
-  return { ended, reminded: reminded.map((s) => s.user) };
+  const names = (xs) => xs.slice(0, 8).join(', ') + (xs.length > 8 ? ' and ' + (xs.length - 8) + ' more' : '');
+  await notifySubs(env, ended,
+    (u) => ({ cat: 'subs', title: u + '’s subscription ended', body: u + ' was taken off your allowed users and can’t sign in until you renew it.', url: adminLink('security', { focus: 'subs', user: u }) }),
+    (xs) => ({ cat: 'subs', title: xs.length + ' subscriptions ended', body: names(xs) + ' were taken off your allowed users. Renew anyone who should keep access.', url: adminLink('security', { focus: 'subs' }) }));
+  await notifySubs(env, reminded,
+    (s) => ({ cat: 'subs', title: s.user + '’s subscription ends soon', body: 'Ends ' + when(s.expiresAt) + '. Renew it in Admin → Security → Subscribers.', url: adminLink('security', { focus: 'subs', user: s.user }) }),
+    (xs) => ({ cat: 'subs', title: xs.length + ' subscriptions end soon', body: names(xs.map((s) => s.user)) + ': the soonest ends ' + when(Math.min(...xs.map((s) => s.expiresAt))) + '. Renew them in Admin → Security → Subscribers.', url: adminLink('security', { focus: 'subs' }) }));
+  return { ended, reminded: reminded.map((s) => s.user), added };
 }
 
 async function checkPresence(env, ownerName, origin, { force = false } = {}) {
@@ -1303,14 +1365,16 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       // A subscriber gets in exactly while their paid time lasts, whatever
       // the list says (so a stale list can't let an expired one back in).
       const sub = subscriptionOf(cfg, u);
-      if (sub) return sub.expiresAt > Date.now();
-      return Array.isArray(a.users) && a.users.includes(u);
+      const listed = Array.isArray(a.users) && a.users.includes(u);
+      // An automatic month (see autoSubscribeListed) also needs the name on the list.
+      if (sub) return sub.expiresAt > Date.now() && (!sub.auto || listed);
+      return listed;
     };
     // The caller's own subscription, for "12 days left" in their console.
     const mySubscription = (cfg, user) => {
       const s = subscriptionOf(cfg, user);
       if (!s || s.expiresAt <= Date.now() || String(user).toLowerCase() === OWNER) return null;
-      return { startedAt: s.startedAt, expiresAt: s.expiresAt, period: s.period, ...(s.autoRenew ? { autoRenew: true } : {}) };
+      return { startedAt: s.startedAt, expiresAt: s.expiresAt, period: s.period, ...(s.autoRenew ? { autoRenew: true } : {}), ...(s.auto ? { auto: true } : {}) };
     };
     // Why a name is refused, in words for that person.
     const deniedReason = (cfg, user) => (subscriptionOf(cfg, user) ? SUB_ENDED : ACCESS_DENIED);
@@ -1758,6 +1822,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       const cfg = await getConfig(kv);
       cfg.subscriptions = cfg.subscriptions && typeof cfg.subscriptions === 'object' ? cfg.subscriptions : {};
       const now = Date.now();
+      // The automatic month for listed names, so the card shows it right away.
+      if ((await autoSubscribeListed(env, cfg, now)).length) await kv.put('config', JSON.stringify(cfg));
       const view = () => {
         const list = Object.values(cfg.subscriptions).map((s) => ({ ...s, active: s.expiresAt > now, daysLeft: Math.max(0, Math.ceil((s.expiresAt - now) / 864e5)) }));
         list.sort((a, b) => (b.active - a.active) || (a.active ? a.expiresAt - b.expiresAt : b.expiresAt - a.expiresAt));
@@ -1786,7 +1852,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       const users = new Set(((cfg.allowlist && cfg.allowlist.users) || []).map((u) => String(u).toLowerCase()));
       const cur = cfg.subscriptions[key];
       if (action === 'add' || action === 'renew') {
-        if (action === 'add' && cur && cur.expiresAt > now) return json({ error: name + ' is already subscribed until ' + new Date(cur.expiresAt).toISOString().slice(0, 10) + '. Use Renew to add time.' }, 409);
+        if (action === 'add' && cur && cur.expiresAt > now && !cur.auto) return json({ error: name + ' is already subscribed until ' + new Date(cur.expiresAt).toISOString().slice(0, 10) + '. Use Renew to add time.' }, 409);
         if (action === 'renew' && !cur) return json({ error: name + ' isn’t a subscriber yet. Add them first.' }, 404);
         // Renewing early adds the time on top of what is left; otherwise the
         // new period starts at the chosen start date (default: now).
@@ -2943,6 +3009,12 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         // A name taken off the list loses its invite too.
         const gone = ((cfgBefore.allowlist && cfgBefore.allowlist.users) || []).filter((u) => !users.includes(u));
         for (const u of gone) { try { await kv.delete(inviteKey(u)); } catch (e) { /* best-effort */ } }
+        // Taken off the list: an automatic month goes with it (a paid one stays).
+        for (const u of gone) { if (cfg.subscriptions && cfg.subscriptions[u] && cfg.subscriptions[u].auto) delete cfg.subscriptions[u]; }
+        // Put back on the list after an automatic month ended: this month's, like anyone listed.
+        const back = users.filter((u) => !((cfgBefore.allowlist && cfgBefore.allowlist.users) || []).includes(u));
+        for (const u of back) { const s = cfg.subscriptions && cfg.subscriptions[u]; if (s && s.auto && (s.ended || s.expiresAt <= Date.now())) delete cfg.subscriptions[u]; }
+        await autoSubscribeListed(env, cfg);
       }
       if ('monthlyQuota' in body) cfg.monthlyQuota = Math.max(0, parseInt(body.monthlyQuota, 10) || 0);
       if ('rpm' in body) cfg.rpm = Math.max(0, parseInt(body.rpm, 10) || 0);
@@ -3108,13 +3180,16 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         if (key === OWNER) return { error: 'That name is taken. Pick another.' };
         const cfg = await getConfig(kv);
         const cur = cfg.subscriptions && cfg.subscriptions[key];
+        // An automatic month on Allowed users isn't paid: they may subscribe (it replaces it).
+        const autoMonth = !!cur && cur.auto && !cur.ended && cur.expiresAt > Date.now();
         // Already paid up: never a second subscription; contributing is their only option.
-        if (cur && !cur.ended && cur.expiresAt > Date.now()) return { error: '“' + name + '” is already subscribed for this month, so it can’t be paid for again. Contributions are welcome instead.', subscribed: true, key, canContribute: true, hasAccount: !!(await getAcct(kv, key)) };
-        if (cfg.allowlist && cfg.allowlist.on && (cfg.allowlist.users || []).includes(key)) return { error: '“' + name + '” already has access. No need to subscribe.' };
+        if (cur && !cur.ended && cur.expiresAt > Date.now() && !autoMonth) return { error: '“' + name + '” is already subscribed for this month, so it can’t be paid for again. Contributions are welcome instead.', subscribed: true, key, canContribute: true, hasAccount: !!(await getAcct(kv, key)) };
+        if (!autoMonth && cfg.allowlist && cfg.allowlist.on && (cfg.allowlist.users || []).includes(key)) return { error: '“' + name + '” already has access. No need to subscribe.' };
         const hold = await kv.get('subhold:' + key, 'json');
         if (hold && !(attempt && hold.attempt === attempt) && hold.until > Date.now()) return { error: 'Someone is paying for “' + name + '” right now. Pick another name or try again in 30 minutes.' };
         const acct = await getAcct(kv, key);
-        return { ok: true, user: name, key, note: acct ? '“' + name + '” already has an account. Only use it if it’s yours: you’ll sign in with its PIN.' : '' };
+        const until = autoMonth ? new Date(cur.expiresAt).toLocaleDateString('en-US', { timeZone: (env && env.OWNER_TZ) || 'America/New_York', month: 'long', day: 'numeric' }) : '';
+        return { ok: true, user: name, key, note: autoMonth ? '“' + name + '” has free access until ' + until + '. Subscribing starts your paid month now.' : acct ? '“' + name + '” already has an account. Only use it if it’s yours: you’ll sign in with its PIN.' : '' };
       };
       // Adds (or extends) a paid subscription; idempotent per payment (ref).
       const approveSub = async (user, info) => {
@@ -3124,7 +3199,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         const ledger = Array.isArray(cfg.subLedger) ? cfg.subLedger : [];
         const dup = !!info.ref && ledger.some((x) => x && x.ref === info.ref);
         const cur = cfg.subscriptions[key];
-        const active = !!cur && !cur.ended && cur.expiresAt > now;
+        // A paid month replaces an automatic one (it doesn't stack on it).
+        const active = !!cur && !cur.ended && cur.expiresAt > now && !cur.auto;
         const amount = Math.round(Math.max(0, Number(info.amount) || 0) * 100) / 100;
         if (!dup) {
           const expiresAt = Math.max((info.periodEnd || addSubPeriod(now, '1m')) + GRACE_MS, active ? cur.expiresAt : 0);
@@ -3168,7 +3244,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           const cfg = await getConfig(kv);
           const cur = cfg.subscriptions && cfg.subscriptions[user.toLowerCase()];
           const ledger = Array.isArray(cfg.subLedger) ? cfg.subLedger : [];
-          const active = !!cur && !cur.ended && cur.expiresAt > Date.now();
+          const active = !!cur && !cur.ended && cur.expiresAt > Date.now() && !cur.auto;
           if (active && !ledger.some((x) => x && x.ref === sess.id) && !(cur.stripe && cur.stripe.subscription && cur.stripe.subscription === subId)) {
             const amount = Math.round(Math.max(0, Number(sess.amount_total) || 0)) / 100;
             cfg.subLedger = [...ledger, { user: cur.user, at: Date.now(), amount, action: 'duplicate', via: 'stripe', ref: sess.id }].slice(-1000);

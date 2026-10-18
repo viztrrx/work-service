@@ -13,6 +13,13 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **automatic month for Allowed users** + **Recent events folds** (owner:
+  "if i didn't put them as a subscriber but they are on the allowed list
+  their subscription starts on the beginning of the month and only lasts a
+  month… make the recent events collapsible"; chosen: at month end they
+  lose access like any subscriber; everyone listed except admins/moderators.
+  This deliberately changed things for people already on the list: from the
+  first sweep they're on a 1st-to-1st month). Before that:
   **YouTube to MP3** in Music → My music (owner only; owner's brief: a
   real, tested FFmpeg converter that respects YouTube's rules). Before that:
   the subscribe page lets a **new subscriber pick their own PIN**, a paid-up
@@ -374,6 +381,24 @@ day, 14 days; not system notices), `trivia` (#public only). Memory only:
   before/at the end, subscriber countdown strip `#gpa-substrip`, and (round
   1) a once-a-day "your access ends in N days" pop-up in the last 3 days
   (`remindSubscriber`, removed on sign-out). Tests: `subscribers.mjs`.
+  **Automatic month**: `autoSubscribeListed()` (runs first in the sweep, on
+  `/admin/subscriptions` and after `/admin/config` saves) gives every name on
+  Allowed users with no subscription record, not the owner and not staff
+  (`isStaffName`: role rank ≥ 1), `{auto: true, period: '1m'}` from
+  `monthBounds()` (1st 00:00 to next 1st 00:00 in `OWNER_TZ`, default
+  America/New_York, DST-safe via `zonedMonthStart`). Only while
+  `allowlist.on`. No ledger entry. Ends like any subscription (taken off the
+  list); a name made staff during the month has the record dropped at the
+  end instead. Taking a name off the list deletes its auto record; putting a name back on
+  the list (`/admin/config`, newly added names only) clears an ended auto
+  record so it gets the current month (ended paid records still need Renew);
+  `allowedUser` also refuses an auto record whose name isn't listed. Add
+  replaces it; `/subscribe/check` lets an auto name pay ("has free access
+  until …"), and `approveSub` treats it as not active (paid month from now).
+  Alerts: `notifySubs` batches (more than 3 → one notification). The
+  Security page's **Recent events** is a `foldCard` (`wireFold`, closed by
+  default, remembered in `gac_sec_events_open`; the `focus=events` deep link
+  opens it). Tests: worker.test.mjs "automatic month", subscribers.mjs step 7.
 
 ### 4.2 Chat
 All rooms live in `ChatRoom` DOs. The console polls every 3 s while Chat is
@@ -564,7 +589,7 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 ## 6. Testing
 
 ```bash
-npm test                                   # node --test tests/*.test.mjs (116 tests)
+npm test                                   # node --test tests/*.test.mjs (117 tests)
 npx wrangler deploy --dry-run --outdir /tmp/x   # bundle/config check, deploys nothing
 # Browser suites (Playwright vs local workerd), each takes an output dir for screenshots:
 node tests/browser/eaglercraft.e2e.mjs     # 83
@@ -576,7 +601,7 @@ node tests/browser/allowlist.mjs           # 6
 node tests/browser/access-requests.mjs     # 12
 node tests/browser/one-session.mjs         # 15
 node tests/browser/same-computer.mjs       # 12
-node tests/browser/subscribers.mjs         # 16
+node tests/browser/subscribers.mjs         # 23
 node tests/browser/owner-tools.mjs         # 15
 node tests/browser/staff-chat.mjs          # 19
 node tests/browser/chat-burst.mjs          # 4
@@ -590,7 +615,7 @@ node tests/browser/my-music.mjs            # 15
 node tests/browser/admin-app.mjs           # 20
 node tests/browser/playlists.mjs           # 21
 node tests/browser/mp3.mjs                 # 51 (+1 NOT RUN: real YouTube download; needs ffmpeg/ffprobe)
-node tests/browser/subscribe.mjs           # 36
+node tests/browser/subscribe.mjs           # 37
 node tests/browser/usage-meter.mjs         # 16
 node tests/browser/usage-meter-sizes.mjs   # 25
 node tests/browser/ask-photo-size.mjs      # 6

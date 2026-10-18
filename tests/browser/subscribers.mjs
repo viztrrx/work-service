@@ -7,6 +7,8 @@
 //      renzo is signed out with "Your subscription has ended…"
 //   5  renzo's sign-in screen: ended message + "Ask to renew"
 //   6  owner renews; renzo gets back in
+//   7  a name put on Allowed users without being made a subscriber gets the
+//      automatic month (1st to 1st), and Security → Recent events folds away
 // (The exact-time cut-off, calendar months, reminders and the cron clean-up
 // are covered with a simulated clock in tests/worker.test.mjs and
 // tests/push.test.mjs.)
@@ -30,6 +32,7 @@ const browser = await launch();
 const R = (page, fn, arg) => page.evaluate(([f, a]) => (0, eval)(f)(document.getElementById('gpa-root-host').shadowRoot, a), [String(fn), arg]);
 const run = Date.now().toString(36).slice(-4);
 const RENZO = 'renzo' + run;
+const MIRA = 'mira' + run;
 const sr = (sel) => `#gpa-root-host >> ${sel}`;
 const shot = (page, name) => page.screenshot({ path: path.join(OUT, name) });
 
@@ -162,6 +165,46 @@ try {
   await shot(owner.page, '06-renewed.png');
   r = await signUp(renzo.page, RENZO, 'signin');
   check('renzo can sign in again', r.inside, JSON.stringify(r));
+
+  // 7: mira is put on Allowed users but never made a subscriber: the automatic month.
+  await admin('/admin/config', { allowlist: { on: true, users: [RENZO, MIRA] } });
+  await R(owner.page, (root) => { root.querySelector('.gps-tab[data-asec="overview"]').click(); });
+  await owner.page.waitForTimeout(800);
+  await R(owner.page, (root) => root.querySelector('.gps-tab[data-asec="security"]').click());
+  await owner.page.waitForFunction((u) => [...document.getElementById('gpa-root-host').shadowRoot.querySelectorAll('.gac-subscr')].some((x) => x.dataset.user === u), MIRA, { timeout: 15000 }).catch(() => {});
+  const miraRow = await subRow(owner.page, MIRA);
+  const mStart = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const firstOf = (d) => d.toLocaleDateString('en-US', { month: 'short' }) + ' 1';
+  const nextMonth = new Date(mStart.getFullYear(), mStart.getMonth() + 1, 1);
+  check('mira (listed, not a subscriber) gets the automatic month: “Automatic · N days left”, 1st to 1st', miraRow && /Automatic · (\d+ days left|Ends today)/.test(miraRow) && miraRow.includes('Since ' + firstOf(mStart)) && miraRow.includes('ends ' + firstOf(nextMonth)) && /Automatic: on Allowed users/.test(miraRow), miraRow);
+  check('The card explains the automatic month', await R(owner.page, (root) => /gets one automatically: from the 1st of this month to the 1st of next/.test(root.querySelector('#gac-subs').textContent)));
+  check('mira is allowed in', (await (await fetch(env.workerUrl + '/access?user=' + MIRA)).json()).allowed === true);
+  await R(owner.page, (root, u) => [...root.querySelectorAll('.gac-subscr')].find((x) => x.dataset.user === u).scrollIntoView({ block: 'center' }), MIRA);
+  await owner.page.waitForTimeout(300);
+  await shot(owner.page, '07-mira-automatic.png');
+
+  // Recent events: folded by default, opens on tap, remembered.
+  const fold = () => R(owner.page, (root) => { const el = root.querySelector('#gac-sec-events'); const h = el.querySelector('.gac-fold-head'); const body = el.querySelector('.gac-fold-body'); return { exp: h.getAttribute('aria-expanded'), hidden: body.hidden, h: Math.round(el.getBoundingClientRect().height), count: (el.querySelector('.gac-fold-count') || {}).textContent || '' }; });
+  await R(owner.page, (root) => root.querySelector('#gac-sec-events').scrollIntoView({ block: 'start' }));
+  await owner.page.waitForTimeout(300);
+  let f = await fold();
+  check('Recent events starts folded: just its title and a count', f.exp === 'false' && f.hidden && f.h < 90 && /^\d+$/.test(f.count), JSON.stringify(f));
+  await shot(owner.page, '08-events-folded.png');
+  await owner.page.click(sr('#gac-sec-events .gac-fold-head'));
+  await owner.page.waitForTimeout(400);
+  const fOpen = await fold();
+  check('Tapping it opens the events', fOpen.exp === 'true' && !fOpen.hidden && fOpen.h > f.h, JSON.stringify(fOpen));
+  await shot(owner.page, '09-events-open.png');
+  await R(owner.page, (root) => { root.querySelector('.gps-tab[data-asec="overview"]').click(); });
+  await owner.page.waitForTimeout(800);
+  await R(owner.page, (root) => root.querySelector('.gps-tab[data-asec="security"]').click());
+  await owner.page.waitForFunction(() => !!document.getElementById('gpa-root-host').shadowRoot.querySelector('#gac-sec-events'), null, { timeout: 15000 }).catch(() => {});
+  f = await fold();
+  check('Open stays open when coming back', f.exp === 'true' && !f.hidden, JSON.stringify(f));
+  await owner.page.click(sr('#gac-sec-events .gac-fold-head'));
+  await owner.page.waitForTimeout(300);
+  f = await fold();
+  check('Tapping again folds it', f.exp === 'false' && f.hidden, JSON.stringify(f));
   check('No page errors (owner)', owner.page._errors.length === 0, owner.page._errors.slice(0, 2).join(' | '));
   check('No page errors (renzo)', renzo.page._errors.length === 0, renzo.page._errors.slice(0, 2).join(' | '));
   await owner.ctx.close();
@@ -169,6 +212,7 @@ try {
 } finally {
   await admin('/admin/config', { allowlist: { on: false, users: [] } }).catch(() => {});
   await admin('/admin/subscriptions', { action: 'delete', user: RENZO }).catch(() => {});
+  await admin('/admin/subscriptions', { action: 'delete', user: MIRA }).catch(() => {});
   await browser.close();
   await env.close();
   await scriptHost.close();

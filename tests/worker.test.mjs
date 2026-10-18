@@ -912,7 +912,7 @@ test('subscribers: paid access for a set time, cut off exactly when it ends, the
     assert.equal((await c.call('/access?user=renzo')).data.allowed, false);
     assert.equal((await env.TELEMETRY.get('config', 'json')).allowlist.users.includes('renzo'), false);
     await subs({ action: 'delete', user: 'renzo' });
-    assert.equal((await subs({ action: 'list' })).data.subscriptions.length, 0);
+    assert.equal((await subs({ action: 'list' })).data.subscriptions.filter((x) => !x.auto).length, 0, 'no paid subscriptions left (kj has the automatic month)');
     assert.equal((await c.call('/access?user=renzo')).data.error, 'Unable to create account', 'back to the plain message');
 
     // Approving an access request from someone whose subscription ended lets them in for free.
@@ -926,7 +926,100 @@ test('subscribers: paid access for a set time, cut off exactly when it ends, the
     // Turning the list on by itself keeps the names on it.
     await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: false } } });
     await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true } } });
-    assert.ok((await env.TELEMETRY.get('config', 'json')).allowlist.users.includes('kj'));
+    assert.ok((await env.TELEMETRY.get('config', 'json')).allowlist.users.includes('dub'));
+  } finally { Date.now = realNow; }
+});
+
+test('subscribers: listed names never made subscribers get an automatic month (1st to 1st, owner time); staff stay unlimited', async () => {
+  const env = makeEnv(); const c = makeClient(env);
+  const subs = (body) => c.call('/admin/subscriptions', { method: 'POST', headers: owner, body });
+  const realNow = Date.now;
+  const at = (t) => { Date.now = () => t; };
+  const cron = async () => { const pend = []; await worker.scheduled({ cron: '*/5 * * * *' }, env, { waitUntil: (p) => pend.push(p) }); await Promise.all(pend); };
+  const cfg = () => env.TELEMETRY.get('config', 'json');
+  try {
+    at(Date.parse('2026-10-18T15:00:00Z'));
+    // A moderator and an admin on the list stay unlimited; the owner never needs one.
+    await signUp(c, 'mod1'); await signUp(c, 'adm1');
+    await c.call('/admin/user/action', { method: 'POST', headers: owner, body: { u: 'mod1', action: 'setrole', role: 'moderator' } });
+    await c.call('/admin/user/action', { method: 'POST', headers: owner, body: { u: 'adm1', action: 'setrole', role: 'admin' } });
+    const kay = await signUp(c, 'KayJay');
+    // A paid month that already ended (left on an old copy of the list) isn't renewed for free.
+    await subs({ action: 'add', user: 'old1', period: '1m' });
+    await subs({ action: 'end', user: 'old1' });
+    await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: ['kayjay', 'ann', 'mod1', 'adm1', 'boss', 'old1'] } } });
+    let c1 = await cfg();
+    const kj = c1.subscriptions.kayjay;
+    assert.equal(kj.auto, true);
+    assert.equal(kj.user, 'KayJay', 'the account’s spelling');
+    assert.equal(kj.startedAt, Date.parse('2026-10-01T04:00:00Z'), 'midnight Oct 1, New York (EDT)');
+    assert.equal(kj.expiresAt, Date.parse('2026-11-01T04:00:00Z'), 'midnight Nov 1, New York');
+    assert.equal(kj.note, 'Automatic: on Allowed users');
+    assert.ok(c1.subscriptions.ann && c1.subscriptions.ann.auto, 'a listed name without an account too');
+    for (const k of ['mod1', 'adm1', 'boss']) assert.equal(c1.subscriptions[k], undefined, k + ' stays unlimited');
+    assert.equal(c1.subscriptions.old1.auto, undefined, 'the old paid record is kept as it was');
+    assert.equal((await c.call('/access?user=old1')).data.allowed, false, 'and still needs a Renew');
+    assert.equal((c1.subLedger || []).filter((x) => x.user === 'KayJay').length, 0, 'nothing recorded as paid');
+    for (const u of ['kayjay', 'ann', 'mod1', 'adm1']) assert.equal((await c.call('/access?user=' + u)).data.allowed, true, u);
+    // The card shows them, and the person's own strip knows it's the automatic month.
+    const list = (await subs({ action: 'list' })).data.subscriptions;
+    assert.deepEqual(list.filter((x) => x.auto).map((x) => x.user).sort(), ['KayJay', 'ann']);
+    const me = (await c.call('/status?user=KayJay', { headers: sess(kay.data.token) })).data;
+    assert.deepEqual([me.subscription && me.subscription.auto, me.subscription && me.subscription.expiresAt], [true, Date.parse('2026-11-01T04:00:00Z')]);
+    // Taken off the list: the automatic month goes too, and they're out.
+    await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: ['kayjay', 'mod1', 'adm1', 'old1', 'zed'] } } });
+    c1 = await cfg();
+    assert.equal(c1.subscriptions.ann, undefined);
+    assert.equal((await c.call('/access?user=ann')).data.allowed, false);
+    assert.ok(c1.subscriptions.zed && c1.subscriptions.zed.auto, 'a name added later gets this month too');
+    // The owner adds KayJay as a real subscriber: it replaces the automatic month.
+    const add = await subs({ action: 'add', user: 'KayJay', period: '1m', amount: 14, note: 'cash' });
+    assert.equal(add.status, 200, JSON.stringify(add.data));
+    const kj2 = add.data.subscriptions.find((x) => x.user === 'KayJay');
+    assert.deepEqual([kj2.auto, kj2.expiresAt, kj2.note], [undefined, Date.parse('2026-11-18T15:00:00Z'), 'cash']);
+    // zed is made a moderator during the month: not cut off at the end.
+    await signUp(c, 'zed');
+    assert.equal((await c.call('/admin/user/action', { method: 'POST', headers: owner, body: { u: 'zed', action: 'setrole', role: 'moderator' } })).status, 200);
+    // Nov 1, just after midnight New York: the automatic months end (zed is staff now: kept, unlimited).
+    at(Date.parse('2026-11-01T04:05:00Z'));
+    await cron();
+    c1 = await cfg();
+    assert.equal(c1.subscriptions.zed, undefined, 'staff: the automatic month is dropped, not ended');
+    assert.ok(c1.allowlist.users.includes('zed'));
+    assert.equal((await c.call('/access?user=zed')).data.allowed, true);
+    assert.equal((await c.call('/access?user=kayjay')).data.allowed, true, 'paid until Nov 18');
+    // A name listed in November gets Nov 1 → Dec 1 (EST after the clocks change).
+    at(Date.parse('2026-11-10T12:00:00Z'));
+    await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: [...c1.allowlist.users, 'nova'] } } });
+    const nova = (await cfg()).subscriptions.nova;
+    assert.deepEqual([nova.startedAt, nova.expiresAt], [Date.parse('2026-11-01T04:00:00Z'), Date.parse('2026-12-01T05:00:00Z')]);
+    // Dec 1: nova's month ends like any subscription: off the list, refused with the usual reason.
+    at(Date.parse('2026-12-01T05:01:00Z'));
+    await cron();
+    c1 = await cfg();
+    assert.equal(c1.subscriptions.nova.ended, true);
+    assert.equal(c1.allowlist.users.includes('nova'), false);
+    const acc = (await c.call('/access?user=nova')).data;
+    assert.deepEqual([acc.allowed, acc.error], [false, 'Your subscription has ended. Ask the owner to renew it.']);
+    // A sweep with the old list (nova still on it) doesn't bring her back…
+    await cron();
+    assert.equal((await cfg()).subscriptions.nova.ended, true);
+    // …but the owner putting nova back on the list gives her December (1st to 1st).
+    at(Date.parse('2026-12-03T15:00:00Z'));
+    await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: [...c1.allowlist.users, 'nova'] } } });
+    const nova2 = (await cfg()).subscriptions.nova;
+    assert.deepEqual([nova2.auto, nova2.ended, nova2.startedAt, nova2.expiresAt], [true, undefined, Date.parse('2026-12-01T05:00:00Z'), Date.parse('2027-01-01T05:00:00Z')]);
+    assert.equal((await c.call('/access?user=nova')).data.allowed, true);
+    // An ended paid subscriber put back on the list still needs Renew.
+    await subs({ action: 'end', user: 'KayJay' });
+    const lst = (await cfg()).allowlist.users.filter((u) => u !== 'kayjay');
+    await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: lst } } });
+    await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: [...lst, 'kayjay'] } } });
+    assert.equal((await cfg()).subscriptions.kayjay.auto, undefined);
+    assert.equal((await c.call('/access?user=kayjay')).data.allowed, false, 'paid and ended: Renew, not a free month');
+    // With the list off, nothing is added.
+    await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: false, users: ['newbie'] } } });
+    assert.equal((await cfg()).subscriptions.newbie, undefined);
   } finally { Date.now = realNow; }
 });
 

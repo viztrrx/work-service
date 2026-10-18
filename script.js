@@ -780,7 +780,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     { at: '2026-10-18T23:30:00-04:00', commit: '', title: 'Subscribe page: pick your own PIN; no paying twice', parts: {
       console: ['feature', 'Subscribe page: after paying, a new subscriber picks their own PIN there and then just signs in; a name that’s already paid up can only contribute, never pay for the subscription again; a clear note that contributions are only for subscribers'] } },
     { at: '2026-10-18T23:45:00-04:00', commit: '', title: 'YouTube to MP3 (owner)', parts: {
-      music: ['feature', 'My music → YouTube to MP3 (owner only): FFmpeg on your device turns a video or audio file you own into a verified MP3 (128–320 kbps) with real progress and Cancel, then Download MP3 or Save to My music; a YouTube link shows the video’s details and how to get its audio legitimately'] } }
+      music: ['feature', 'My music → YouTube to MP3 (owner only): FFmpeg on your device turns a video or audio file you own into a verified MP3 (128–320 kbps) with real progress and Cancel, then Download MP3 or Save to My music; a YouTube link shows the video’s details and how to get its audio legitimately'] } },
+    { at: '2026-10-19T00:30:00-04:00', commit: '', title: 'Allowed users get a month automatically; Recent events folds', parts: {
+      admin: ['feature', 'Security → Subscribers: anyone on Allowed users you haven’t made a subscriber gets one automatically, from the 1st of the month to the 1st of the next (admins and moderators stay unlimited); Recent events folds away under its title'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -2190,6 +2192,14 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gac-subs-count { margin: 4px 0 0; }
       .gac-subs-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0 4px; }
       .gac-subs-totals.has-gifts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      /* Folding cards (Security → Recent events) */
+      .gac-fold-head { -webkit-appearance: none; appearance: none; background: none; border: 0; margin: 0; padding: 0; width: 100%; color: inherit; font: inherit; text-align: left; cursor: pointer; min-height: 32px; }
+      .gac-fold-head:focus-visible { outline: 2px solid var(--gpa-accent); outline-offset: 3px; border-radius: var(--gps-r2); }
+      .gac-fold-count { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--gpa-sub); font-variant-numeric: tabular-nums; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--gpa-border); }
+      .gac-fold-head::after { content: ''; margin-left: 10px; width: 8px; height: 8px; flex-shrink: 0; border-right: 1.6px solid var(--gpa-sub); border-bottom: 1.6px solid var(--gpa-sub); transform: rotate(45deg); transition: transform var(--gps-t2) var(--gps-ease); }
+      .gac-fold-head[aria-expanded="true"]::after { transform: rotate(225deg); }
+      .gac-fold-body[hidden] { display: none !important; }
+      @media (prefers-reduced-motion: reduce) { .gac-fold-head::after { transition: none; } }
       .gac-subs-totals > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--gpa-border); border-radius: var(--gps-r2); background: var(--gpa-field); min-width: 0; }
       .gac-subs-totals b { font-size: 17px; font-variant-numeric: tabular-nums; color: var(--gpa-text); }
       .gac-subs-totals span { font-size: 11.5px; color: var(--gpa-sub); }
@@ -20437,9 +20447,11 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     bar.querySelector('i').style.width = pct + '%';
     bar.setAttribute('aria-valuenow', String(pct));
     bar.setAttribute('aria-valuetext', (sameDay ? 'Ends today' : days + ' days left') + ', until ' + endDay);
-    subStripEl.querySelector('#gpa-substrip-note').textContent = left <= 3 * 864e5
-      ? 'Your subscription ends ' + (sameDay ? 'today at ' + endTime : endDay + ' at ' + endTime) + '. Ask the owner to renew to keep access.'
-      : 'Active since ' + new Date(sub.startedAt).toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · ends ' + endDay + ' at ' + endTime;
+    subStripEl.querySelector('#gpa-substrip-note').textContent = sub.auto
+      ? 'This month’s access (on the allowed list) ends ' + (sameDay ? 'today at ' + endTime : endDay + ' at ' + endTime) + '. Subscribe on the payment page, or ask the owner, to keep it.'
+      : left <= 3 * 864e5
+        ? 'Your subscription ends ' + (sameDay ? 'today at ' + endTime : endDay + ' at ' + endTime) + '. Ask the owner to renew to keep access.'
+        : 'Active since ' + new Date(sub.startedAt).toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · ends ' + endDay + ' at ' + endTime;
     subStripEl.hidden = false;
     if (left <= 3 * 864e5) remindSubscriber(sub, sameDay ? 'today at ' + endTime : (days === 1 ? 'tomorrow' : 'in ' + days + ' days') + ' (' + endDay + ', ' + endTime + ')');
   }
@@ -21221,6 +21233,19 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     // ---- Tiny rendering helpers (all data is escaped) ----
     const kpi = (label, value, detail, tone) => `<div class="gac-kpi ${tone || ''}"><div class="gac-kpi-k">${esc(label)}</div><div class="gac-kpi-v">${esc(value)}</div>${detail ? `<div class="gac-kpi-d">${esc(detail)}</div>` : ''}</div>`;
     const card = (title, inner, icon, id) => `<section ${id ? 'id="' + id + '" ' : ''}class="gpa-card gpx-card gac-card"><div class="gpx-card-head">${icon ? GPS_ICONS[icon] || '' : ''}<div class="gpa-card-title">${esc(title)}</div></div>${inner}</section>`;
+    // A card whose body folds away under its title (see wireFold); closed until opened.
+    const foldCard = (title, inner, icon, id, count) => `<section id="${id}" class="gpa-card gpx-card gac-card gac-fold"><button type="button" class="gpx-card-head gac-fold-head" aria-expanded="false" aria-controls="${id}-body">${icon ? GPS_ICONS[icon] || '' : ''}<span class="gpa-card-title">${esc(title)}</span>${count != null ? `<span class="gac-fold-count">${esc(String(count))}</span>` : ''}</button><div id="${id}-body" class="gac-fold-body" hidden>${inner}</div></section>`;
+    // Opens/closes a foldCard; remembers the choice on this device.
+    const wireFold = (root, id, key) => {
+      const el = root.querySelector('#' + id);
+      if (!el) return;
+      const head = el.querySelector('.gac-fold-head'), inner = el.querySelector('.gac-fold-body');
+      const set = (open) => { head.setAttribute('aria-expanded', String(open)); inner.hidden = !open; try { localStorage.setItem(key, open ? '1' : '0'); } catch (e) { /* ignore */ } };
+      let open = false;
+      try { open = localStorage.getItem(key) === '1'; } catch (e) { open = false; }
+      head.setAttribute('aria-expanded', String(open)); inner.hidden = !open;
+      head.addEventListener('click', () => set(head.getAttribute('aria-expanded') !== 'true'));
+    };
     const empty = (title, desc) => gpxEmpty({ icon: 'overview', title, desc, cls: 'gac-empty' });
     function bars(series, key, opts) {
       opts = opts || {};
@@ -21460,7 +21485,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           + (Object.keys(types).length ? '' : kpi('Security events', '0', 'last 7 days')) + `</div>`
           + `<div class="gpx-split"><div class="gpx-main">`
           + card('Events per day', bars(d.days, 'total', { label: 'Security events', cls: 'is-bad', emptyText: 'No security events in the last 7 days.' }), 'advanced')
-          + card('Recent events', d.recent.length ? `<div class="gac-table" role="table" aria-label="Recent security events"><div role="row" class="gac-tr gac-th"><span role="columnheader">When</span><span role="columnheader">Event</span><span role="columnheader">User</span><span role="columnheader">Route</span><span role="columnheader">Source</span></div>${d.recent.slice(0, 60).map((e) => `<div role="row" class="gac-tr"><span role="cell">${esc(when(e.ts))}</span><span role="cell">${esc(LABEL[e.type] || e.type)}${e.note ? ' <em>' + esc(e.note) + '</em>' : ''}</span><span role="cell">${esc(e.user || '—')}</span><span role="cell"><code>${esc(e.path || '')}</code></span><span role="cell"><code>${esc(e.ip || '')}</code></span></div>`).join('')}</div>` : empty('No security events', 'Failed sign-ins, lockouts, spoofed names and rate limits show up here.'), 'note', 'gac-sec-events')
+          + foldCard('Recent events', d.recent.length ? `<div class="gac-table" role="table" aria-label="Recent security events"><div role="row" class="gac-tr gac-th"><span role="columnheader">When</span><span role="columnheader">Event</span><span role="columnheader">User</span><span role="columnheader">Route</span><span role="columnheader">Source</span></div>${d.recent.slice(0, 60).map((e) => `<div role="row" class="gac-tr"><span role="cell">${esc(when(e.ts))}</span><span role="cell">${esc(LABEL[e.type] || e.type)}${e.note ? ' <em>' + esc(e.note) + '</em>' : ''}</span><span role="cell">${esc(e.user || '—')}</span><span role="cell"><code>${esc(e.path || '')}</code></span><span role="cell"><code>${esc(e.ip || '')}</code></span></div>`).join('')}</div>` : empty('No security events', 'Failed sign-ins, lockouts, spoofed names and rate limits show up here.'), 'note', 'gac-sec-events', Math.min(60, d.recent.length))
           + `</div><aside class="gpx-side">`
           + card('Sessions', `<ul class="gac-health"><li class="ok"><i></i><span>Accounts</span><em>${num(d.sessions.accounts)}</em></li><li class="ok"><i></i><span>Signed-in sessions</span><em>${num(d.sessions.active)}</em></li><li class="${d.sessions.disabled ? 'bad' : 'ok'}"><i></i><span>Disabled accounts</span><em>${num(d.sessions.disabled)}</em></li><li class="ok"><i></i><span>Active lockouts</span><em>${num(Object.values(d.lockouts).reduce((a, x) => a + x, 0))}</em></li></ul>`, 'users')
           + card('Policy', `<ul class="gac-health">`
@@ -21488,6 +21513,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
                 : `<div class="gac-req-actions">${a.invite ? '<button class="gps-btn" data-acct="invite-copy" type="button">Copy code</button><button class="gps-btn" data-acct="invite-revoke" type="button">Remove code</button>' : '<button class="gps-btn" data-acct="invite-make" type="button">Make invite code</button>'}</div>`)
               + `</li>`).join('') + `</ul>` : ''), 'account') : '')
           + `<div id="gac-legacy-security"></div></aside></div>`;
+        wireFold(b, 'gac-sec-events', 'gac_sec_events_open');
         // ---- Subscribers: paid access for a set time ----
         const subsEl = b.querySelector('#gac-subs');
         const fmtDay = (ts) => new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric', year: new Date(ts).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
@@ -21509,6 +21535,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           const giftTotal = gifts.reduce((n, x) => n + (Number(x.amount) || 0), 0);
           const giftsBy = (u) => gifts.filter((x) => String(x.user).toLowerCase() === String(u).toLowerCase()).reduce((n, x) => n + (Number(x.amount) || 0), 0);
           subsEl.innerHTML = `<p class="gps-hint">Add someone who paid for access. They can sign in right away, and when their time is up they’re signed out (“Your subscription has ended”) and taken off Allowed users. You get a phone alert 3 days before and when it ends.</p>`
+            + `<p class="gps-hint">Anyone on Allowed users you haven’t made a subscriber gets one automatically: from the 1st of this month to the 1st of next, then it ends the same way unless you renew it or they pay. Admins and moderators stay unlimited. <b>Add subscriber</b> on one of them replaces the automatic month.</p>`
             + (d.allowlistOn ? '' : `<div class="gac-subs-warn" role="note"><span>Subscriptions only matter while <b>Only allow listed users</b> is on; right now everyone can get in.</span><button class="gps-btn primary" id="gac-subs-allow" type="button">Turn it on</button></div>`)
             + `<form class="gac-subs-form" id="gac-subs-form" autocomplete="off">`
             + `<label>Username<input class="gpa-input" id="gac-subs-name" placeholder="e.g. renzo" spellcheck="false" autocapitalize="off" maxlength="40" required></label>`
@@ -21521,7 +21548,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             + (ledger.length ? `<div class="gac-subs-totals${giftTotal ? ' has-gifts' : ''}"><div><b>${esc(money(month))}</b><span>this month</span></div><div><b>${esc(money(total))}</b><span>collected in all</span></div><div><b>${active.length}</b><span>active now</span></div>${giftTotal ? `<div><b>${esc(money(giftTotal))}</b><span>contributions</span></div>` : ''}</div>` : '')
             + (d.subscriptions.length ? `<p class="gps-hint gac-subs-count"${ledger.length ? ' hidden' : ''}>${active.length} active${d.subscriptions.length > active.length ? ' · ' + (d.subscriptions.length - active.length) + ' ended' : ''}</p><ul class="gac-acct-list gac-subs-list">` + d.subscriptions.map((s) => {
               const soon = s.active && s.expiresAt - Date.now() <= 3 * 864e5;
-              const badge = !s.active ? 'Ended' : s.daysLeft <= 1 ? 'Ends today' : s.daysLeft + ' days left';
+              const badge = (s.auto && s.active ? 'Automatic · ' : '') + (!s.active ? 'Ended' : s.daysLeft <= 1 ? 'Ends today' : s.daysLeft + ' days left');
               return `<li class="gac-acct gac-subscr${s.active ? '' : ' is-ended'}${soon ? ' is-soon' : ''}" data-user="${esc(s.user)}"><div class="gac-acct-top"><span class="gac-req-name">${esc(s.user)}</span><span class="gac-req-badge ${s.active && !soon ? 'pending' : ''}">${esc(badge)}</span></div>`
                 + `<div class="gac-req-meta">${s.active ? 'Since ' + esc(fmtDay(s.startedAt)) + ' · ends ' + esc(fmtDay(s.expiresAt)) : 'Ended ' + esc(fmtDay(s.endedAt || s.expiresAt))}${lastPaid(s) ? ' · paid ' + esc(money(lastPaid(s))) : ''}${giftsBy(s.user) ? ' · contributed ' + esc(money(giftsBy(s.user))) : ''}${s.note ? ' · ' + esc(s.note) : ''}</div>`
                 + `<div class="gac-req-actions"><button class="gps-btn${s.active ? '' : ' primary'}" data-sub="renew" type="button">Renew +${esc(periods[subsPeriod] || '1 month')}</button>`
@@ -22045,7 +22072,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         });
       }
       else if (sec === 'security' && p.focus === 'allow') await land(() => (user && byUser('.gac-acct', user)) || gac.querySelector('#gac-sec-events'));
-      else if (sec === 'security' && p.focus === 'events') await land(() => gac.querySelector('#gac-sec-events'));
+      else if (sec === 'security' && p.focus === 'events') await land(() => { const ev = gac.querySelector('#gac-sec-events'); const h = ev && ev.querySelector('.gac-fold-head'); if (h && h.getAttribute('aria-expanded') !== 'true') h.click(); return ev; });
       else if (sec === 'security' && p.focus === 'subs') {
         await land(() => {
           const box = gac.querySelector('#gac-subs');

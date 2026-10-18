@@ -87,6 +87,7 @@ const track = (page) => { page._errors = []; page.on('pageerror', (e) => page._e
 
 try {
   await admin('/admin/config', { allowlist: { on: true, users: ['oldfriend'] } });
+  await admin('/admin/subscriptions', { action: 'add', user: 'paidpal', period: '1m', amount: 14, note: 'cash' });
 
   // 1: the page on a phone.
   const ctx = await browser.newContext({ ...(devices['iPhone 15'] || devices['iPhone 14']) });
@@ -95,8 +96,11 @@ try {
   check('The subscribe page shows $13.80 / month and a username box', /\$13\.80\s*\/ month/.test(await page.textContent('.price')) && await page.isVisible('#user'));
   check('A clear note: contributions are only for subscribers, subscribe first', await page.isVisible('#contrib-note') && /Contributions are only for subscribers\. New here\? Subscribe first\./.test(await page.textContent('#contrib-note')), await page.textContent('#contrib-note'));
   await page.fill('#user', 'oldfriend');
-  await page.waitForFunction(() => /already has access/.test(document.getElementById('hint').textContent), null, { timeout: 8000 }).catch(() => {});
-  check('A name that already has access is refused', /already has access/.test(await page.textContent('#hint')) && await page.isDisabled('#pay'), await page.textContent('#hint'));
+  await page.waitForFunction(() => /free access until/.test(document.getElementById('hint').textContent), null, { timeout: 8000 }).catch(() => {});
+  check('A listed name on its automatic month may pay (“free access until …, subscribing starts your paid month now”)', /has free access until \w+ \d+\. Subscribing starts your paid month now\./.test(await page.textContent('#hint')) && !(await page.isDisabled('#pay')), await page.textContent('#hint'));
+  await page.fill('#user', 'paidpal');
+  await page.waitForFunction(() => /already subscribed/.test(document.getElementById('hint').textContent), null, { timeout: 8000 }).catch(() => {});
+  check('A name already paid for this month is refused', /already subscribed for this month/.test(await page.textContent('#hint')) && await page.isDisabled('#pay'), await page.textContent('#hint'));
   await page.fill('#user', NAME);
   await page.waitForFunction(() => /is available/.test(document.getElementById('hint').textContent), null, { timeout: 8000 }).catch(() => {});
   check('A free name is available; Continue turns on', /is available/.test(await page.textContent('#hint')) && !(await page.isDisabled('#pay')), await page.textContent('#hint'));
