@@ -215,6 +215,24 @@ subscriptions. Stripe Tax can collect it (about 0.5% more per payment), but
 only after you register in those states; ask an accountant first. It isn't
 turned on.
 
+**Policies (what Stripe's review looks for):** every subscribe page has a
+footer with **Terms** (`/subscribe/terms`), **Refunds & cancellation**
+(`/subscribe/refunds`), **Privacy** (`/subscribe/privacy`) and the contact
+email (`viztrrx@gmail.com`; change it with a Cloudflare **Text** variable
+`SUPPORT_EMAIL`). By the pay button the page says the buyer agrees to the
+Terms and the Refund policy and will be charged the price today and every
+month until they cancel, and Stripe's checkout repeats that above its own
+button. The refund policy: cancel any time and keep access to the end of the
+paid month; full refund if asked within 7 days of any charge; duplicate,
+mistaken, unauthorized or after-cancel charges always refunded. **What you
+promise there:** answer emails within 2 business days, cancel within 1
+business day, send approved refunds within 3 business days (in Stripe:
+Payments → the payment → Refund, then Subscriptions → Cancel immediately),
+and email subscribers 30 days before a price change. In Stripe, **Settings →
+Business → Public details**, put the three page addresses in the Terms,
+Privacy and Refund policy fields and `viztrrx@gmail.com` as support email.
+The pages aren't legal advice; have a lawyer look if the business grows.
+
 Until `STRIPE_SECRET_KEY` is set the page says "Subscriptions aren't open
 yet". Try it first with Stripe's test mode keys (`sk_test_…`, test card
 4242 4242 4242 4242), then switch to the live keys. Secrets live only in

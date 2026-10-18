@@ -12,7 +12,9 @@
 // Stripe Dashboard; the page shows its amount), else SUB_PRICE_CENTS (default
 // 1380 = $13.80/month, so $13.00 is left after Stripe's 2.9% + 30¢ card fee
 // and 0.7% Billing fee); STRIPE_PORTAL_URL (Stripe's no-code customer portal
-// link, for "Manage or cancel"); STRIPE_API (tests).
+// link, for "Manage or cancel"); SUPPORT_EMAIL (the contact email customers
+// see; default below); STRIPE_API (tests). The Terms, Refund & Cancellation
+// and Privacy pages are in web/policies.js.
 //
 // Every call is pinned to one Stripe API version, so a change on Stripe's
 // side can't change what the Worker reads. Webhook endpoints have their own
@@ -33,6 +35,14 @@ export const money = (cents) => '$' + (cents / 100).toFixed(2);
 export const subscribeReady = (env) => !!(env && env.STRIPE_SECRET_KEY);
 export const priceId = (env) => (/^price_[A-Za-z0-9]{4,80}$/.test(String((env && env.STRIPE_PRICE_ID) || '').trim()) ? String(env.STRIPE_PRICE_ID).trim() : '');
 export const ATTEMPT_RE = /^[a-z0-9]{16,40}$/;
+// Days after a charge a customer can ask for a full refund (web/policies.js).
+export const REFUND_DAYS = 7;
+export const SUPPORT_EMAIL_DEFAULT = 'viztrrx@gmail.com';
+export const supportEmail = (env) => {
+  const e = String((env && env.SUPPORT_EMAIL) || '').trim();
+  return /^[^\s@<>"']{1,64}@[^\s@<>"']{1,190}\.[A-Za-z]{2,}$/.test(e) ? e : SUPPORT_EMAIL_DEFAULT;
+};
+export const portalUrl = (env) => (/^https:\/\/[^\s"'<>]{1,300}$/.test(String((env && env.STRIPE_PORTAL_URL) || '')) ? env.STRIPE_PORTAL_URL : '');
 
 // ---- Stripe API (form-encoded) ------------------------------------------------
 function formEncode(obj, prefix, out = []) {
@@ -79,7 +89,9 @@ export function checkoutParams(env, origin, user) {
     integration_identifier: INTEGRATION_ID,
     success_url: origin + '/subscribe/?done={CHECKOUT_SESSION_ID}',
     cancel_url: origin + '/subscribe/?canceled=1',
-    allow_promotion_codes: 'false'
+    allow_promotion_codes: 'false',
+    // Shown above Stripe's Subscribe button: how it renews and how to cancel.
+    custom_text: { submit: { message: 'Renews automatically every month until you cancel. Cancel any time; you keep access until the end of the month you paid for. Refunds within ' + REFUND_DAYS + ' days of a charge. Help: ' + supportEmail(env) } }
   };
 }
 
@@ -144,9 +156,18 @@ export async function stripeSignatureOk(secret, header, payload, nowMs = Date.no
 
 // ---- The page ---------------------------------------------------------------
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// The links every subscribe and policy page shows at the bottom.
+export function policyFooter(env) {
+  const mail = esc(supportEmail(env));
+  return `<footer class="legal">
+    <nav><a href="/subscribe/terms">Terms</a><span>·</span><a href="/subscribe/refunds">Refunds &amp; cancellation</a><span>·</span><a href="/subscribe/privacy">Privacy</a></nav>
+    <p>Questions or help: <a href="mailto:${mail}">${mail}</a></p>
+    <p>© 2026 Saints Service · United States · Payments processed securely by Stripe</p>
+  </footer>`;
+}
 export function subscribePage(env, { ready, cents }) {
   const price = money(cents || priceCents(env));
-  const portal = /^https:\/\/[^\s"'<>]{1,300}$/.test(String((env && env.STRIPE_PORTAL_URL) || '')) ? env.STRIPE_PORTAL_URL : '';
+  const portal = portalUrl(env);
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -187,9 +208,16 @@ export function subscribePage(env, { ready, cents }) {
   ol { padding-left: 20px; color: var(--sub); font-size: 14px; } ol b { color: var(--text); }
   .spin { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--border); border-top-color: var(--teal); border-right-color: var(--violet); animation: s 0.9s linear infinite; margin: 18px auto; }
   @keyframes s { to { transform: rotate(360deg); } }
+  .cur { font-size: 13px; color: var(--sub); margin: 0 0 4px; }
+  .terms { font-size: 12.5px; color: var(--sub); margin: 12px 2px 0; line-height: 1.5; }
+  .terms a, .legal a { color: var(--ok); }
+  .wrap { width: 100%; max-width: 420px; }
+  .legal { text-align: center; color: var(--sub); font-size: 12.5px; margin-top: 18px; }
+  .legal nav { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; }
+  .legal p { margin: 6px 0; }
   [hidden] { display: none !important; }
 </style></head>
-<body><main><div class="card">
+<body><main><div class="wrap"><div class="card">
   <div class="brand"><img class="logo" src="/console/icon-180.png" alt="" width="48" height="48"><div><b>Saints Service</b><span>Subscription</span></div></div>
 
   <section id="closed" ${ready ? 'hidden' : ''}>
@@ -200,11 +228,13 @@ export function subscribePage(env, { ready, cents }) {
   <section id="form" ${ready ? '' : 'hidden'}>
     <h1>Subscribe</h1>
     <div class="price">${esc(price)} <small>/ month</small></div>
-    <ul><li>Full access to Saints Service</li><li>Your username is approved as soon as your payment goes through</li><li>Renews monthly · cancel any time</li></ul>
+    <p class="cur">US dollars · billed monthly until you cancel</p>
+    <ul><li>Full access to Saints Service</li><li>Your username is approved as soon as your payment goes through</li><li>Cancel any time · refund within ${REFUND_DAYS} days of a charge</li></ul>
     <label for="user">Username you’ll sign in with</label>
     <input id="user" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="40" placeholder="e.g. jsmith" inputmode="text">
     <div id="hint" class="hint" role="status" aria-live="polite">Letters, numbers, dot, dash or underscore.</div>
     <button id="pay" type="button" disabled>Continue to payment</button>
+    <p class="terms">By continuing, you agree to the <a href="/subscribe/terms">Terms of Service</a> and the <a href="/subscribe/refunds">Refund &amp; Cancellation Policy</a>. You’ll be charged ${esc(price)} USD today and then every month until you cancel. You can cancel any time${portal ? ` <a href="${esc(portal)}" target="_blank" rel="noopener">online</a> or` : ''} by emailing <a href="mailto:${esc(supportEmail(env))}">${esc(supportEmail(env))}</a>.</p>
     <p class="small">You’ll choose how to pay (card, Apple Pay, Google Pay, Cash App Pay…) on Stripe’s secure page.${portal ? ` · <a href="${esc(portal)}" target="_blank" rel="noopener">Manage or cancel a subscription</a>` : ''}</p>
   </section>
 
@@ -229,7 +259,7 @@ export function subscribePage(env, { ready, cents }) {
     <ol id="steps-back" hidden>
       <li>Open Saints Service (the Agent Console) and sign in as <b class="u"></b> with your PIN, as before.</li>
     </ol>
-    <p class="small">Your subscription renews monthly. Keep this page or a screenshot of your code until you’ve signed in.${portal ? ` · <a href="${esc(portal)}" target="_blank" rel="noopener">Manage or cancel</a>` : ''}</p>
+    <p class="small">Your subscription renews monthly until you cancel. Stripe emails you a receipt. Keep this page or a screenshot of your code until you’ve signed in.${portal ? ` · <a href="${esc(portal)}" target="_blank" rel="noopener">Manage or cancel</a>` : ` To cancel, email <a href="mailto:${esc(supportEmail(env))}">${esc(supportEmail(env))}</a>.`}</p>
   </section>
 
   <section id="cancel" hidden>
@@ -237,6 +267,8 @@ export function subscribePage(env, { ready, cents }) {
     <p class="hint">Nothing was charged.</p>
     <a class="btn" href="/subscribe/">Try again</a>
   </section>
+</div>
+${policyFooter(env)}
 </div></main>
 <script>
 (function () {

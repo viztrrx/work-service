@@ -12,7 +12,13 @@ list (rounds 1–3) was finished and pushed.
 
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
-  deployed (pushing to `main` deploys; see below). The last commit: the **Subscribe page** (owner: "a payment only app…
+  deployed (pushing to `main` deploys; see below). The last commit: the
+  subscribe page's **Terms, Refund & Cancellation and Privacy pages** and
+  contact email (owner: "the email is viztrrx@gmail.com and build the
+  refund/cancellation policy properly so stripe approves it… make everything
+  professional"). The owner is in the middle of activating their live Stripe
+  account (business type: unregistered/sole proprietor, no EIN; website =
+  the subscribe page). Before that: the **Subscribe page** (owner: "a payment only app…
   they select their payment method and… put the username… approved once the
   payment of $13 is received… automatically approved on the allowed users";
   Stripe, monthly, fees passed on so the owner nets $13). Before that:
@@ -154,7 +160,7 @@ KV `push:vapid`), `CONSOLE_SCRIPT_URL`, `AUDIUS_API`,
 `APNS_RELAY_URL`/`APNS_RELAY_SECRET`, optional `YOUTUBE_API_KEY`,
 `SPOTIFY_CLIENT_ID`/`SPOTIFY_CLIENT_SECRET` (Playlists), `STRIPE_SECRET_KEY`,
 `STRIPE_WEBHOOK_SECRET`, optional `STRIPE_PRICE_ID`, `STRIPE_PORTAL_URL`,
-`SUB_PRICE_CENTS` (Subscribe page).
+`SUB_PRICE_CENTS`, `SUPPORT_EMAIL` (default `viztrrx@gmail.com`) (Subscribe page).
 
 ### KV keys (TELEMETRY)
 `config` (allowlist, subscriptions, subLedger, chatQuiet, fun, flair,
@@ -281,6 +287,17 @@ day, 14 days; not system notices), `trivia` (#public only). Memory only:
   strip says "Subscribed · renews monthly". **Never tested against real
   Stripe** (blocked from the dev container): tests use a stand-in that signs
   webhooks like Stripe. Tests: `subscribe.test.mjs`, `subscribe.mjs`.
+  Policies (`web/policies.js`): `/subscribe/terms`, `/subscribe/refunds`,
+  `/subscribe/privacy` (also with a trailing slash; open even before
+  Stripe keys are set; same security headers, no scripts). Footer on every
+  page (`policyFooter` in subscribe.js) with the contact email
+  (`supportEmail(env)`); the auto-renewal sentence by the pay button; Checkout
+  `custom_text.submit.message` repeats it on Stripe's page. Refund window
+  `REFUND_DAYS` = 7 (subscribe.js); effective date `POLICY_EFFECTIVE`
+  (policies.js) — change it when the wording changes. The privacy page
+  describes what the app really stores (salted PIN verifier hash, hashed
+  IP/UA, country, sessions, content; Stripe/Cloudflare/push services as
+  processors; 30–180-day security logs) — keep it true when that changes.
   Hardening (owner said yes to it, following the Stripe plugin's
   best-practices skill): every call sends `Stripe-Version:
   2026-08-26.dahlia` (`STRIPE_API_VERSION`); sessions carry
@@ -430,7 +447,9 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 
 | Commit | What |
 |---|---|
-| (this) | Subscribe page hardening: API version, price ID, idempotency, failed payments |
+| (this) | Subscribe page: Terms, Refund & Cancellation, Privacy pages; contact email; renewal disclosure |
+| `c196301` | Subscribe page: "Saints Service", the planet icon and its colors |
+| `81430fa` | Subscribe page hardening: API version, price ID, idempotency, failed payments |
 | `96545d4` | Subscribe page: pay monthly with Stripe, approved automatically |
 | `b7a3eba` | Playlists: app only, Worker YouTube key, shared lookup cache |
 | `a11eeaa` | Playlists → YouTube links (owner + admins) |
@@ -464,7 +483,7 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 ## 6. Testing
 
 ```bash
-npm test                                   # node --test tests/*.test.mjs (111 tests)
+npm test                                   # node --test tests/*.test.mjs (112 tests)
 npx wrangler deploy --dry-run --outdir /tmp/x   # bundle/config check, deploys nothing
 # Browser suites (Playwright vs local workerd), each takes an output dir for screenshots:
 node tests/browser/eaglercraft.e2e.mjs     # 83
@@ -489,7 +508,7 @@ node tests/browser/music.mjs               # 15
 node tests/browser/my-music.mjs            # 15
 node tests/browser/admin-app.mjs           # 20
 node tests/browser/playlists.mjs           # 21
-node tests/browser/subscribe.mjs           # 16
+node tests/browser/subscribe.mjs           # 23
 node tests/browser/usage-meter.mjs         # 16
 node tests/browser/usage-meter-sizes.mjs   # 25
 node tests/browser/ask-photo-size.mjs      # 6

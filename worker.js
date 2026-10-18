@@ -1,5 +1,6 @@
 import { webApp } from './web/handler.js';
 import { consoleApp } from './web/console/handler.js';
+import { policyPage, POLICY_PAGES } from './web/policies.js';
 import { subscribePage, subscribeReady, priceCents, displayCents, stripe, checkoutParams, periodEndMs, invoiceSubscription, stripeSignatureOk, SUB_NAME_RE, SESSION_RE, ATTEMPT_RE } from './web/subscribe.js';
 import { readPlaylist, readLists, writeLists, newList, listSummary, publicList, searchYouTube, matchCacheKey, LISTS_MAX, MATCH_BATCH, MATCH_SCAN } from './web/playlists.js';
 import { audiusSearch, audiusStream, listLibrary, addToLibrary, removeFromLibrary, serveLibraryFile, audioKind, listMine, mineUsage, addToMine, removeFromMine, MINE_DAILY_UPLOADS } from './web/music.js';
@@ -3173,6 +3174,15 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           return new Response(req.method === 'HEAD' ? null : subscribePage(env, { ready, cents: ready ? await displayCents(env, kv) : 0 }), { headers: {
             'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
             'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+          } });
+        }
+        // Terms, Refund & Cancellation and Privacy: public, even before
+        // subscriptions open (Stripe reviews them).
+        const policy = /^\/subscribe\/(terms|refunds|privacy)\/?$/.exec(url.pathname);
+        if (policy && POLICY_PAGES[policy[1]] && (req.method === 'GET' || req.method === 'HEAD')) {
+          return new Response(req.method === 'HEAD' ? null : policyPage(env, policy[1], { cents: ready ? await displayCents(env, kv) : 0 }), { headers: {
+            'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
+            'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
           } });
         }
         if (!ready) return json({ ok: false, error: 'Subscriptions aren’t open yet.' }, 503);

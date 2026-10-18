@@ -10,6 +10,8 @@
 //   4  the owner sees them in Subscribers with the payment in the ledger
 //   5  canceling at checkout: "Nothing was charged", and trying again with
 //      the same name isn't blocked by their own unfinished checkout
+//   6  the footer (Terms, Refunds & cancellation, Privacy, contact email),
+//      the renewal terms by the button, and each policy page on a phone
 //   node tests/browser/subscribe.mjs [outDir]
 import fs from 'node:fs';
 import path from 'node:path';
@@ -159,6 +161,32 @@ try {
   await page.fill('#user', SECOND);
   await page.waitForFunction(() => /is available|paying/.test(document.getElementById('hint').textContent), null, { timeout: 8000 }).catch(() => {});
   check('Try again with the same name: still available to them (not “someone is paying”)', /is available/.test(await page.textContent('#hint')) && !!again, await page.textContent('#hint'));
+
+  // 5: the policies Stripe's review looks for, linked from every page.
+  await page.goto(env.workerUrl + '/subscribe/');
+  const legal = await page.evaluate(() => ({ links: [...document.querySelectorAll('footer.legal a')].map((a) => a.getAttribute('href')), terms: document.querySelector('#form .terms').textContent.replace(/\s+/g, ' ') }));
+  check('Footer: Terms, Refunds & cancellation, Privacy and the contact email', ['/subscribe/terms', '/subscribe/refunds', '/subscribe/privacy', 'mailto:viztrrx@gmail.com'].every((h) => legal.links.includes(h)), legal.links.join(' '));
+  check('By the button: agree to the terms, $13.80 USD today and every month until you cancel', /agree to the Terms of Service and the Refund & Cancellation Policy/.test(legal.terms) && /\$13\.80 USD today and then every month until you cancel/.test(legal.terms), legal.terms);
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.screenshot({ path: path.join(OUT, '05-subscribe-footer.png') });
+  await page.click('footer.legal a[href="/subscribe/refunds"]');
+  await page.waitForURL(/\/subscribe\/refunds$/, { timeout: 10000 });
+  const refund = (await page.textContent('article')).replace(/\s+/g, ' ');
+  check('Refund & Cancellation Policy: price, how to cancel, 7-day refund, contact', /\$13\.80 USD a month/.test(refund) && /How to cancel/.test(refund) && /within 7 days of a charge/.test(refund) && /viztrrx@gmail\.com/.test(refund), refund.slice(0, 120));
+  await page.screenshot({ path: path.join(OUT, '06-refund-policy.png'), fullPage: true });
+  await page.click('a[href="/subscribe/terms"]');
+  await page.waitForURL(/\/subscribe\/terms$/, { timeout: 10000 });
+  check('Terms of Service open from there', /Terms of Service/.test(await page.textContent('h1')) && /Acceptable use/.test(await page.textContent('article')));
+  await page.screenshot({ path: path.join(OUT, '07-terms.png') });
+  await page.click('a[href="/subscribe/privacy"]');
+  await page.waitForURL(/\/subscribe\/privacy$/, { timeout: 10000 });
+  check('Privacy Policy opens, and says data isn’t sold', /Privacy Policy/.test(await page.textContent('h1')) && /don’t sell/.test(await page.textContent('article')));
+  await page.screenshot({ path: path.join(OUT, '08-privacy.png') });
+  const wide = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+  check('Policy pages fit a phone screen (no sideways scrolling)', wide);
+  await page.click('a.back');
+  await page.waitForURL(/\/subscribe\/$/, { timeout: 10000 });
+  check('“← Subscribe page” goes back', await page.isVisible('#user'));
 
   for (const [n, p] of [['subscribe page', page], ['console', cp]]) check(`No page errors (${n})`, p._errors.length === 0, p._errors.slice(0, 2).join(' | '));
   await ctx.close(); await pc.close();

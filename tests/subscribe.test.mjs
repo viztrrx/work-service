@@ -226,3 +226,42 @@ test('subscribe: API version pinned, sessions tagged, double taps reuse the chec
     assert.equal(sub.active, true, 'still active while Stripe retries');
   } finally { st.restore(); }
 });
+
+test('subscribe: Terms, Refund & Cancellation and Privacy pages; contact email; renewal disclosure', async () => {
+  const st = stubStripe();
+  try {
+    const t = setup();
+    const page = (await t.call('/subscribe/')).text;
+    for (const href of ['/subscribe/terms', '/subscribe/refunds', '/subscribe/privacy']) assert.ok(page.includes(`href="${href}"`), 'footer links ' + href);
+    assert.match(page, /mailto:viztrrx@gmail\.com/, 'contact email');
+    assert.match(page, /charged \$13\.80 USD today and then every month until you cancel/, 'auto-renewal disclosure by the button');
+    const refunds = await t.call('/subscribe/refunds');
+    assert.equal(refunds.status, 200);
+    assert.equal(refunds.headers.get('X-Frame-Options'), 'DENY');
+    assert.match(refunds.text, /<h1>Refund &amp; Cancellation Policy<\/h1>/);
+    assert.match(refunds.text, /\$13\.80 USD a month/);
+    assert.match(refunds.text, /within 7 days of a charge/);
+    assert.match(refunds.text, /How to cancel/);
+    assert.match((await t.call('/subscribe/terms')).text, /<h1>Terms of Service<\/h1>[\s\S]*Acceptable use/);
+    assert.match((await t.call('/subscribe/privacy/')).text, /<h1>Privacy Policy<\/h1>[\s\S]*don’t sell/);
+    assert.equal((await t.call('/subscribe/cookies')).status, 404, 'only the three pages');
+    // The Dashboard price shows on the policies too; a custom contact email.
+    const priced = setup({ STRIPE_PRICE_ID: 'price_monthly15', SUPPORT_EMAIL: 'help@saints.example' });
+    const r2 = (await priced.call('/subscribe/refunds')).text;
+    assert.match(r2, /\$15\.00 USD a month/);
+    assert.match(r2, /mailto:help@saints\.example/);
+    assert.ok(!r2.includes('viztrrx@gmail.com'));
+    // A portal link adds the online way to cancel.
+    const portal = setup({ STRIPE_PORTAL_URL: 'https://billing.stripe.com/p/login/test_abc' });
+    assert.match((await portal.call('/subscribe/refunds')).text, /billing\.stripe\.com\/p\/login\/test_abc[\s\S]*By email/);
+    // Open to everyone even before subscriptions open.
+    const off = setup({ STRIPE_SECRET_KEY: '', STRIPE_WEBHOOK_SECRET: '' });
+    const offTerms = await off.call('/subscribe/terms');
+    assert.equal(offTerms.status, 200);
+    assert.match(offTerms.text, /\$13\.80 USD a month/);
+    // Stripe's checkout shows the renewal terms above its pay button.
+    await t.call('/subscribe/checkout', { method: 'POST', body: { user: 'kim' } });
+    const sent = st.calls.find((c) => new URL(c.url).pathname === '/v1/checkout/sessions' && c.method === 'POST');
+    assert.match(decodeURIComponent(sent.body.replace(/\+/g, ' ')), /custom_text\[submit\]\[message\]=Renews automatically every month until you cancel/);
+  } finally { st.restore(); }
+});
