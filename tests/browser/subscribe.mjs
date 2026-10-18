@@ -150,7 +150,7 @@ try {
   await page.goto(env.workerUrl + '/subscribe/');
   await page.fill('#user', NAME);
   await page.waitForFunction(() => /already subscribed/.test(document.getElementById('hint').textContent), null, { timeout: 8000 }).catch(() => {});
-  check('The same name can’t be bought twice: no Subscribe button, only Contribute', /can’t be paid for again/.test(await page.textContent('#hint')) && await page.isHidden('#pay') && await page.isVisible('#give') && (await page.textContent('#form-title')) === 'Contribute', await page.textContent('#hint'));
+  check('The same name can’t be bought twice: no Subscribe button, only Contribute', /can’t be paid for again/.test(await page.textContent('#hint')) && await page.isHidden('#pay') && await page.isHidden('#sub-info') && await page.isVisible('#give') && (await page.textContent('#form-title')) === 'Contribute', await page.textContent('#hint'));
   const second = await fetch(env.workerUrl + '/subscribe/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: NAME }) });
   check('…and the server refuses a second subscription even if asked directly', second.status === 409, String(second.status));
 

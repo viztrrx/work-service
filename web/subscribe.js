@@ -268,9 +268,11 @@ export function subscribePage(env, { ready, cents }) {
 
   <section id="form" ${ready ? '' : 'hidden'}>
     <h1 id="form-title">Subscribe</h1>
+    <div id="sub-info">
     <div class="price">${esc(price)} <small>/ month</small></div>
     <p class="cur">US dollars · billed monthly until you cancel</p>
     <ul><li>Full access to Saints Service</li><li>Your username is approved as soon as your payment goes through</li><li>Cancel any time · access lasts to the end of the month you paid for</li></ul>
+    </div>
     <label for="user">Username you’ll sign in with</label>
     <input id="user" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="40" placeholder="e.g. jsmith" inputmode="text">
     <div id="hint" class="hint" role="status" aria-live="polite">Letters, numbers, dot, dash or underscore.</div>
@@ -367,7 +369,7 @@ ${policyFooter(env)}
   function setHint(text, cls) { hint.textContent = text; hint.className = 'hint' + (cls ? ' ' + cls : ''); }
   function check() {
     var u = input.value.trim().replace(/^@/, '');
-    okName = ''; pay.disabled = true; giveName = ''; contrib.hidden = true; subbox.hidden = false; $('form-title').textContent = 'Subscribe';
+    okName = ''; pay.disabled = true; giveName = ''; contrib.hidden = true; subbox.hidden = false; $('sub-info').hidden = false; $('form-title').textContent = 'Subscribe';
     if (!u) { setHint('Letters, numbers, dot, dash or underscore.'); return; }
     if (!/^[A-Za-z0-9_.-]{1,40}$/.test(u)) { setHint('Use only letters, numbers, dot, dash or underscore.', 'bad'); return; }
     setHint('Checking…');
@@ -376,7 +378,7 @@ ${policyFooter(env)}
       if (d.ok) { okName = u; pay.disabled = false; setHint(d.note || ('“' + u + '” is available.'), 'ok'); }
       else if (d.canContribute) {
         // Already paid up: no second subscription, only a contribution.
-        giveName = u; contrib.hidden = false; subbox.hidden = true; $('form-title').textContent = 'Contribute';
+        giveName = u; contrib.hidden = false; subbox.hidden = true; $('sub-info').hidden = true; $('form-title').textContent = 'Contribute';
         setHint('“' + u + '” is already subscribed for this month, so it can’t be paid for again. You can add a one-time contribution below.' + (d.hasAccount ? '' : ' (No PIN yet? Finish on your payment confirmation page, or ask the owner.)'), 'ok');
         syncAmt();
       }
