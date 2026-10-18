@@ -34,7 +34,7 @@ function stubStripe() {
       if (hd['Idempotency-Key'] && idem.has(hd['Idempotency-Key'])) return Response.json(sessions.get(idem.get(hd['Idempotency-Key'])));
       const p = new URLSearchParams(String(init.body));
       const id = 'cs_test_' + 'a'.repeat(20) + (++n);
-      const s = { id, object: 'checkout.session', url: 'https://checkout.stripe.com/c/pay/' + id, mode: p.get('mode'), client_reference_id: p.get('client_reference_id'), metadata: { user: p.get('metadata[user]') },
+      const s = { id, object: 'checkout.session', url: 'https://checkout.stripe.com/c/pay/' + id, mode: p.get('mode'), client_reference_id: p.get('client_reference_id'), metadata: { user: p.get('metadata[user]'), ...(p.get('metadata[kind]') ? { kind: p.get('metadata[kind]') } : {}) },
         amount_total: Number(p.get('line_items[0][price_data][unit_amount]')), status: 'open', payment_status: 'unpaid', customer: null, subscription: null };
       sessions.set(id, s);
       if (hd['Idempotency-Key']) idem.set(hd['Idempotency-Key'], id);
@@ -265,5 +265,78 @@ test('subscribe: Terms, Refund & Cancellation and Privacy pages; contact email; 
     await t.call('/subscribe/checkout', { method: 'POST', body: { user: 'kim' } });
     const sent = st.calls.find((c) => new URL(c.url).pathname === '/v1/checkout/sessions' && c.method === 'POST');
     assert.match(decodeURIComponent(sent.body.replace(/\+/g, ' ')), /custom_text\[submit\]\[message\]=Renews automatically every month until you cancel\..*non-refundable/);
+  } finally { st.restore(); }
+});
+
+test('subscribe: members who already pay can add a one-time contribution ($8–$500); it never buys a subscription', async () => {
+  const st = stubStripe();
+  try {
+    const t = setup();
+    await t.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: [] } } });
+    // kj subscribes and creates their account; "nokey" pays but has no account yet.
+    const join = async (user) => {
+      await t.call('/subscribe/checkout', { method: 'POST', body: { user } });
+      const sid = [...st.sessions.keys()].pop();
+      st.pay(sid);
+      return (await t.call('/subscribe/status?session=' + sid)).data;
+    };
+    const kj = await join('kj');
+    assert.equal(kj.approved, true);
+    assert.equal((await t.call('/auth/register', { method: 'POST', body: { user: 'kj', verifier: 'a'.repeat(64), invite: kj.code } })).status, 200);
+    await join('nokey');
+    // The page's name check: kj can contribute; nokey (no account) and strangers can't.
+    const chk = (await t.call('/subscribe/check?user=kj')).data;
+    assert.equal(chk.ok, false);
+    assert.equal(chk.canContribute, true);
+    assert.match(chk.error, /already subscribed/);
+    assert.equal((await t.call('/subscribe/check?user=nokey')).data.canContribute, undefined);
+    assert.equal((await t.call('/subscribe/check?user=stranger')).data.ok, true);
+    // Amount and member checks.
+    const give = (body) => t.call('/subscribe/contribute', { method: 'POST', body });
+    assert.equal((await give({ user: 'kj', cents: 799 })).status, 400, 'under $8');
+    assert.equal((await give({ user: 'kj', cents: 50001 })).status, 400, 'over $500');
+    assert.equal((await give({ user: 'kj', cents: 10.5 })).status, 400, 'whole cents only');
+    assert.equal((await give({ user: 'kj', cents: 'lots' })).status, 400);
+    assert.equal((await give({ user: 'stranger', cents: 1000 })).status, 409, 'not a member');
+    assert.equal((await give({ user: 'nokey', cents: 1000 })).status, 409, 'no account yet');
+    // kj gives $10: a one-time checkout, tagged as a contribution.
+    const before = (await t.cfg()).subscriptions.find((x) => x.user === 'kj');
+    const r = await give({ user: 'kj', cents: 1000, attempt: 'a'.repeat(20) });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    const call = st.calls.filter((c) => new URL(c.url).pathname === '/v1/checkout/sessions' && c.method === 'POST').pop();
+    const sent = new URLSearchParams(call.body);
+    assert.equal(sent.get('mode'), 'payment');
+    assert.equal(sent.get('metadata[kind]'), 'contribution');
+    assert.equal(sent.get('line_items[0][price_data][unit_amount]'), '1000');
+    assert.match(sent.get('success_url'), /\/subscribe\/\?thanks=\{CHECKOUT_SESSION_ID\}$/);
+    assert.match(sent.get('custom_text[submit][message]'), /One-time contribution.*isn’t tax-deductible.*non-refundable/);
+    assert.ok(call.idem && call.idem.startsWith('contribute-'), 'double taps reuse the checkout');
+    const cid = [...st.sessions.keys()].pop();
+    assert.equal((await t.call('/subscribe/status?session=' + cid)).data.pending, true, 'not paid yet');
+    // Paid: the thank-you page gets the amount; the ledger gets a contribution; the subscription doesn't change.
+    st.pay(cid);
+    const thanks = (await t.call('/subscribe/status?session=' + cid)).data;
+    assert.deepEqual([thanks.contribution, thanks.paid, thanks.amount, thanks.user, thanks.approved], [true, true, 10, 'kj', undefined]);
+    await t.hook({ id: 'evt_c1', type: 'checkout.session.completed', data: { object: st.sessions.get(cid) } });
+    let c = await t.cfg();
+    assert.deepEqual(c.ledger.filter((x) => x.action === 'contribution').map((x) => [x.user, x.amount]), [['kj', 10]], 'counted once');
+    assert.equal(c.subscriptions.length, 2);
+    assert.equal(c.subscriptions.find((x) => x.user === 'kj').expiresAt, before.expiresAt, 'subscription untouched');
+    // Only the webhook (page closed early): still recorded.
+    await give({ user: 'kj', cents: 2500 });
+    const cid2 = [...st.sessions.keys()].pop();
+    await t.hook({ id: 'evt_c2', type: 'checkout.session.completed', data: { object: st.pay(cid2) } });
+    c = await t.cfg();
+    assert.deepEqual(c.ledger.filter((x) => x.action === 'contribution').map((x) => x.amount), [10, 25]);
+    // A one-time payment never approves anyone, contribution-tagged or not.
+    for (const [id, metadata] of [['cs_test_' + 'z'.repeat(20) + '1', { user: 'freebie', kind: 'contribution' }], ['cs_test_' + 'z'.repeat(20) + '2', { user: 'freebie2' }]]) {
+      st.sessions.set(id, { id, object: 'checkout.session', mode: 'payment', client_reference_id: metadata.user, metadata, amount_total: 800, status: 'complete', payment_status: 'paid' });
+      await t.call('/subscribe/status?session=' + id);
+      await t.hook({ id: 'evt_' + id.slice(-1) + 'x', type: 'checkout.session.completed', data: { object: st.sessions.get(id) } });
+    }
+    c = await t.cfg();
+    assert.ok(!c.subscriptions.some((x) => /^freebie/.test(x.user)), 'no subscription from a one-time payment');
+    const conf = (await t.call('/admin/config/view', { headers: owner })).data.config;
+    assert.ok(!conf.allowlist.users.some((u) => /^freebie/.test(u)), 'not on Allowed users');
   } finally { st.restore(); }
 });

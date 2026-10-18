@@ -215,6 +215,16 @@ subscriptions. Stripe Tax can collect it (about 0.5% more per payment), but
 only after you register in those states; ask an accountant first. It isn't
 turned on.
 
+**Contributions:** when someone who already pays (and has an account) types
+their name on the subscribe page, instead of "already subscribed" they get a
+box to add a **one-time contribution** of $8 to $500 (quick buttons $8, $10,
+$20, $50, or any amount). It's a separate one-time Stripe payment: it doesn't
+change their subscription, the page says it's non-refundable and not
+tax-deductible (Saints Service isn't a charity, so it's called a contribution,
+not a donation). You get a "kj contributed $20" notification, and Admin →
+Security → Subscribers shows a contributions total and "contributed $X" on
+their row. Nothing to set up: it uses the same Stripe key and webhook.
+
 **Policies (what Stripe's review looks for):** every subscribe page has a
 footer with **Terms** (`/subscribe/terms`), **Refunds & cancellation**
 (`/subscribe/refunds`), **Privacy** (`/subscribe/privacy`) and the contact

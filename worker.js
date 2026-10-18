@@ -1,7 +1,7 @@
 import { webApp } from './web/handler.js';
 import { consoleApp } from './web/console/handler.js';
 import { policyPage, POLICY_PAGES } from './web/policies.js';
-import { subscribePage, subscribeReady, priceCents, displayCents, stripe, checkoutParams, periodEndMs, invoiceSubscription, stripeSignatureOk, SUB_NAME_RE, SESSION_RE, ATTEMPT_RE } from './web/subscribe.js';
+import { subscribePage, subscribeReady, priceCents, displayCents, stripe, checkoutParams, contributionParams, contribCents, isContribution, periodEndMs, invoiceSubscription, stripeSignatureOk, SUB_NAME_RE, SESSION_RE, ATTEMPT_RE } from './web/subscribe.js';
 import { readPlaylist, readLists, writeLists, newList, listSummary, publicList, searchYouTube, matchCacheKey, LISTS_MAX, MATCH_BATCH, MATCH_SCAN } from './web/playlists.js';
 import { audiusSearch, audiusStream, listLibrary, addToLibrary, removeFromLibrary, serveLibraryFile, audioKind, listMine, mineUsage, addToMine, removeFromMine, MINE_DAILY_UPLOADS } from './web/music.js';
 import { PUSH_CATEGORIES, vapidKeys, validSubscription, addSubscription, updateSubscription, removeSubscription, getSubscription, sendPush, notifyOwner, ownerTime, cleanCategories, anySubscriberWants,
@@ -3107,7 +3107,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         if (key === OWNER) return { error: 'That name is taken. Pick another.' };
         const cfg = await getConfig(kv);
         const cur = cfg.subscriptions && cfg.subscriptions[key];
-        if (cur && !cur.ended && cur.expiresAt > Date.now()) return { error: '“' + name + '” is already subscribed.' };
+        // A member who already pays (and has an account) can add a contribution instead.
+        if (cur && !cur.ended && cur.expiresAt > Date.now()) return { error: '“' + name + '” is already subscribed.', subscribed: true, key, canContribute: !!(await getAcct(kv, key)) };
         if (cfg.allowlist && cfg.allowlist.on && (cfg.allowlist.users || []).includes(key)) return { error: '“' + name + '” already has access. No need to subscribe.' };
         const hold = await kv.get('subhold:' + key, 'json');
         if (hold && !(attempt && hold.attempt === attempt) && hold.until > Date.now()) return { error: 'Someone is paying for “' + name + '” right now. Pick another name or try again in 30 minutes.' };
@@ -3153,6 +3154,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       const fromSession = async (sess) => {
         const done = await kv.get('subpay:' + sess.id, 'json');
         if (done) return done;
+        if (sess.mode !== 'subscription') throw Object.assign(new Error('Unknown payment.'), { status: 400 });
         const user = String(sess.client_reference_id || (sess.metadata && sess.metadata.user) || '');
         if (!SUB_NAME_RE.test(user)) throw Object.assign(new Error('That payment has no username.'), { status: 422 });
         let sub = sess.subscription;
@@ -3164,6 +3166,35 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         if (subId) await kv.put('substripe:' + subId, user.toLowerCase());
         await kv.delete('subhold:' + user.toLowerCase());
         return rec;
+      };
+      // A paid one-time contribution: in the ledger (deduped per checkout)
+      // and an owner alert. Never touches the subscription itself.
+      const recordContribution = async (sess) => {
+        const done = await kv.get('subpay:' + sess.id, 'json');
+        if (done) return done;
+        const user = String((sess.metadata && sess.metadata.user) || sess.client_reference_id || '');
+        if (!SUB_NAME_RE.test(user)) throw Object.assign(new Error('That payment has no username.'), { status: 422 });
+        const amount = Math.round(Math.max(0, Number(sess.amount_total) || 0)) / 100;
+        const cfg = await getConfig(kv);
+        const ledger = Array.isArray(cfg.subLedger) ? cfg.subLedger : [];
+        if (!ledger.some((x) => x && x.ref === sess.id)) {
+          const cur = cfg.subscriptions && cfg.subscriptions[user.toLowerCase()];
+          cfg.subLedger = [...ledger, { user: (cur && cur.user) || user, at: Date.now(), amount, action: 'contribution', via: 'stripe', ref: sess.id }].slice(-1000);
+          await kv.put('config', JSON.stringify(cfg));
+          await logAudit(kv, { route: url.pathname, action: 'subscription_contribution', target: user.toLowerCase(), meta: { amount } });
+          await notifyOwner(env, { cat: 'subs', title: user + ' contributed $' + amount.toFixed(2), body: 'A one-time contribution through Stripe, on top of their subscription.', url: adminLink('security', { focus: 'subs', user }) }, url.origin).catch(() => {});
+        }
+        const rec = { user, contribution: true, paid: true, amount };
+        await kv.put('subpay:' + sess.id, JSON.stringify(rec), { expirationTtl: 30 * 24 * 3600 });
+        return rec;
+      };
+      // At most 10 checkouts (subscriptions and contributions) an hour from one network.
+      const checkoutLimited = async () => {
+        const rk = 'subco:' + (await sha256hex('ip|' + clientIp(req))).slice(0, 24) + ':' + Math.floor(Date.now() / 3600e3);
+        const n = parseInt(await kv.get(rk), 10) || 0;
+        if (n >= 10) return true;
+        await kv.put(rk, String(n + 1), { expirationTtl: 2 * 3600 });
+        return false;
       };
       const userForSub = async (subId, metaUser) => {
         const u = String(metaUser || '') || (subId ? (await kv.get('substripe:' + subId)) || '' : '');
@@ -3189,16 +3220,12 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         if (url.pathname === '/subscribe/check' && req.method === 'GET') {
           const at = String(url.searchParams.get('attempt') || '');
           const st = await nameStatus(url.searchParams.get('user'), ATTEMPT_RE.test(at) ? at : '');
-          return json(st.ok ? { ok: true, note: st.note } : { ok: false, error: st.error });
+          return json(st.ok ? { ok: true, note: st.note } : { ok: false, error: st.error, ...(st.canContribute ? { canContribute: true } : {}) });
         }
         if (url.pathname === '/subscribe/checkout' && req.method === 'POST') {
           let body = {};
           try { const raw = await req.text(); if (raw.length > 1024) throw 0; body = JSON.parse(raw) || {}; } catch (e) { return json({ ok: false, error: 'invalid request' }, 400); }
-          // At most 10 checkouts an hour from one network.
-          const rk = 'subco:' + (await sha256hex('ip|' + clientIp(req))).slice(0, 24) + ':' + Math.floor(Date.now() / 3600e3);
-          const n = parseInt(await kv.get(rk), 10) || 0;
-          if (n >= 10) return json({ ok: false, error: 'Too many tries. Wait a bit and try again.' }, 429);
-          await kv.put(rk, String(n + 1), { expirationTtl: 2 * 3600 });
+          if (await checkoutLimited()) return json({ ok: false, error: 'Too many tries. Wait a bit and try again.' }, 429);
           const attempt = ATTEMPT_RE.test(String(body.attempt || '')) ? String(body.attempt) : '';
           const st = await nameStatus(body.user, attempt);
           if (!st.ok) return json({ ok: false, error: st.error }, 409);
@@ -3209,6 +3236,22 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           await kv.put('subhold:' + st.key, JSON.stringify({ attempt, session: sess.id, until: Date.now() + 30 * 60e3 }), { expirationTtl: 3600 });
           return json({ ok: true, url: sess.url });
         }
+        // A member who already subscribes (and has an account) adds a
+        // one-time contribution: $8 to $500, Stripe Checkout in payment mode.
+        if (url.pathname === '/subscribe/contribute' && req.method === 'POST') {
+          let body = {};
+          try { const raw = await req.text(); if (raw.length > 1024) throw 0; body = JSON.parse(raw) || {}; } catch (e) { return json({ ok: false, error: 'invalid request' }, 400); }
+          const cents = contribCents(body.cents);
+          if (!cents) return json({ ok: false, error: 'Pick an amount from $8 to $500.' }, 400);
+          const st = await nameStatus(body.user, '');
+          if (!st.canContribute) return json({ ok: false, error: 'Contributions are for members who already subscribe and have an account.' }, 409);
+          if (await checkoutLimited()) return json({ ok: false, error: 'Too many tries. Wait a bit and try again.' }, 429);
+          const user = String(body.user).trim().replace(/^@/, '');
+          const attempt = ATTEMPT_RE.test(String(body.attempt || '')) ? String(body.attempt) : '';
+          const idem = attempt ? 'contribute-' + (await sha256hex(attempt + '|' + st.key + '|' + cents)).slice(0, 40) : undefined;
+          const sess = await stripe(env, 'POST', 'checkout/sessions', contributionParams(env, url.origin, user, cents), { idempotencyKey: idem });
+          return json({ ok: true, url: sess.url });
+        }
         if (url.pathname === '/subscribe/status' && req.method === 'GET') {
           const id = url.searchParams.get('session') || '';
           if (!SESSION_RE.test(id)) return json({ ok: false, error: 'Unknown payment.' }, 400);
@@ -3217,7 +3260,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           // Not confirmed by the webhook yet: ask Stripe.
           let sess;
           try { sess = await stripe(env, 'GET', 'checkout/sessions/' + encodeURIComponent(id)); } catch (e) { return json({ ok: false, pending: true }); }
-          if (sess.status === 'complete' && sess.payment_status === 'paid') return json({ ok: true, ...(await fromSession(sess)) });
+          if (sess.status === 'complete' && sess.payment_status === 'paid') return json({ ok: true, ...(await (isContribution(sess) ? recordContribution(sess) : fromSession(sess))) });
           if (sess.status === 'expired') return json({ ok: false, error: 'This checkout expired and nothing was charged. Start again.' });
           return json({ ok: false, pending: true });
         }
@@ -3235,6 +3278,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           const o = ev.data.object;
           if (ev.type === 'checkout.session.completed' || ev.type === 'checkout.session.async_payment_succeeded') {
             if (o.mode === 'subscription' && o.payment_status === 'paid') await fromSession(o);
+            else if (isContribution(o) && o.payment_status === 'paid') await recordContribution(o);
           } else if (ev.type === 'invoice.paid' || ev.type === 'invoice.payment_succeeded') {
             // Monthly renewals. The first invoice is the checkout payment itself.
             if (o.billing_reason !== 'subscription_create') {

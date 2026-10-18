@@ -773,7 +773,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     { at: '2026-10-18T02:30:00-04:00', commit: '', title: 'Subscribe page: pay monthly with Stripe, approved automatically', parts: {
       console: ['feature', 'A payment page (/subscribe/) where someone picks their username and pays monthly; the name is approved as a subscriber when Stripe confirms the payment'] } },
     { at: '2026-10-18T03:30:00-04:00', commit: '', title: 'Subscribe page: safer Stripe setup', parts: {
-      console: ['fix', 'Subscribe page: price from Stripe, failed-renewal alerts for the owner, and trying again after backing out of checkout no longer locks the name'] } }
+      console: ['fix', 'Subscribe page: price from Stripe, failed-renewal alerts for the owner, and trying again after backing out of checkout no longer locks the name'] } },
+    { at: '2026-10-18T22:30:00-04:00', commit: '', title: 'Subscribe page: members can add a contribution', parts: {
+      console: ['feature', 'Subscribe page: a member who already pays and has an account can add a one-time contribution ($8 to $500) instead of subscribing again'],
+      admin: ['feature', 'Subscribers: a contributions total and “contributed $X” on each member’s row'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -2141,6 +2144,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         border: 1px solid color-mix(in srgb, var(--gpa-warning, #e0a63b) 55%, var(--gpa-border)); background: color-mix(in srgb, var(--gpa-warning, #e0a63b) 10%, transparent); }
       .gac-subs-count { margin: 4px 0 0; }
       .gac-subs-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0 4px; }
+      .gac-subs-totals.has-gifts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .gac-subs-totals > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--gpa-border); border-radius: var(--gps-r2); background: var(--gpa-field); min-width: 0; }
       .gac-subs-totals b { font-size: 17px; font-variant-numeric: tabular-nums; color: var(--gpa-text); }
       .gac-subs-totals span { font-size: 11.5px; color: var(--gpa-sub); }
@@ -20948,6 +20952,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           const month = ledger.filter((x) => { const t = new Date(x.at); return t.getFullYear() === nowD.getFullYear() && t.getMonth() === nowD.getMonth(); }).reduce((n, x) => n + (Number(x.amount) || 0), 0);
           const periods = d.periods || { '1m': '1 month' };
           const active = d.subscriptions.filter((s) => s.active);
+          // One-time contributions from members (subscribe page), per person.
+          const gifts = ledger.filter((x) => x.action === 'contribution');
+          const giftTotal = gifts.reduce((n, x) => n + (Number(x.amount) || 0), 0);
+          const giftsBy = (u) => gifts.filter((x) => String(x.user).toLowerCase() === String(u).toLowerCase()).reduce((n, x) => n + (Number(x.amount) || 0), 0);
           subsEl.innerHTML = `<p class="gps-hint">Add someone who paid for access. They can sign in right away, and when their time is up they’re signed out (“Your subscription has ended”) and taken off Allowed users. You get a phone alert 3 days before and when it ends.</p>`
             + (d.allowlistOn ? '' : `<div class="gac-subs-warn" role="note"><span>Subscriptions only matter while <b>Only allow listed users</b> is on; right now everyone can get in.</span><button class="gps-btn primary" id="gac-subs-allow" type="button">Turn it on</button></div>`)
             + `<form class="gac-subs-form" id="gac-subs-form" autocomplete="off">`
@@ -20958,12 +20966,12 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             + `<label>Note (optional)<input class="gpa-input" id="gac-subs-note" placeholder="Cash App" maxlength="120"></label>`
             + `<p class="gps-hint gac-subs-note-l">The end date counts from “Subscribed on”, so you can add someone who paid earlier. Renew uses the length and amount above.</p>`
             + `<button class="gps-btn primary" type="submit">Add subscriber</button></form>`
-            + (ledger.length ? `<div class="gac-subs-totals"><div><b>${esc(money(month))}</b><span>this month</span></div><div><b>${esc(money(total))}</b><span>collected in all</span></div><div><b>${active.length}</b><span>active now</span></div></div>` : '')
+            + (ledger.length ? `<div class="gac-subs-totals${giftTotal ? ' has-gifts' : ''}"><div><b>${esc(money(month))}</b><span>this month</span></div><div><b>${esc(money(total))}</b><span>collected in all</span></div><div><b>${active.length}</b><span>active now</span></div>${giftTotal ? `<div><b>${esc(money(giftTotal))}</b><span>contributions</span></div>` : ''}</div>` : '')
             + (d.subscriptions.length ? `<p class="gps-hint gac-subs-count"${ledger.length ? ' hidden' : ''}>${active.length} active${d.subscriptions.length > active.length ? ' · ' + (d.subscriptions.length - active.length) + ' ended' : ''}</p><ul class="gac-acct-list gac-subs-list">` + d.subscriptions.map((s) => {
               const soon = s.active && s.expiresAt - Date.now() <= 3 * 864e5;
               const badge = !s.active ? 'Ended' : s.daysLeft <= 1 ? 'Ends today' : s.daysLeft + ' days left';
               return `<li class="gac-acct gac-subscr${s.active ? '' : ' is-ended'}${soon ? ' is-soon' : ''}" data-user="${esc(s.user)}"><div class="gac-acct-top"><span class="gac-req-name">${esc(s.user)}</span><span class="gac-req-badge ${s.active && !soon ? 'pending' : ''}">${esc(badge)}</span></div>`
-                + `<div class="gac-req-meta">${s.active ? 'Since ' + esc(fmtDay(s.startedAt)) + ' · ends ' + esc(fmtDay(s.expiresAt)) : 'Ended ' + esc(fmtDay(s.endedAt || s.expiresAt))}${lastPaid(s) ? ' · paid ' + esc(money(lastPaid(s))) : ''}${s.note ? ' · ' + esc(s.note) : ''}</div>`
+                + `<div class="gac-req-meta">${s.active ? 'Since ' + esc(fmtDay(s.startedAt)) + ' · ends ' + esc(fmtDay(s.expiresAt)) : 'Ended ' + esc(fmtDay(s.endedAt || s.expiresAt))}${lastPaid(s) ? ' · paid ' + esc(money(lastPaid(s))) : ''}${giftsBy(s.user) ? ' · contributed ' + esc(money(giftsBy(s.user))) : ''}${s.note ? ' · ' + esc(s.note) : ''}</div>`
                 + `<div class="gac-req-actions"><button class="gps-btn${s.active ? '' : ' primary'}" data-sub="renew" type="button">Renew +${esc(periods[subsPeriod] || '1 month')}</button>`
                 + `<button class="gps-btn" data-sub="editstart" type="button">Change start</button>`
                 + (s.active ? '<button class="gps-btn" data-sub="end" type="button">End now</button>' : '<button class="gps-btn" data-sub="delete" type="button">Remove</button>') + `</div>`

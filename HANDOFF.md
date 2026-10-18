@@ -12,7 +12,10 @@ list (rounds 1–3) was finished and pushed.
 
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
-  deployed (pushing to `main` deploys; see below). The last commit: the
+  deployed (pushing to `main` deploys; see below). The last commit:
+  **contributions** on the subscribe page (owner: "if they already have an
+  account and paid the $14 subscription… they should have an option to
+  contribute/donate anything from $8 or higher"). Before that: the
   subscribe page's **Terms, Refund & Cancellation and Privacy pages** and
   contact email (owner: "the email is viztrrx@gmail.com and build the
   refund/cancellation policy properly so stripe approves it… make everything
@@ -287,6 +290,18 @@ day, 14 days; not system notices), `trivia` (#public only). Memory only:
   strip says "Subscribed · renews monthly". **Never tested against real
   Stripe** (blocked from the dev container): tests use a stand-in that signs
   webhooks like Stripe. Tests: `subscribe.test.mjs`, `subscribe.mjs`.
+  Contributions: `/subscribe/check` adds `canContribute` when the name has an
+  active subscription and an account; the page then shows `#contrib` ($8–$500,
+  `CONTRIB_MIN_CENTS`/`CONTRIB_MAX_CENTS`) instead of Subscribe.
+  `/subscribe/contribute` (same 10/h-per-network limit as checkout,
+  `checkoutLimited`) makes a Checkout Session in **payment** mode with
+  `metadata.kind = 'contribution'` (`contributionParams`); success URL
+  `?thanks=<session>`. `recordContribution()` (webhook or `/status`) adds a
+  ledger entry `action: 'contribution'` (deduped by `ref`) and notifies the
+  owner; it never touches the subscription. `fromSession()` now refuses
+  anything but `mode: 'subscription'`, and `/status` sends contribution
+  sessions to `recordContribution`, so a one-time payment can never approve
+  a name. The owner card adds a "contributions" tile and "contributed $X".
   Policies (`web/policies.js`): `/subscribe/terms`, `/subscribe/refunds`,
   `/subscribe/privacy` (also with a trailing slash; open even before
   Stripe keys are set; same security headers, no scripts). Footer on every
@@ -448,7 +463,8 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 
 | Commit | What |
 |---|---|
-| (this) | Refund policy: no refunds (billing errors only) |
+| (this) | Subscribe page: one-time contributions ($8+) from members |
+| `c9d49b1` | Refund policy: no refunds (billing errors only) |
 | `c9465ac` | Subscribe page: Terms, Refund & Cancellation, Privacy pages; contact email; renewal disclosure |
 | `c196301` | Subscribe page: "Saints Service", the planet icon and its colors |
 | `81430fa` | Subscribe page hardening: API version, price ID, idempotency, failed payments |
@@ -485,7 +501,7 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 ## 6. Testing
 
 ```bash
-npm test                                   # node --test tests/*.test.mjs (112 tests)
+npm test                                   # node --test tests/*.test.mjs (113 tests)
 npx wrangler deploy --dry-run --outdir /tmp/x   # bundle/config check, deploys nothing
 # Browser suites (Playwright vs local workerd), each takes an output dir for screenshots:
 node tests/browser/eaglercraft.e2e.mjs     # 83
@@ -510,7 +526,7 @@ node tests/browser/music.mjs               # 15
 node tests/browser/my-music.mjs            # 15
 node tests/browser/admin-app.mjs           # 20
 node tests/browser/playlists.mjs           # 21
-node tests/browser/subscribe.mjs           # 23
+node tests/browser/subscribe.mjs           # 32
 node tests/browser/usage-meter.mjs         # 16
 node tests/browser/usage-meter-sizes.mjs   # 25
 node tests/browser/ask-photo-size.mjs      # 6

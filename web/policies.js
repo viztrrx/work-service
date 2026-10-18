@@ -41,6 +41,7 @@ function body(env, kind, price) {
     <p>After you cancel there are no more charges. Your access continues until the end of the period you’ve already paid for, then ends. You can subscribe again at any time with the same username.</p>
     <h2>3. No refunds</h2>
     <p><b>All payments are final and non-refundable.</b> This includes your first payment, renewals, and any unused part of a month after you cancel. When you cancel, you simply aren’t charged again, and you keep access until the end of the month you’ve paid for.</p>
+    <p><b>Optional contributions</b> — one-time extra payments members can make on the subscribe page — are final and non-refundable too. They don’t change your subscription, and they aren’t tax-deductible because Saints Service isn’t a charity.</p>
     <p><b>Billing errors are the only exception.</b> We refund in full, whenever you tell us: duplicate charges, charges for the wrong amount, charges you didn’t authorize, and renewals charged after you asked us to cancel. We also give a refund wherever the law requires one.</p>
     <p>Billing-error refunds are sent within 3 business days to the original payment method through Stripe. Your bank may take 5–10 business days to show it.</p>
     <h2>4. If we end your access</h2>
@@ -61,7 +62,7 @@ function body(env, kind, price) {
       <li>For security, an account may be limited to one signed-in device at a time.</li>
     </ul>
     <h2>3. Subscription, billing and cancellation</h2>
-    <p>The subscription costs ${price} USD a month. It renews and is charged automatically every month until you cancel. You can cancel any time; you keep access until the end of the month you’ve paid for. Payments are non-refundable except for billing errors. Cancellation, refunds and price changes are covered by our <a href="/subscribe/refunds">Refund &amp; Cancellation Policy</a>, which is part of these terms.</p>
+    <p>The subscription costs ${price} USD a month. It renews and is charged automatically every month until you cancel. You can cancel any time; you keep access until the end of the month you’ve paid for. Payments are non-refundable except for billing errors. Members may also make optional one-time contributions ($8 or more); a contribution doesn’t change the subscription or add features, isn’t tax-deductible, and is non-refundable. Cancellation, refunds and price changes are covered by our <a href="/subscribe/refunds">Refund &amp; Cancellation Policy</a>, which is part of these terms.</p>
     <h2>4. Acceptable use</h2>
     <p>Don’t use Saints Service to:</p>
     <ul>

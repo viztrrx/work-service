@@ -35,6 +35,13 @@ export const money = (cents) => '$' + (cents / 100).toFixed(2);
 export const subscribeReady = (env) => !!(env && env.STRIPE_SECRET_KEY);
 export const priceId = (env) => (/^price_[A-Za-z0-9]{4,80}$/.test(String((env && env.STRIPE_PRICE_ID) || '').trim()) ? String(env.STRIPE_PRICE_ID).trim() : '');
 export const ATTEMPT_RE = /^[a-z0-9]{16,40}$/;
+// One-time contributions from members who already subscribe: $8 to $500.
+export const CONTRIB_MIN_CENTS = 800;
+export const CONTRIB_MAX_CENTS = 50000;
+export const contribCents = (v) => {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= CONTRIB_MIN_CENTS && n <= CONTRIB_MAX_CENTS ? n : 0;
+};
 export const SUPPORT_EMAIL_DEFAULT = 'viztrrx@gmail.com';
 export const supportEmail = (env) => {
   const e = String((env && env.SUPPORT_EMAIL) || '').trim();
@@ -92,6 +99,25 @@ export function checkoutParams(env, origin, user) {
     custom_text: { submit: { message: 'Renews automatically every month until you cancel. Cancel any time; you keep access until the end of the month you paid for. Payments are non-refundable, except billing errors. Help: ' + supportEmail(env) } }
   };
 }
+
+// A one-time contribution (Checkout in payment mode) from a member who
+// already subscribes. metadata.kind tells the webhook and the status check
+// it's a contribution, never a subscription payment.
+export function contributionParams(env, origin, user, cents) {
+  return {
+    mode: 'payment',
+    client_reference_id: user,
+    metadata: { kind: 'contribution', user },
+    payment_intent_data: { metadata: { kind: 'contribution', user }, description: 'Contribution to Saints Service from ' + user },
+    line_items: { 0: { quantity: 1, price_data: { currency: 'usd', unit_amount: cents, product_data: { name: 'Contribution to Saints Service', description: 'One-time contribution from ' + user + '. Thank you!' } } } },
+    submit_type: 'pay',
+    integration_identifier: INTEGRATION_ID,
+    success_url: origin + '/subscribe/?thanks={CHECKOUT_SESSION_ID}',
+    cancel_url: origin + '/subscribe/?canceled=1',
+    custom_text: { submit: { message: 'One-time contribution. It doesn’t change your subscription, isn’t tax-deductible, and is non-refundable except for billing errors. Help: ' + supportEmail(env) } }
+  };
+}
+export const isContribution = (sess) => !!sess && sess.mode === 'payment' && !!sess.metadata && sess.metadata.kind === 'contribution';
 
 // The monthly amount the page shows: the Dashboard Price's (cached an hour
 // in KV), or SUB_PRICE_CENTS.
@@ -210,6 +236,13 @@ export function subscribePage(env, { ready, cents }) {
   .terms { font-size: 12.5px; color: var(--sub); margin: 12px 2px 0; line-height: 1.5; }
   .terms a, .legal a { color: var(--ok); }
   .wrap { width: 100%; max-width: 420px; }
+  .contrib { border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin: 4px 0 6px; background: rgba(114,80,203,0.07); }
+  .contrib-t { margin: 0 0 12px; font-size: 14.5px; color: var(--sub); } .contrib-t b { color: var(--text); }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .chips button { width: auto; flex: 1 1 0; min-width: 0; padding: 10px 0; background: var(--field); border: 1px solid var(--border); box-shadow: none; color: var(--text); }
+  .chips button[aria-pressed="true"] { border-color: var(--violet); background: rgba(114,80,203,0.25); }
+  .amt { position: relative; } .amt span { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--sub); }
+  .amt input { padding-left: 28px; }
   .legal { text-align: center; color: var(--sub); font-size: 12.5px; margin-top: 18px; }
   .legal nav { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; }
   .legal p { margin: 6px 0; }
@@ -231,9 +264,20 @@ export function subscribePage(env, { ready, cents }) {
     <label for="user">Username you’ll sign in with</label>
     <input id="user" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="40" placeholder="e.g. jsmith" inputmode="text">
     <div id="hint" class="hint" role="status" aria-live="polite">Letters, numbers, dot, dash or underscore.</div>
+    <div id="contrib" class="contrib" hidden>
+      <p class="contrib-t"><b>You’re already a member.</b> Want to support Saints Service? Add a one-time contribution of ${esc(money(CONTRIB_MIN_CENTS))} or more.</p>
+      <div class="chips" role="group" aria-label="Amount">${[8, 10, 20, 50].map((d) => `<button type="button" data-amt="${d}" aria-pressed="${d === 8}">$${d}</button>`).join('')}</div>
+      <label for="amt">Amount (USD)</label>
+      <div class="amt"><span>$</span><input id="amt" type="number" inputmode="decimal" min="${CONTRIB_MIN_CENTS / 100}" max="${CONTRIB_MAX_CENTS / 100}" step="0.01" value="${CONTRIB_MIN_CENTS / 100}"></div>
+      <div id="amt-hint" class="hint">From ${esc(money(CONTRIB_MIN_CENTS))} to ${esc(money(CONTRIB_MAX_CENTS))}.</div>
+      <button id="give" type="button">Contribute ${esc(money(CONTRIB_MIN_CENTS))}</button>
+      <p class="terms">A one-time payment that doesn’t change your subscription. Contributions are non-refundable (see the <a href="/subscribe/refunds">Refund &amp; Cancellation Policy</a>) and aren’t tax-deductible, since Saints Service isn’t a charity.</p>
+    </div>
+    <div id="subbox">
     <button id="pay" type="button" disabled>Continue to payment</button>
     <p class="terms">By continuing, you agree to the <a href="/subscribe/terms">Terms of Service</a> and the <a href="/subscribe/refunds">Refund &amp; Cancellation Policy</a>. You’ll be charged ${esc(price)} USD today and then every month until you cancel. Payments are non-refundable. You can cancel any time${portal ? ` <a href="${esc(portal)}" target="_blank" rel="noopener">online</a> or` : ''} by emailing <a href="mailto:${esc(supportEmail(env))}">${esc(supportEmail(env))}</a>.</p>
     <p class="small">You’ll choose how to pay (card, Apple Pay, Google Pay, Cash App Pay…) on Stripe’s secure page.${portal ? ` · <a href="${esc(portal)}" target="_blank" rel="noopener">Manage or cancel a subscription</a>` : ''}</p>
+    </div>
   </section>
 
   <section id="wait" hidden>
@@ -260,6 +304,13 @@ export function subscribePage(env, { ready, cents }) {
     <p class="small">Your subscription renews monthly until you cancel. Stripe emails you a receipt. Keep this page or a screenshot of your code until you’ve signed in.${portal ? ` · <a href="${esc(portal)}" target="_blank" rel="noopener">Manage or cancel</a>` : ` To cancel, email <a href="mailto:${esc(supportEmail(env))}">${esc(supportEmail(env))}</a>.`}</p>
   </section>
 
+  <section id="thanks" hidden>
+    <h1>Thank you, <span id="thanks-user"></span>!</h1>
+    <p class="hint ok">Your contribution of <b id="thanks-amt"></b> went through. It really helps keep Saints Service going.</p>
+    <p class="small">Stripe emails you a receipt. Your subscription stays the same.</p>
+    <a class="btn" href="/subscribe/">Done</a>
+  </section>
+
   <section id="cancel" hidden>
     <h1>Payment canceled</h1>
     <p class="hint">Nothing was charged.</p>
@@ -271,9 +322,11 @@ ${policyFooter(env)}
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
-  var show = function (id) { ['closed', 'form', 'wait', 'done', 'cancel'].forEach(function (x) { $(x).hidden = x !== id; }); };
+  var show = function (id) { ['closed', 'form', 'wait', 'done', 'thanks', 'cancel'].forEach(function (x) { $(x).hidden = x !== id; }); };
   var q = new URLSearchParams(location.search);
   var hint = $('hint'), input = $('user'), pay = $('pay'), timer = null, okName = '';
+  var contrib = $('contrib'), subbox = $('subbox'), amt = $('amt'), give = $('give'), giveName = '';
+  var MIN = ${CONTRIB_MIN_CENTS}, MAX = ${CONTRIB_MAX_CENTS};
   // One id per visit: tapping twice, or coming back from checkout, reuses the
   // same checkout instead of locking the name.
   var attempt = '';
@@ -286,13 +339,14 @@ ${policyFooter(env)}
   function setHint(text, cls) { hint.textContent = text; hint.className = 'hint' + (cls ? ' ' + cls : ''); }
   function check() {
     var u = input.value.trim().replace(/^@/, '');
-    okName = ''; pay.disabled = true;
+    okName = ''; pay.disabled = true; giveName = ''; contrib.hidden = true; subbox.hidden = false;
     if (!u) { setHint('Letters, numbers, dot, dash or underscore.'); return; }
     if (!/^[A-Za-z0-9_.-]{1,40}$/.test(u)) { setHint('Use only letters, numbers, dot, dash or underscore.', 'bad'); return; }
     setHint('Checking…');
     fetch('/subscribe/check?user=' + encodeURIComponent(u) + '&attempt=' + attempt, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
       if (input.value.trim().replace(/^@/, '') !== u) return;
       if (d.ok) { okName = u; pay.disabled = false; setHint(d.note || ('“' + u + '” is available.'), 'ok'); }
+      else if (d.canContribute) { giveName = u; contrib.hidden = false; subbox.hidden = true; setHint('“' + u + '” is already subscribed. Thank you for being a member!', 'ok'); syncAmt(); }
       else setHint(d.error || 'That name can’t be used.', 'bad');
     }).catch(function () { setHint('Couldn’t check right now. Try again.', 'bad'); });
   }
@@ -309,7 +363,49 @@ ${policyFooter(env)}
         }).catch(function () { setHint('Couldn’t reach the server. Try again.', 'bad'); pay.disabled = false; pay.textContent = 'Continue to payment'; });
     });
   }
+  // Contributions: the amount box and its preset buttons.
+  function cents() { var v = Math.round(parseFloat(amt.value) * 100); return isFinite(v) ? v : 0; }
+  function syncAmt() {
+    var c = cents(), ok = c >= MIN && c <= MAX, ah = $('amt-hint');
+    give.disabled = !ok;
+    give.textContent = ok ? 'Contribute $' + (c / 100).toFixed(2) : 'Contribute';
+    ah.textContent = ok ? 'From $' + (MIN / 100).toFixed(2) + ' to $' + (MAX / 100).toFixed(2) + '.' : c < MIN ? 'The smallest contribution is $' + (MIN / 100).toFixed(2) + '.' : 'The largest contribution is $' + (MAX / 100).toFixed(2) + '.';
+    ah.className = 'hint' + (ok ? '' : ' bad');
+    Array.prototype.forEach.call(contrib.querySelectorAll('[data-amt]'), function (b) { b.setAttribute('aria-pressed', String(Number(b.getAttribute('data-amt')) * 100 === c)); });
+  }
+  if (contrib) {
+    Array.prototype.forEach.call(contrib.querySelectorAll('[data-amt]'), function (b) { b.addEventListener('click', function () { amt.value = b.getAttribute('data-amt'); syncAmt(); }); });
+    amt.addEventListener('input', syncAmt);
+    give.addEventListener('click', function () {
+      var c = cents();
+      if (!giveName || c < MIN || c > MAX) return;
+      give.disabled = true; give.textContent = 'Opening secure checkout…';
+      fetch('/subscribe/contribute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: giveName, cents: c, attempt: attempt }) })
+        .then(function (r) { return r.json(); }).then(function (d) {
+          if (d.url) { location.href = d.url; return; }
+          $('amt-hint').textContent = d.error || 'Couldn’t start the payment. Try again.'; $('amt-hint').className = 'hint bad'; syncAmt();
+        }).catch(function () { $('amt-hint').textContent = 'Couldn’t reach the server. Try again.'; $('amt-hint').className = 'hint bad'; give.disabled = false; give.textContent = 'Contribute $' + (c / 100).toFixed(2); });
+    });
+  }
   if (q.get('canceled')) { show('cancel'); return; }
+  var thanks = q.get('thanks');
+  if (thanks) {
+    show('wait');
+    var ttries = 0;
+    (function pollThanks() {
+      fetch('/subscribe/status?session=' + encodeURIComponent(thanks), { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
+        if (d.contribution && d.paid) {
+          // A new visit id, so giving the same amount again opens a new checkout.
+          try { sessionStorage.removeItem('sub_attempt'); } catch (e) { /* private mode */ }
+          $('thanks-user').textContent = d.user; $('thanks-amt').textContent = '$' + Number(d.amount).toFixed(2); show('thanks'); return;
+        }
+        if (d.error && !d.pending) { $('wait-msg').textContent = d.error; return; }
+        if (++ttries > 40) { $('wait-msg').textContent = 'Still waiting for the payment to be confirmed. Keep this page open, or come back to it later: it will update.'; ttries = 0; }
+        setTimeout(pollThanks, 3000);
+      }).catch(function () { setTimeout(pollThanks, 4000); });
+    })();
+    return;
+  }
   var session = q.get('done');
   if (session) {
     show('wait');

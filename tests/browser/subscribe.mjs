@@ -12,6 +12,9 @@
 //      the same name isn't blocked by their own unfinished checkout
 //   6  the footer (Terms, Refunds & cancellation, Privacy, contact email),
 //      the renewal terms by the button, and each policy page on a phone
+//   7  a member who already pays types their name: instead of Subscribe they
+//      get a one-time contribution ($8 or more) → checkout → "Thank you";
+//      the owner's Subscribers card shows it; the subscription is unchanged
 //   node tests/browser/subscribe.mjs [outDir]
 import fs from 'node:fs';
 import path from 'node:path';
@@ -40,7 +43,7 @@ const stub = await serve(async (rq, rs) => {
     if (rq.headers.authorization !== 'Bearer sk_test_browser') return json({ error: { message: 'Invalid API key' } }, 401);
     const p = new URLSearchParams(body);
     const id = 'cs_test_' + Math.random().toString(36).slice(2, 14) + 'abcdefgh';
-    const s = { id, object: 'checkout.session', mode: p.get('mode'), url: `http://127.0.0.1:${stub.port}/pay/${id}`, client_reference_id: p.get('client_reference_id'), metadata: { user: p.get('metadata[user]') },
+    const s = { id, object: 'checkout.session', mode: p.get('mode'), url: `http://127.0.0.1:${stub.port}/pay/${id}`, client_reference_id: p.get('client_reference_id'), metadata: { user: p.get('metadata[user]'), ...(p.get('metadata[kind]') ? { kind: p.get('metadata[kind]') } : {}) },
       amount_total: Number(p.get('line_items[0][price_data][unit_amount]')), success_url: p.get('success_url'), cancel_url: p.get('cancel_url'), status: 'open', payment_status: 'unpaid', customer: null, subscription: null };
     sessions.set(id, s);
     return json(s);
@@ -54,7 +57,7 @@ const stub = await serve(async (rq, rs) => {
     const s = sessions.get(m[1]);
     if (rq.method === 'GET') {
       rs.setHeader('Content-Type', 'text/html');
-      rs.end(`<!doctype html><meta name="viewport" content="width=device-width"><body style="font-family:sans-serif;padding:24px"><h2>Stripe Checkout (test stand-in)</h2><p>${s.metadata.user} · $${(s.amount_total / 100).toFixed(2)} / month</p>
+      rs.end(`<!doctype html><meta name="viewport" content="width=device-width"><body style="font-family:sans-serif;padding:24px"><h2>Stripe Checkout (test stand-in)</h2><p>${s.metadata.user} · $${(s.amount_total / 100).toFixed(2)}${s.mode === 'subscription' ? ' / month' : ' one-time'}</p>
         <form method="post"><button id="pay" name="a" value="pay">Pay</button> <button id="back" name="a" value="cancel">Back</button></form></body>`);
       return;
     }
@@ -164,7 +167,7 @@ try {
 
   // 5: the policies Stripe's review looks for, linked from every page.
   await page.goto(env.workerUrl + '/subscribe/');
-  const legal = await page.evaluate(() => ({ links: [...document.querySelectorAll('footer.legal a')].map((a) => a.getAttribute('href')), terms: document.querySelector('#form .terms').textContent.replace(/\s+/g, ' ') }));
+  const legal = await page.evaluate(() => ({ links: [...document.querySelectorAll('footer.legal a')].map((a) => a.getAttribute('href')), terms: document.querySelector('#subbox .terms').textContent.replace(/\s+/g, ' ') }));
   check('Footer: Terms, Refunds & cancellation, Privacy and the contact email', ['/subscribe/terms', '/subscribe/refunds', '/subscribe/privacy', 'mailto:viztrrx@gmail.com'].every((h) => legal.links.includes(h)), legal.links.join(' '));
   check('By the button: agree to the terms, $13.80 USD today and every month until you cancel, non-refundable', /agree to the Terms of Service and the Refund & Cancellation Policy/.test(legal.terms) && /\$13\.80 USD today and then every month until you cancel\. Payments are non-refundable\./.test(legal.terms), legal.terms);
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
@@ -188,8 +191,73 @@ try {
   await page.waitForURL(/\/subscribe\/$/, { timeout: 10000 });
   check('“← Subscribe page” goes back', await page.isVisible('#user'));
 
-  for (const [n, p] of [['subscribe page', page], ['console', cp]]) check(`No page errors (${n})`, p._errors.length === 0, p._errors.slice(0, 2).join(' | '));
-  await ctx.close(); await pc.close();
+  // 7: a member adds a one-time contribution.
+  const subBefore = (await admin('/admin/subscriptions', { action: 'list' })).subscriptions.find((x) => x.user === NAME);
+  await page.goto(env.workerUrl + '/subscribe/');
+  await page.fill('#user', NAME);
+  const giveShown = await page.waitForFunction(() => !document.getElementById('contrib').hidden, null, { timeout: 8000 }).then(() => true, () => false);
+  check('A member who already pays gets “already subscribed” and the contribution box, not Subscribe', giveShown && await page.isHidden('#subbox') && /already subscribed/.test(await page.textContent('#hint')), await page.textContent('#hint'));
+  await page.fill('#amt', '7');
+  check('Under $8: the button turns off and says the smallest is $8', await page.isDisabled('#give') && /smallest contribution is \$8\.00/.test(await page.textContent('#amt-hint')), await page.textContent('#amt-hint'));
+  await page.click('#contrib [data-amt="20"]');
+  check('Tapping $20: “Contribute $20.00”', (await page.textContent('#give')).trim() === 'Contribute $20.00' && await page.getAttribute('#contrib [data-amt="20"]', 'aria-pressed') === 'true', await page.textContent('#give'));
+  await page.screenshot({ path: path.join(OUT, '09-contribute.png') });
+  const hooksBefore = webhooksSent;
+  await page.click('#give');
+  await page.waitForURL(/\/pay\/cs_test_/, { timeout: 10000 });
+  check('Opens Stripe’s checkout (stand-in) for a one-time $20.00', /\$20\.00 one-time/.test(await page.textContent('body')));
+  await page.click('#pay');
+  await page.waitForURL(/\/subscribe\/\?thanks=cs_test_/, { timeout: 10000 });
+  const thanked = await page.waitForFunction(() => !document.getElementById('thanks').hidden, null, { timeout: 20000 }).then(() => true, () => false);
+  check('Back on the page: “Thank you” with the amount', thanked && (await page.textContent('#thanks-user')) === NAME && (await page.textContent('#thanks-amt')) === '$20.00', thanked ? (await page.textContent('#thanks')).replace(/\s+/g, ' ').trim() : '');
+  await page.screenshot({ path: path.join(OUT, '10-thank-you.png') });
+  check('…and the next contribution gets a fresh checkout (visit id renewed)', await page.evaluate(() => !sessionStorage.getItem('sub_attempt')));
+  const after = await admin('/admin/subscriptions', { action: 'list' });
+  const subAfter = after.subscriptions.find((x) => x.user === NAME);
+  check('Owner: the $20 contribution is in the ledger once; the subscription didn’t change', webhooksSent === hooksBefore + 1 && after.ledger.filter((x) => x.user === NAME && x.action === 'contribution').map((x) => x.amount).join() === '20' && subAfter.expiresAt === subBefore.expiresAt, JSON.stringify(after.ledger.filter((x) => x.user === NAME)));
+
+  // …and on the owner's Subscribers card.
+  const oc = await browser.newContext({ viewport: { width: 1200, height: 900 } });
+  await oc.addInitScript((u) => { try { localStorage.setItem('gpa_admin_tele_endpoint', u); localStorage.setItem('gpa_openai_key_skip', '1'); } catch (e) { /* ignore */ } }, env.workerUrl);
+  const op = track(await oc.newPage());
+  await op.goto(`http://127.0.0.1:${site.port}/`);
+  await op.evaluate((c) => { (0, eval)(c); }, code);
+  await op.waitForFunction(() => !!document.getElementById('gpa-root-host'));
+  for (const btn of ['#gpa-signup-btn', '#gpa-login-btn']) {   // a fresh test Worker, or one where the owner already signed up
+    if (await R(op, (r) => r.querySelector('#gpa-login').style.display === 'none')) break;
+    await op.fill(sr('#gpa-login-user'), 'viztrrx');
+    await op.fill(sr('#gpa-login-pin'), '246810');
+    await op.click(sr(btn));
+    await op.waitForTimeout(2500);
+  }
+  await R(op, (r) => { const b = r.querySelector('#gpa-langpick .gpa-langpick-opt[data-lang="en"]'); if (b && b.offsetParent) b.click(); });
+  await R(op, (r, a) => {
+    const n = r.querySelector('.gpa-dropdown-item[data-tab="admin"]'); n.style.display = ''; n.click();
+    const f = r.querySelector('#gac-auth-fields');
+    if (f && f.offsetParent) {
+      const inputs = [...f.querySelectorAll('input')];
+      const tok = inputs.find((i) => i.type === 'password') || inputs[0];
+      tok.value = a.token; tok.dispatchEvent(new Event('input', { bubbles: true }));
+      const urlIn = inputs.find((i) => i !== tok);
+      if (urlIn) { urlIn.value = a.url; urlIn.dispatchEvent(new Event('input', { bubbles: true })); }
+      r.querySelector('#gac-connect').click();
+    }
+  }, { token: ADMIN, url: env.workerUrl });
+  await op.waitForTimeout(2500);
+  await R(op, (r) => r.querySelector('.gps-tab[data-asec="security"]').click());
+  await op.waitForFunction(() => { const b = document.getElementById('gpa-root-host').shadowRoot.querySelector('#gac-subs'); return b && !/Loading/.test(b.textContent) && b.querySelector('.gac-subs-totals'); }, null, { timeout: 15000 }).catch(() => {});
+  const card = await R(op, (r, u) => {
+    const row = [...r.querySelectorAll('.gac-subscr')].find((x) => x.dataset.user === u);
+    const t = r.querySelector('.gac-subs-totals');
+    if (t) t.scrollIntoView({ block: 'start' });
+    return { totals: t ? t.textContent.replace(/\s+/g, ' ') : '', row: row ? row.textContent.replace(/\s+/g, ' ') : '' };
+  }, NAME);
+  check('Owner’s Subscribers card: a “contributions” total, and “contributed $20” on their row', /\$20contributions/.test(card.totals.replace(/ /g, '')) && /contributed \$20/.test(card.row), JSON.stringify(card));
+  await op.waitForTimeout(400);
+  await op.screenshot({ path: path.join(OUT, '11-owner-contributions.png') });
+
+  for (const [n, p] of [['subscribe page', page], ['console', cp], ['owner console', op]]) check(`No page errors (${n})`, p._errors.length === 0, p._errors.slice(0, 2).join(' | '));
+  await ctx.close(); await pc.close(); await oc.close();
 } finally {
   await admin('/admin/config', { allowlist: { on: false } }).catch(() => {});
   await browser.close();
