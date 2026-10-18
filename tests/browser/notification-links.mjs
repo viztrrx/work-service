@@ -132,7 +132,7 @@ try {
 
   await W('/auth/register', { user: KJ, verifier: 'a'.repeat(64) });
   await tapOpen(`/console/#tab=admin&sec=security&focus=allow&user=${KJ}`);
-  check('“Wrong PIN for kj” → Allowed users, kj’s row', await flashed('.gac-acct', KJ));
+  check('“Wrong PIN for kj” → Allowed users, kj’s row', await flashed('#gac-allow-accts .gac-acct', KJ));
   await page.waitForTimeout(1200);
   const lit = await R(page, (r) => [...r.querySelectorAll('.gpa-flash')].map((x) => x.dataset.user || x.id || x.className));
   check('…and only kj’s row is outlined (the earlier tap let go)', lit.length === 1 && lit[0].toLowerCase() === KJ.toLowerCase(), JSON.stringify(lit));

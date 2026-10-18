@@ -71,7 +71,7 @@ async function ownerAdmin(page, section) {
   await R(page, (root, s) => { const t = root.querySelector(`.gps-tab[data-asec="${s}"]`); if (t) t.click(); }, section);
   await page.waitForTimeout(1500);
 }
-const rowText = (page, u) => R(page, (r, u) => (r.querySelector(`.gac-acct[data-user="${u}"]`) || {}).textContent || '', u);
+const rowText = (page, u) => R(page, (r, u) => (r.querySelector(`#gac-allow-accts .gac-acct[data-user="${u}"]`) || {}).textContent || '', u);
 
 try {
   // kj has an account; dub is approved but hasn't created it yet.
@@ -82,15 +82,15 @@ try {
   const O = await open('laptop');
   await create(O.page, 'viztrrx', null);
   await ownerAdmin(O.page, 'security');
-  await O.page.waitForFunction((u) => !!document.getElementById('gpa-root-host').shadowRoot.querySelector(`.gac-acct[data-user="${u}"]`), DUB.toLowerCase(), { timeout: 15000 });
+  await O.page.waitForFunction((u) => !!document.getElementById('gpa-root-host').shadowRoot.querySelector(`#gac-allow-accts .gac-acct[data-user="${u}"]`), DUB.toLowerCase(), { timeout: 15000 });
   const dubBefore = await rowText(O.page, DUB.toLowerCase());
   check('dub (approved earlier, no account yet) has no invite code: unchanged', /The first person to create this account/.test(dubBefore) && /Make invite code/.test(dubBefore), dubBefore);
   await O.page.fill(sr('#gac-allow-users'), [KJ, DUB, SUBBY, SAM].join('\n'));
   await O.page.click(sr('#gac-allow-save'));
-  const samRow = await O.page.waitForFunction((u) => { const el = document.getElementById('gpa-root-host').shadowRoot.querySelector(`.gac-acct[data-user="${u}"] .gac-invite-code`); return el ? el.textContent : false; }, SAM.toLowerCase(), { timeout: 15000 }).then((h) => h.jsonValue(), () => '');
+  const samRow = await O.page.waitForFunction((u) => { const el = document.getElementById('gpa-root-host').shadowRoot.querySelector(`#gac-allow-accts .gac-acct[data-user="${u}"] .gac-invite-code`); return el ? el.textContent : false; }, SAM.toLowerCase(), { timeout: 15000 }).then((h) => h.jsonValue(), () => '');
   check('Adding sam makes an invite code, shown under Allowed users', /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(samRow), samRow);
   check('…kj and dub still have no code', !/Invite code/.test(await rowText(O.page, KJ.toLowerCase())) && !/Invite code/.test(await rowText(O.page, DUB.toLowerCase())));
-  await R(O.page, (r, u) => r.querySelector(`.gac-acct[data-user="${u}"]`).scrollIntoView({ block: 'center' }), SAM.toLowerCase());
+  await R(O.page, (r, u) => r.querySelector(`#gac-allow-accts .gac-acct[data-user="${u}"]`).scrollIntoView({ block: 'center' }), SAM.toLowerCase());
   await O.page.waitForTimeout(300);
   await O.page.locator(sr('#gac-allow-accts')).screenshot({ path: path.join(OUT, '01-allowed-users-invite.png') });
 
@@ -107,7 +107,7 @@ try {
   // The code is used up.
   await R(O.page, (root) => root.querySelector('.gps-tab[data-asec="security"]').click());
   await O.page.waitForTimeout(1500);
-  check('…and the owner now sees sam signed in, code gone', await O.page.waitForFunction((u) => { const el = document.getElementById('gpa-root-host').shadowRoot.querySelector(`.gac-acct[data-user="${u}"]`); return el && /Signed in/.test(el.textContent) && !el.querySelector('.gac-invite-code'); }, SAM.toLowerCase(), { timeout: 15000 }).then(() => true, () => false));
+  check('…and the owner now sees sam signed in, code gone', await O.page.waitForFunction((u) => { const el = document.getElementById('gpa-root-host').shadowRoot.querySelector(`#gac-allow-accts .gac-acct[data-user="${u}"]`); return el && /Signed in/.test(el.textContent) && !el.querySelector('.gac-invite-code'); }, SAM.toLowerCase(), { timeout: 15000 }).then(() => true, () => false));
 
   // 3: dub, approved before invites, needs no code.
   const D = await open('phone');

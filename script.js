@@ -22131,7 +22131,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           return (user && byUser('.gac-req', user)) || box.closest('.gac-card');
         });
       }
-      else if (sec === 'security' && p.focus === 'allow') await land(() => (user && byUser('.gac-acct', user)) || gac.querySelector('#gac-sec-events'));
+      else if (sec === 'security' && p.focus === 'allow') await land(() => (user && byUser('#gac-allow-accts .gac-acct', user)) || gac.querySelector('#gac-sec-events'));
       else if (sec === 'security' && p.focus === 'events') await land(() => { const ev = gac.querySelector('#gac-sec-events'); const h = ev && ev.querySelector('.gac-fold-head'); if (h && h.getAttribute('aria-expanded') !== 'true') h.click(); return ev; });
       else if (sec === 'security' && p.focus === 'free') await land(() => { const box = gac.querySelector('#gac-free'); if (!box || /Loading/.test(box.textContent)) return null; return (user && byUser('.gac-free-row', user)) || box.closest('.gac-card'); });
       else if (sec === 'security' && p.focus === 'subs') {

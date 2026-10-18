@@ -123,18 +123,18 @@ try {
   await O.page.waitForTimeout(2500);
   await R(O.page, (root) => { const t = root.querySelector('.gps-tab[data-asec="security"]'); if (t) t.click(); });
   const row = await O.page.waitForFunction((u) => {
-    const el = document.getElementById('gpa-root-host').shadowRoot.querySelector(`.gac-acct[data-user="${u}"]`);
+    const el = document.getElementById('gpa-root-host').shadowRoot.querySelector(`#gac-allow-accts .gac-acct[data-user="${u}"]`);
     return el ? el.textContent : false;
   }, KJ.toLowerCase(), { timeout: 15000 }).then((h) => h.jsonValue(), () => '');
   check('Owner sees kj as “Signed in” in Admin → Security → Allowed users', /Signed in/.test(row) && /Sign out/.test(row), row);
-  await R(O.page, (root, u) => root.querySelector(`.gac-acct[data-user="${u}"]`).scrollIntoView({ block: 'center' }), KJ.toLowerCase());
+  await R(O.page, (root, u) => root.querySelector(`#gac-allow-accts .gac-acct[data-user="${u}"]`).scrollIntoView({ block: 'center' }), KJ.toLowerCase());
   await O.page.waitForTimeout(300);
   await shot(O.page, '06-owner-allowed-users.png');
   const secLog = await R(O.page, (root) => root.querySelector('#gac-body-security, [data-body="security"]')?.textContent || root.textContent);
   check('Security log counts the refused second sign-in and the wrong PIN', /Second sign-ins refused/.test(secLog) && /Failed sign-ins/.test(secLog));
-  await R(O.page, (root, u) => root.querySelector(`.gac-acct[data-user="${u}"] button[data-acct="revokesessions"]`).click(), KJ.toLowerCase());
+  await R(O.page, (root, u) => root.querySelector(`#gac-allow-accts .gac-acct[data-user="${u}"] button[data-acct="revokesessions"]`).click(), KJ.toLowerCase());
   await O.page.waitForTimeout(1500);
-  const after = await R(O.page, (root, u) => (root.querySelector(`.gac-acct[data-user="${u}"]`) || {}).textContent || '', KJ.toLowerCase());
+  const after = await R(O.page, (root, u) => (root.querySelector(`#gac-allow-accts .gac-acct[data-user="${u}"]`) || {}).textContent || '', KJ.toLowerCase());
   check('After Sign out the owner sees “Signed out”', /Signed out/.test(after), after);
   await shot(O.page, '06b-owner-after-sign-out.png');
   check('No page errors in the owner’s console', O.page._errors.length === 0, O.page._errors.slice(0, 2).join(' | '));
