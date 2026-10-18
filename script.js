@@ -816,7 +816,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     { at: '2026-10-19T07:00:00-04:00', commit: '', title: 'Opens centered, not full screen', parts: {
       console: ['change', 'Injected into a website, only the sign-in card shows (centered, the page around it still usable); signed in, the console is a centered window (about 60% of the page) instead of the whole screen; Full page is still in Settings → Size']} },
     { at: '2026-10-19T08:00:00-04:00', commit: '', title: 'Now called Saints Service, with the planet icon', parts: {
-      console: ['change', 'The console is now called Saints Service everywhere; on the sign-in card the planet icon replaces ＋ and does the same thing (create an account)'] } }
+      console: ['change', 'The console is now called Saints Service everywhere; on the sign-in card the planet icon replaces ＋ and does the same thing (create an account)'] } },
+    { at: '2026-10-19T08:30:00-04:00', commit: '', title: 'No way in without the server', parts: {
+      console: ['fix', 'Signing in or creating an account (planet icon) is refused when the server can’t be reached, and a saved sign-in only comes back after the server checks it, so blocking the server or faking browser data can’t open the console'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -16070,6 +16072,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // The Worker's own words for a refusal: "Unable to create account", or
   // "Your subscription has ended…" for a subscriber whose time is up.
   let accessDeniedMsg = ACCESS_DENIED_MSG;
+  const SERVER_UNREACHABLE_MSG = 'Can’t reach the Saints Service server, so nobody can sign in right now. Check your connection and try again.';
   async function accessAllowed(user) {
     accessNeedsServer = false;
     accessDeniedMsg = ACCESS_DENIED_MSG;
@@ -16079,7 +16082,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       const timer = ctl ? setTimeout(() => ctl.abort(), 6000) : null;
       const r = await fetch(telemetryEndpoint() + '/access?user=' + encodeURIComponent(user) + '&device=' + consoleDeviceId(), { cache: 'no-store', signal: ctl ? ctl.signal : undefined });
       if (timer) clearTimeout(timer);
-      const d = await r.json().catch(() => ({}));
+      // Fail closed: no answer from the server is never a "yes".
+      if (!r.ok) { accessDeniedMsg = SERVER_UNREACHABLE_MSG; return false; }
+      const d = await r.json().catch(() => null);
+      if (!d || typeof d.allowed !== 'boolean') { accessDeniedMsg = SERVER_UNREACHABLE_MSG; return false; }
       if (d.deviceLocked) { showDeviceLock(d.until); accessDeniedMsg = d.error || 'This device is locked.'; return false; }
       if (d.allowed === false) {
         accessDeniedMsg = typeof d.error === 'string' && d.error ? d.error.slice(0, 160) : ACCESS_DENIED_MSG;
@@ -16090,7 +16096,12 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       // server first, which only lets them in.
       accessNeedsServer = !!d.sessionRequired || !!d.appStaffOnly;
       return true;
-    } catch (e) { return true; }
+    } catch (e) {
+      // Unreachable (offline, blocked, timed out): refuse, so blocking the
+      // server can't be used to open the console with a local-only account.
+      accessDeniedMsg = SERVER_UNREACHABLE_MSG;
+      return false;
+    }
   }
 
   // "Request access" under the refusal: the person can ask the owner, who
@@ -25634,7 +25645,26 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // If this browser already had someone signed in, skip straight back in.
   (function restoreSession() {
     const savedUser = localStorage.getItem(SESSION_KEY);
-    if (savedUser && readProfile(savedUser)) {
+    if (savedUser && readProfile(savedUser) && typeof telemetryOn === 'function' && telemetryOn()) {
+      // Server-backed: a saved sign-in only comes back after the server says
+      // this name is allowed and (when sessions are required) its session is
+      // still valid, so faking browser storage or blocking the server can't
+      // open the console. Until then the sign-in screen shows.
+      loginOverlay.style.display = 'flex';
+      setLockedChrome(true);
+      refreshAccountUI();
+      (async () => {
+        if (!(await accessAllowed(savedUser))) { localStorage.removeItem(SESSION_KEY); showLoginMsg(accessDeniedMsg, true); return; }
+        if (accessNeedsServer) {
+          const t = serverSession && serverSession.token && String(serverSession.u).toLowerCase() === String(savedUser).toLowerCase() ? serverSession.token : '';
+          let ok = false;
+          if (t) { try { const r = await fetch(AUTH_BASE() + '/auth/me', { headers: { 'X-GPA-Session': t } }); const d = await r.json().catch(() => ({})); ok = r.ok && !!d.ok; } catch (e) { ok = false; } }
+          if (!ok) { showLoginMsg('Sign in again with your PIN.'); loginUserInput.value = savedUser; return; }
+        }
+        enterApp(savedUser);
+        refreshServerSession();
+      })();
+    } else if (savedUser && readProfile(savedUser)) {
       enterApp(savedUser);
       refreshServerSession();
     } else {

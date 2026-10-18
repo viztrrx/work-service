@@ -13,6 +13,20 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **Fail closed** (owner: "make sure the planet icon replacing the plus
+  doesn't bypass the approved users so no one brute forces their way in or
+  finds a way in"): the icon calls `doSignUp` like ＋ did (server register:
+  allowlist, device lock, attempt limits). Two client gaps closed:
+  `accessAllowed()` used to return true when `/access` failed (offline or
+  blocked) or answered oddly, letting a local-only profile open the
+  console; now it returns false with `SERVER_UNREACHABLE_MSG`.
+  `restoreSession()` used to enter the app from localStorage alone; when
+  server-backed (`telemetryOn()`) it now shows the sign-in screen until
+  `/access` allows the name and, if sessions are required, `/auth/me`
+  accepts the stored token. Tests: signin-help.mjs step 5 (icon with an
+  unapproved name, server blocked for create and sign-in, faked storage
+  for unapproved and approved names, a real reload still signed in).
+  Before that:
   **Renamed to Saints Service + planet icon** (owner: "change it from Agent
   Console to Saints Service… instead of the plus change the plus for this
   image icon… same features"): every visible "Agent Console" in the repo is
@@ -777,7 +791,7 @@ node tests/browser/admin-app.mjs           # 20
 node tests/browser/playlists.mjs           # 23
 node tests/browser/mp3.mjs                 # 51 (+1 NOT RUN: real YouTube download; needs ffmpeg/ffprobe)
 node tests/browser/subscribe.mjs           # 61
-node tests/browser/signin-help.mjs         # 28
+node tests/browser/signin-help.mjs         # 37
 node tests/browser/usage-meter.mjs         # 16
 node tests/browser/usage-meter-sizes.mjs   # 25
 node tests/browser/ask-photo-size.mjs      # 6

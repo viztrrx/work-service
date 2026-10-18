@@ -205,6 +205,51 @@ try {
   await R(owner.page, (r) => { const d = r.querySelectorAll('.gac-help-fold'); d.forEach((x) => { x.open = true; }); });
   await owner.page.waitForTimeout(300);
   await owner.page.locator(sr('#gac-help-card')).screenshot({ path: path.join(OUT, '08-owner-people-and-log.png') });
+  // 5: no way around the approved list through the planet icon (create account).
+  const sneak = await computer();
+  await sneak.page.fill(sr('#gpa-login-user'), 'sneaky' + run);
+  await sneak.page.fill(sr('#gpa-login-pin'), '9753');
+  await sneak.page.click(sr('#gpa-signup-btn'));
+  await sneak.page.waitForTimeout(2000);
+  let st = await R(sneak.page, (r) => ({ inside: r.querySelector('#gpa-login').style.display === 'none', msg: r.querySelector('#gpa-login-msg').textContent }));
+  check('The planet icon (create account) with a name that isn’t approved: refused', !st.inside && /Unable to create account/.test(st.msg), JSON.stringify(st));
+  // Blocking the server doesn't help: no answer is never a "yes".
+  await sneak.page.route(env.workerUrl + '/**', (route) => route.abort());
+  await sneak.page.fill(sr('#gpa-login-user'), KIM);
+  await sneak.page.fill(sr('#gpa-login-pin'), '1111');
+  await sneak.page.click(sr('#gpa-signup-btn'));
+  await sneak.page.waitForTimeout(7500);
+  st = await R(sneak.page, (r) => ({ inside: r.querySelector('#gpa-login').style.display === 'none', msg: r.querySelector('#gpa-login-msg').textContent }));
+  check('With the server blocked, creating an account (even with an approved name) is refused: “Can’t reach the server”', !st.inside && /Can’t reach the Saints Service server/.test(st.msg), JSON.stringify(st));
+  await sneak.page.click(sr('#gpa-login-btn'));
+  await sneak.page.waitForTimeout(7500);
+  st = await R(sneak.page, (r) => ({ inside: r.querySelector('#gpa-login').style.display === 'none', msg: r.querySelector('#gpa-login-msg').textContent }));
+  check('…and so is signing in', !st.inside && /Can’t reach the Saints Service server/.test(st.msg), JSON.stringify(st));
+  await sneak.page.unroute(env.workerUrl + '/**');
+  // A faked saved sign-in (browser storage) doesn't open the console on reload.
+  await sneak.page.evaluate((u) => { localStorage.setItem('gpa_profile_' + u, JSON.stringify({ user: u, pinHash: 'x', data: {}, updatedAt: Date.now() })); localStorage.setItem('gpa_session_user', u); }, 'faker' + run);
+  await sneak.page.reload();
+  await sneak.page.evaluate((c) => { (0, eval)(c); }, code);
+  await sneak.page.waitForFunction(() => !!document.getElementById('gpa-root-host'));
+  await sneak.page.waitForTimeout(3500);
+  st = await R(sneak.page, (r) => ({ inside: r.querySelector('#gpa-login').style.display === 'none', msg: r.querySelector('#gpa-login-msg').textContent }));
+  check('A faked saved sign-in for a name that isn’t approved: stays on the sign-in screen', !st.inside, JSON.stringify(st));
+  // …nor does a real approved name's saved sign-in without its server session.
+  await sneak.page.evaluate((u) => { localStorage.setItem('gpa_profile_' + u.toLowerCase(), JSON.stringify({ user: u, pinHash: 'x', data: {}, updatedAt: Date.now() })); localStorage.setItem('gpa_session_user', u); localStorage.removeItem('gpa_session_token'); }, KIM);
+  await sneak.page.reload();
+  await sneak.page.evaluate((c) => { (0, eval)(c); }, code);
+  await sneak.page.waitForFunction(() => !!document.getElementById('gpa-root-host'));
+  await sneak.page.waitForTimeout(3500);
+  st = await R(sneak.page, (r) => ({ inside: r.querySelector('#gpa-login').style.display === 'none', msg: r.querySelector('#gpa-login-msg').textContent }));
+  check('A faked saved sign-in for an approved name (no valid session): “Sign in again with your PIN”', !st.inside && /Sign in again with your PIN/.test(st.msg), JSON.stringify(st));
+  await sneak.page.screenshot({ path: path.join(OUT, '09-no-way-around.png') });
+  // A real saved sign-in still comes back on reload.
+  await kim.page.reload();
+  await kim.page.evaluate((c) => { (0, eval)(c); }, code);
+  await kim.page.waitForFunction(() => !!document.getElementById('gpa-root-host'));
+  const kimBack = await waitFor(kim.page, (r) => r.querySelector('#gpa-login').style.display === 'none', null, 15000);
+  check('A real signed-in person reloading the page is still signed in (after the server check)', kimBack);
+  check('No page errors (sneaky)', sneak.page._errors.length === 0, sneak.page._errors.slice(0, 2).join(' | '));
   for (const [n, p] of [['kim', kim], ['lou', lou], ['owner', owner], ['stranger', stranger]]) check(`No page errors (${n})`, p.page._errors.length === 0, p.page._errors.slice(0, 2).join(' | '));
 } finally {
   await admin('/admin/config', { allowlist: { on: false, users: [] } }).catch(() => {});
