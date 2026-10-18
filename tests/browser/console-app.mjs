@@ -40,6 +40,9 @@ try {
   const iphone = devices['iPhone 15'] || devices['iPhone 14'];
   const ctx = await browser.newContext({ ...iphone, serviceWorkers: 'allow' });
   await ctx.addInitScript(() => { Object.defineProperty(navigator, 'standalone', { value: true, configurable: true }); });
+  // The app talks to this test Worker (in production that's the default
+  // address). Signing in needs a Worker that answers: it never opens without one.
+  await ctx.addInitScript((u) => { try { localStorage.setItem('gpa_admin_tele_endpoint', u); localStorage.setItem('gpa_openai_key_skip', '1'); } catch (e) { /* ignore */ } }, env.workerUrl);
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));

@@ -26,6 +26,13 @@ list (rounds 1–3) was finished and pushed.
   accepts the stored token. Tests: signin-help.mjs step 5 (icon with an
   unapproved name, server blocked for create and sign-in, faked storage
   for unapproved and approved names, a real reload still signed in).
+  **For tests:** a console that signs in must point at the test Worker
+  (localStorage `gpa_admin_tele_endpoint` = env.workerUrl, or the script
+  patched to it). Several suites used to pass by accident because the
+  fail-open check let them in when the default production address was
+  unreachable; console-app, eaglercraft ("worker unreachable" now signs in
+  first, then blocks `/eagler/`), one-session (the hand-made profile never
+  gets in) and usage-meter-sizes (6 presets) were updated.
   Before that:
   **Renamed to Saints Service + planet icon** (owner: "change it from Agent
   Console to Saints Service… instead of the plus change the plus for this
