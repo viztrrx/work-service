@@ -689,7 +689,14 @@ files/suites you think would be affected". So:
    (e.g. a selector class, the login flow, `allowedUser`) reaches a suite,
    include it. Don't run unrelated suites (e.g. `eaglercraft.e2e`,
    `usage-meter*`, `ask-photo-size` for a subscriptions change).
-3. Look at the screenshots, say in the report which suites ran and which
+3. **Screenshots for the owner go in `docs/screenshots/`** (owner: "add the
+   images to a special dedicated file in github where i can see them… it
+   won't let me see it here"): copy the relevant ones from the test output
+   into a numbered folder per feature with plain names, shrink them
+   (≤1200 px wide, 256-color PNG via Pillow), and add each to
+   `docs/screenshots/README.md` with a one-line caption. Link that page in
+   the report. Never include real keys, SSNs or bank details.
+4. Look at the screenshots, say in the report which suites ran and which
    were skipped as unaffected, then commit and push.
 The whole list of 27 suites is still the right call only for a change that
 touches everything (e.g. script.js start-up, the Worker's request
