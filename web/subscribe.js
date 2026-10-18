@@ -349,7 +349,7 @@ export function subscribePage(env, { ready, cents }) {
     <ol id="steps-back" hidden>
       <li>Open Saints Service (the Agent Console) and sign in as <b class="u"></b> with your PIN, as before.</li>
     </ol>
-    <p class="small">Your subscription renews monthly until you cancel. Stripe emails you a receipt.<span id="keep-open" hidden> Keep this page open until you’ve made your PIN.</span>${portal ? ` · <a href="${esc(portal)}" target="_blank" rel="noopener">Manage or cancel</a>` : ` To cancel, email <a href="mailto:${esc(supportEmail(env))}">${esc(supportEmail(env))}</a>.`}</p>
+    <p class="small">Your subscription renews monthly until you cancel. Stripe emails you a receipt.<span id="keep-open" hidden> Keep this page open until you’ve finished these steps.</span>${portal ? ` · <a href="${esc(portal)}" target="_blank" rel="noopener">Manage or cancel</a>` : ` To cancel, email <a href="mailto:${esc(supportEmail(env))}">${esc(supportEmail(env))}</a>.`}</p>
   </section>
 
   <section id="dup" hidden>

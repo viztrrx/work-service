@@ -115,6 +115,8 @@ try {
   const doneOk = await page.waitForFunction(() => !document.getElementById('done').hidden, null, { timeout: 20000 }).then(() => true, () => false);
   const signupCode = doneOk ? (await page.textContent('#code')).trim() : '';
   check('Back on the page: “You’re in”, and “Create your PIN” (the sign-up code only tucked away as an in-app fallback)', doneOk && await page.isVisible('#pin-form') && (await page.inputValue('#pin-user')) === NAME && await page.isHidden('#code') && /^[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(signupCode), signupCode);
+  const walk = (n) => page.screenshot({ path: path.join(OUT, 'walk-' + n + '.png'), fullPage: true });
+  await walk('1-back-from-paying');
   await page.fill('#pin1', '12'); await page.fill('#pin2', '12'); await page.click('#pin-go');
   check('A PIN under 4 characters is refused', /at least 4 characters/.test(await page.textContent('#pin-hint')), await page.textContent('#pin-hint'));
   await page.fill('#pin1', '246810'); await page.fill('#pin2', '246811'); await page.click('#pin-go');
@@ -129,19 +131,23 @@ try {
   check('Without ticking “I’ll remember this PIN”, it doesn’t go through', /Tick “I’ll remember this PIN”/.test(await page.textContent('#pin-hint')) && await page.isVisible('#pin-form'), await page.textContent('#pin-hint'));
   await page.check('#pin-ok');
   await page.locator('#pin-form').screenshot({ path: path.join(OUT, '02a-pin-warning.png') });
+  await walk('2-pin-filled-in');
   await page.click('#pin-go');
   const emailStep = await page.waitForFunction(() => !document.getElementById('email-form').hidden, null, { timeout: 20000 }).then(() => true, () => false);
   check('The PIN creates the account; next: “Add your school email”', emailStep && await page.isHidden('#pin-form') && await page.isHidden('#steps-ready'), (await page.textContent('#done')).replace(/\s+/g, ' ').slice(0, 160));
+  await walk('3-email-step');
   check('The email box: digits only, the domain fixed as “@alseducation.onmicrosoft.com”', (await page.textContent('#sid-dom')) === '@alseducation.onmicrosoft.com' && (await page.getAttribute('#sid', 'maxlength')) === '6' && await page.isDisabled('#sid-go'));
   await page.locator('#sid').pressSequentially('22a3b9xx29');
   check('Letters are dropped as they type', (await page.inputValue('#sid')) === '223929' && /Your email: 223929@alseducation\.onmicrosoft\.com/.test(await page.textContent('#sid-hint')) && !(await page.isDisabled('#sid-go')), await page.inputValue('#sid'));
   await page.locator('#sid').pressSequentially('77');
   check('No more than 6 digits', (await page.inputValue('#sid')) === '223929', await page.inputValue('#sid'));
   await page.locator('#email-form').screenshot({ path: path.join(OUT, '02b-school-email.png') });
+  await walk('4-email-typed');
   await page.click('#sid-go');
   const made = await page.waitForFunction(() => !document.getElementById('steps-ready').hidden, null, { timeout: 20000 }).then(() => true, () => false);
   check('Sent: the page confirms the email and says to sign in with the PIN', made && await page.isHidden('#email-form') && await page.isHidden('#keep-open') && /Sent: 223929@alseducation\.onmicrosoft\.com/.test(await page.textContent('#email-sent')) && /account is ready/.test(await page.textContent('#done')), (await page.textContent('#done')).replace(/\s+/g, ' ').slice(0, 200));
   await page.screenshot({ path: path.join(OUT, '02c-pin-made.png') });
+  await walk('5-all-done');
   check('…the payment was confirmed by Stripe’s signed webhook', webhooksSent === 1, String(webhooksSent));
 
   // 3: sign in to the console with the PIN they made (no code, no Create).

@@ -8,7 +8,8 @@ new subscriber and then the owner would see things.
 
 | Folder | What's in it |
 |---|---|
-| [1-new-subscriber](#1-a-new-subscriber-after-paying) | Making the PIN, the school email box, the confirmation, signed in |
+| [0-subscriber-walkthrough](#0-what-a-new-subscriber-sees-step-by-step) | **Start here:** every screen a new subscriber sees after paying, in order |
+| [1-new-subscriber](#1-a-new-subscriber-after-paying-close-ups) | Making the PIN, the school email box, the confirmation, signed in |
 | [2-admin-security](#2-admin--security-owner-admins-moderators) | New subscribers card, automatic month, Recent events folding, Free access |
 | [3-playlists](#3-playlists-everyone-signed-in) | Spotify / Apple Music playlist → YouTube links, for everyone |
 | [4-youtube-to-mp3](#4-youtube-to-mp3-owner) | The MP3 converter in Music → My music |
@@ -16,7 +17,42 @@ new subscriber and then the owner would see things.
 
 ---
 
-## 1. A new subscriber after paying
+## 0. What a new subscriber sees, step by step
+
+The whole page on a phone, from coming back from Stripe to done.
+
+**Step 1: right after paying.** "You're in, NewKid…! Payment received. Your
+username is approved." Then **Create your PIN** with the red "You must
+remember this PIN" box and the "I'll remember this PIN" checkbox.
+
+<img src="0-subscriber-walkthrough/step-1-after-paying.png" width="320" alt="Step 1: back from paying, Create your PIN">
+
+**Step 2: PIN typed twice and the checkbox ticked**, ready for **Create my
+account**. (Easy PINs like 1234 are refused at this point.)
+
+<img src="0-subscriber-walkthrough/step-2-pin-filled-in.png" width="320" alt="Step 2: PIN filled in and checkbox ticked">
+
+**Step 3: the account is made. "One last step: add your school email."**
+The box shows `@alseducation.onmicrosoft.com`; **Send my email** stays off
+until 6 numbers are typed.
+
+<img src="0-subscriber-walkthrough/step-3-email-step.png" width="320" alt="Step 3: Add your school email, empty">
+
+**Step 4: the 6 numbers typed** ("Your email: 223929@alseducation.onmicrosoft.com").
+Letters and a 7th digit can't be typed.
+
+<img src="0-subscriber-walkthrough/step-4-email-typed.png" width="320" alt="Step 4: 223929 typed">
+
+**Step 5: done.** "Sent: 223929@alseducation.onmicrosoft.com. The owner or an
+admin will email you the instructions there." and how to sign in. At the
+same moment you (and your admins) get the alert and it appears in
+Admin → Security → New subscribers.
+
+<img src="0-subscriber-walkthrough/step-5-all-done.png" width="320" alt="Step 5: email sent, account ready, sign-in steps">
+
+---
+
+## 1. A new subscriber after paying (close-ups)
 
 **Create your PIN.** The red box says they must remember it and nobody can
 reset it. Easy PINs (1234, 0000, 9876, a year…) are refused, and the
