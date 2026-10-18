@@ -40,7 +40,7 @@ try {
   await page.click(sr('#gpa-signup-btn'));
   await page.waitForTimeout(2500);
   await R(page, (r) => { const b = r.querySelector('#gpa-langpick .gpa-langpick-opt[data-lang="en"]'); if (b && b.offsetParent) b.click(); });
-  check('Not the home-screen app: the size presets are available here', await R(page, (r) => !r.querySelector('.gpa-panel').classList.contains('gpa-app') && r.querySelectorAll('.size-btn').length === 5));
+  check('Not the home-screen app: the size presets are available here (Compact, Normal, Large, XL, Centered, Full page)', await R(page, (r) => !r.querySelector('.gpa-panel').classList.contains('gpa-app') && r.querySelectorAll('.size-btn').length === 6 && !!r.querySelector('.size-btn[data-size="center"]')));
   const ready = await page.waitForFunction(() => { const el = document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-usage'); return el && !el.hidden && el.querySelector('#gpa-usage-left').textContent === '4 left'; }, null, { timeout: 25000 }).then(() => true, () => false);
   check('Meter shows on the injected console: 4 left of 20', ready);
 
