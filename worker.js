@@ -503,6 +503,24 @@ function zonedMonthStart(y, m, tz) {
   }
   return t;
 }
+// h:00 on day d of month m (1-12) of year y in tz, as a timestamp (DST-safe).
+function zonedAt(y, m, d, h, tz) {
+  const want = Date.UTC(y, m - 1, d, h);
+  let t = want;
+  for (let i = 0; i < 3; i++) { const p = zonedParts(t, tz); t += want - Date.UTC(p.y, p.m - 1, p.d, p.h, p.mi, p.s); }
+  return t;
+}
+// The school day session runs 7 AM to 12 PM (owner's time). A device locked
+// for unauthorized sign-in attempts stays locked until the end of the
+// current session: 12 PM today, or 12 PM tomorrow if it's already past noon.
+const SESSION_END_HOUR = 12;
+function sessionEnd(now, tz) {
+  const p = zonedParts(now, tz);
+  const today = zonedAt(p.y, p.m, p.d, SESSION_END_HOUR, tz);
+  if (now < today) return today;
+  const next = zonedParts(now + 24 * 3600e3, tz);
+  return zonedAt(next.y, next.m, next.d, SESSION_END_HOUR, tz);
+}
 function monthBounds(now, tz) {
   const p = zonedParts(now, tz);
   return { start: zonedMonthStart(p.y, p.m, tz), end: zonedMonthStart(p.y, p.m + 1, tz) };
@@ -1228,6 +1246,58 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       if (ctx && ctx.waitUntil) ctx.waitUntil(p);
       return p;
     };
+    // The owner and every admin: push to the owner's devices (computer and
+    // app) and to each admin who turned on alerts.
+    const notifyStaff = (ev) => {
+      const p = (async () => {
+        await notifyOwner(env, ev, url.origin).catch(() => {});
+        for (const a of await adminNames(env.TELEMETRY)) await notifyUser(env, a, ev, url.origin).catch(() => {});
+      })();
+      if (ctx && ctx.waitUntil) ctx.waitUntil(p);
+      return p;
+    };
+    // Sign-in help log (Admin → Security → Sign-in help): PIN requests and
+    // decisions, locked devices, student numbers. Newest first, 300 kept.
+    const signinLog = async (entry) => {
+      const kv = env && env.TELEMETRY;
+      if (!kv) return;
+      try { const l = (await kv.get('signinlog', 'json')) || []; await kv.put('signinlog', JSON.stringify([{ at: Date.now(), ...entry }, ...l].slice(0, 300))); } catch (e) { /* best-effort */ }
+    };
+    // ---- Locked devices: unauthorized sign-in attempts ----------------------
+    // Each console makes a random device id (sent as "device"), so one
+    // school network's shared IP never locks everyone. Names that aren't
+    // allowed (3 tries in an hour) or wrong PINs / codes / student numbers
+    // (5 in an hour) lock that device until the end of the day session; the
+    // owner and admins are told and can unlock it.
+    const DEVICE_RE = /^[0-9a-f]{32}$/;
+    const deviceId = (v) => (DEVICE_RE.test(String(v || '')) ? String(v) : '');
+    const deviceLock = async (id) => {
+      const kv = env && env.TELEMETRY;
+      if (!kv || !id) return null;
+      const l = await kv.get('devlock:' + id, 'json');
+      return l && l.status === 'locked' && l.until > Date.now() ? l : null;
+    };
+    const lockedResponse = (l) => json({ ok: false, deviceLocked: true, until: l.until, error: 'This device is locked after too many sign-in attempts. The owner has been told.' }, 423);
+    const deviceFail = async (id, kind, name) => {
+      const kv = env && env.TELEMETRY;
+      if (!kv || !id) return null;
+      const fk = 'devfail:' + id + ':' + Math.floor(Date.now() / 3600e3);
+      const f = (await kv.get(fk, 'json')) || { notAllowed: 0, wrong: 0, names: [] };
+      if (kind === 'notAllowed') f.notAllowed++; else f.wrong++;
+      if (name && !f.names.includes(name)) f.names = [...f.names, String(name).slice(0, 40)].slice(-8);
+      await kv.put(fk, JSON.stringify(f), { expirationTtl: 2 * 3600 });
+      if (f.notAllowed < 3 && f.wrong < 5) return null;
+      const now = Date.now(), tz = (env && env.OWNER_TZ) || 'America/New_York';
+      const lock = { id, status: 'locked', at: now, until: sessionEnd(now, tz), names: f.names, notAllowed: f.notAllowed, wrong: f.wrong,
+        ua: String(req.headers.get('User-Agent') || '').slice(0, 80), country: (req.cf && req.cf.country) || '??' };
+      await kv.put('devlock:' + id, JSON.stringify(lock), { expirationTtl: 3 * 24 * 3600 });
+      await kv.delete(fk);
+      await noteSec('device_locked', { user: f.names[0] || '', note: f.names.join(', ') });
+      await signinLog({ type: 'lock', user: f.names.join(', '), detail: (f.notAllowed >= 3 ? 'names not allowed' : 'wrong PINs or codes') + ' · ' + lock.country });
+      const when = new Date(lock.until).toLocaleString('en-US', { timeZone: tz, weekday: 'short', hour: 'numeric', minute: '2-digit' });
+      notifyStaff({ cat: 'security', urgent: true, tag: 'devlock-' + id.slice(0, 8), title: 'Device locked: unauthorized sign-in', body: 'Tried ' + (f.names.join(', ') || 'names') + '. Locked until ' + when + '. Approve (unlock) or keep it locked in Admin → Security → Sign-in help.', url: adminLink('security', { focus: 'signinhelp' }) });
+      return lock;
+    };
     const noteUsage = (user, delta) => {
       const k = `usage:${dayKey()}:${String(user || 'anonymous').toLowerCase().slice(0, 80)}`;
       pendingUsage.set(k, addUsage(pendingUsage.get(k) || emptyUsage(), delta));
@@ -1654,6 +1724,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       '/admin/subscriptions':          { method: 'POST', perm: 'system.manage' },
       '/admin/free-access':            { method: 'POST', perm: 'coadmin' },
       '/admin/sub-emails':             { method: 'POST', perm: 'users.manage' },
+      '/admin/signin-help':            { method: 'POST', perm: 'users.manage' },
       '/admin/invites':                { method: 'POST', perm: 'system.manage' },
       '/admin/heatmap':                { method: 'GET',  perm: 'users.view' },
       '/admin/weekly':                 { method: 'POST', perm: 'system.manage' },
@@ -1875,6 +1946,52 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       return json(view());
     }
 
+    // Sign-in help (Admin → Security, owner and admins): the approved people
+    // with their school emails, Forgot-PIN requests waiting for a decision,
+    // devices locked for unauthorized sign-in attempts (Unlock or keep them
+    // locked until the end of the day session), and the log of all of it.
+    // POST { action: 'list' | 'unlock' | 'keep', id }.
+    if (url.pathname === '/admin/signin-help') {
+      const kv = env.TELEMETRY;
+      let body = {};
+      try { body = JSON.parse(await req.text()) || {}; } catch (e) { return json({ error: 'invalid request' }, 400); }
+      const principal = await resolvePrincipal();
+      const by = principal.role === 'owner' ? OWNER : String(principal.user || principal.actor || principal.role).slice(0, 40);
+      const action = String(body.action || 'list');
+      const listPrefix = async (prefix) => {
+        const out = [];
+        let cursor;
+        for (let i = 0; i < 10; i++) {
+          const page = await kv.list({ prefix, cursor });
+          for (const k of page.keys) { const v = await kv.get(k.name, 'json'); if (v) out.push(v); }
+          if (page.list_complete || !page.cursor) break;
+          cursor = page.cursor;
+        }
+        return out;
+      };
+      if (action === 'unlock' || action === 'keep') {
+        const id = String(body.id || '');
+        if (!/^[0-9a-f]{32}$/.test(id)) return json({ error: 'invalid device' }, 400);
+        const l = await kv.get('devlock:' + id, 'json');
+        if (!l) return json({ error: 'That device isn’t locked.' }, 404);
+        if (action === 'unlock') { l.status = 'unlocked'; l.unlockedBy = by; l.unlockedAt = Date.now(); }
+        else { l.kept = true; l.keptBy = by; }
+        await kv.put('devlock:' + id, JSON.stringify(l), { expirationTtl: 3 * 24 * 3600 });
+        await kv.delete('devfail:' + id + ':' + Math.floor(Date.now() / 3600e3));
+        await signinLog({ type: action === 'unlock' ? 'unlock' : 'keep', user: (l.names || []).join(', '), by, detail: l.country || '' });
+        await logAudit(kv, { route: url.pathname, action, target: id.slice(0, 8), admin: principal.role });
+      } else if (action !== 'list') return json({ error: 'action must be list, unlock or keep' }, 400);
+      const now = Date.now();
+      const cfg = await getConfig(kv);
+      const names = (cfg.allowlist && cfg.allowlist.users) || [];
+      const people = await Promise.all(names.map(async (u) => { const a = await getAcct(kv, u); return { user: (a && a.user) || u, account: !!a, email: a && a.studentId ? a.studentId + '@' + SCHOOL_DOMAIN : '' }; }));
+      const requests = (await listPrefix('pinreq:')).filter((r) => r.status === 'pending' && r.until > now)
+        .map((r) => ({ user: r.user, at: r.at, sameDevice: !!r.sameDevice, sameBrowser: !!r.sameBrowser, ua: r.ua, country: r.country, note: r.note || '', email: r.studentId ? r.studentId + '@' + SCHOOL_DOMAIN : '' }));
+      const locks = (await listPrefix('devlock:')).filter((l) => l.status === 'locked' && l.until > now)
+        .map((l) => ({ id: l.id, at: l.at, until: l.until, names: l.names || [], ua: l.ua, country: l.country, notAllowed: l.notAllowed || 0, wrong: l.wrong || 0, kept: !!l.kept }));
+      return json({ ok: true, domain: SCHOOL_DOMAIN, people, requests, locks, log: ((await kv.get('signinlog', 'json')) || []).slice(0, 100) });
+    }
+
     // Free access (Admin → Security → Free access; moderators: Moderation):
     // the owner, admins and moderators can let someone in for free, whatever
     // their subscription says, with no end date or for a set time. It's a
@@ -2086,7 +2203,9 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         await kv.put(acctKey(acct.user), JSON.stringify(acct));
         return { token, exp: now + SESSION_MS };
       };
-      const view = (acct, role) => ({ user: acct.user, role, createdAt: acct.createdAt, lastLoginAt: acct.lastLoginAt || 0, perms: permsFor(role) });
+      const view = (acct, role) => ({ user: acct.user, role, createdAt: acct.createdAt, lastLoginAt: acct.lastLoginAt || 0, perms: permsFor(role),
+        // Everyone but the owner must have their school student number on file.
+        needsStudentId: role !== 'owner' && !acct.studentId && !(env && env.STUDENT_ID_OPTIONAL === '1'), email: acct.studentId ? acct.studentId + '@' + SCHOOL_DOMAIN : '' });
       const roleOf = (acct) => (String(acct.user).toLowerCase() === OWNER && acct.ownerVerified ? 'owner' : (ROLE_PERMS[acct.role] ? acct.role : 'user'));
 
       if (url.pathname === '/auth/register' && req.method === 'POST') {
@@ -2097,8 +2216,13 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         if (!USERNAME_RE.test(user)) return json({ ok: false, error: 'invalid username' }, 400);
         if (!/^[0-9a-f]{64}$/.test(verifier)) return json({ ok: false, error: 'invalid verifier' }, 400);
         const userLower = user.toLowerCase();
+        const dev = deviceId(body.device);
+        const locked = await deviceLock(dev);
+        if (locked) return lockedResponse(locked);
         if (!allowedUser(await getConfig(kv), user)) {
           await noteSec('not_allowed', { user, note: 'register' });
+          const l = await deviceFail(dev, 'notAllowed', user);
+          if (l) return lockedResponse(l);
           return json({ ok: false, error: ACCESS_DENIED, notAllowed: true }, 403);
         }
         if (await getAcct(kv, user)) return json({ ok: false, error: 'account exists', exists: true }, 409);
@@ -2135,17 +2259,29 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       }
 
       // "Forgot PIN?" on the sign-in screen: the person picks a new PIN (only
-      // its verifier is sent) and asks the owner, who approves or denies it in
-      // the Admin panel, seeing whether the request came from a device this
-      // name used before. Approved: that PIN is theirs, and the waiting
-      // screen signs them in. Nothing has to be passed between them. 24 h.
+      // its verifier is sent) and types their school student number (the 6
+      // digits before @alseducation.onmicrosoft.com). If it matches the one on
+      // their account, the new PIN works right away (owner's rule); a wrong
+      // number is refused and counts toward locking the device. With no
+      // number on file yet, the owner or an admin approves it in Admin →
+      // Security → Sign-in help, and the waiting screen signs in by itself.
+      // Either way the owner and admins are told. A request lasts 24 h.
       if (url.pathname === '/auth/pin-request' && req.method === 'POST') {
         if (await isLockedOut(kv, 'login', ip)) return json({ ok: false, error: 'too many attempts — try again later' }, 429);
         const body = await readJson();
         const user = String(body.user || '').trim();
         const verifier = String(body.verifier || '');
+        const sid = String(body.studentId || '').trim();
+        const dev = deviceId(body.device);
+        const locked = await deviceLock(dev);
+        if (locked) return lockedResponse(locked);
         if (!USERNAME_RE.test(user) || !/^[0-9a-f]{64}$/.test(verifier)) return json({ ok: false, error: 'invalid request' }, 400);
-        if (!allowedUser(await getConfig(kv), user)) return json({ ok: false, error: ACCESS_DENIED, notAllowed: true }, 403);
+        if (!SCHOOL_ID_RE.test(sid)) return json({ ok: false, error: 'Type the 6 digits of your school email (before @' + SCHOOL_DOMAIN + ').' }, 400);
+        if (!allowedUser(await getConfig(kv), user)) {
+          const l = await deviceFail(dev, 'notAllowed', user);
+          if (l) return lockedResponse(l);
+          return json({ ok: false, error: ACCESS_DENIED, notAllowed: true }, 403);
+        }
         const acct = await getAcct(kv, user);
         if (!acct) return json({ ok: false, error: 'No account with that name yet. Use Create to make one.', missing: true }, 404);
         if (String(acct.user).toLowerCase() === OWNER) return json({ ok: false, error: 'The owner resets their PIN with the owner code.' }, 400);
@@ -2153,17 +2289,44 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         const n = parseInt(await kv.get(rk), 10) || 0;
         if (n >= 5) return json({ ok: false, error: 'Too many requests. Try again in an hour.' }, 429);
         await kv.put(rk, String(n + 1), { expirationTtl: 2 * 3600 });
-        const dev = await deviceHashes();
+        if (acct.studentId && !(await timingSafeEqualStr(sid, acct.studentId))) {
+          await noteFailure(kv, 'login', ip);
+          await noteSec('pinreq_wrong_student', { user: acct.user });
+          await signinLog({ type: 'pinwrong', user: acct.user, detail: 'student number didn’t match' });
+          const l = await deviceFail(dev, 'wrong', acct.user);
+          if (l) return lockedResponse(l);
+          return json({ ok: false, error: 'That student number doesn’t match this account. Use the one you gave when you subscribed.', wrongStudent: true }, 403);
+        }
+        const dh = await deviceHashes();
         const known = [...(acct.known || []), ...(acct.sessions || [])];
-        const sameDevice = known.some((k) => k.uaH === dev.uaH && k.ipH === dev.ipH);
-        const sameBrowser = sameDevice || known.some((k) => k.uaH === dev.uaH);
+        const sameDevice = known.some((k) => k.uaH === dh.uaH && k.ipH === dh.ipH);
+        const sameBrowser = sameDevice || known.some((k) => k.uaH === dh.uaH);
         const salt = randHex(16), ticket = randHex(16);
+        const matched = !!acct.studentId;
         const rec = { user: acct.user, salt, verifier: await sha256hex(salt + '|' + verifier), ticketH: await sha256hex(ticket), at: Date.now(), until: Date.now() + 24 * 3600e3,
-          status: 'pending', sameDevice, sameBrowser, ua: String(req.headers.get('User-Agent') || '').slice(0, 80), country: (req.cf && req.cf.country) || '??', note: String(body.note || '').replace(/\s+/g, ' ').trim().slice(0, 200) };
+          status: matched ? 'approved' : 'pending', decidedBy: matched ? 'student number' : undefined, matched, sameDevice, sameBrowser,
+          ua: String(req.headers.get('User-Agent') || '').slice(0, 80), country: (req.cf && req.cf.country) || '??', note: String(body.note || '').replace(/\s+/g, ' ').trim().slice(0, 200), studentId: sid };
+        if (matched) {
+          // The student number matches: the new PIN is theirs now.
+          acct.salt = rec.salt; acct.verifier = rec.verifier;
+          acct.epoch = (acct.epoch || 0) + 1; acct.sessions = [];
+          await kv.put(acctKey(acct.user), JSON.stringify(acct));
+          await kv.delete(pinResetKey(acct.user));
+        }
         await kv.put('pinreq:' + acct.user.toLowerCase(), JSON.stringify(rec), { expirationTtl: 2 * 24 * 3600 });
-        await noteSec('pin_request', { user: acct.user, note: sameDevice ? 'usual device' : sameBrowser ? 'usual browser' : 'new device' });
-        notify({ cat: 'security', title: acct.user + ' forgot their PIN', body: (sameDevice ? 'From the device they usually use.' : sameBrowser ? 'From the same kind of browser they used before, on another network.' : 'From a device they haven’t used before: make sure it’s them.') + ' Approve or deny in Admin → Security → Allowed users.', url: adminLink('security', { focus: 'allow', user: acct.user }), urgent: true });
-        return json({ ok: true, ticket });
+        const email = sid + '@' + SCHOOL_DOMAIN;
+        await noteSec(matched ? 'pin_reset_by_student' : 'pin_request', { user: acct.user, note: email });
+        await signinLog({ type: matched ? 'pinauto' : 'pinreq', user: acct.user, email, detail: matched ? 'new PIN set: student number matched' : 'waiting for approval (no student number on file)' });
+        const where = sameDevice ? 'their usual device' : sameBrowser ? 'the same kind of browser, another network' : 'a device they haven’t used before';
+        notifyStaff({ cat: 'security', urgent: !matched, tag: 'pinreq-' + acct.user.toLowerCase(), title: matched ? acct.user + ' reset their PIN' : acct.user + ' forgot their PIN',
+          body: matched ? 'Student number ' + email + ' matched, so the new PIN works now (from ' + where + ').' : 'No student number on file (gave ' + email + '). From ' + where + '. Approve or deny in Admin → Security → Sign-in help.',
+          url: adminLink('security', { focus: 'signinhelp', user: acct.user }) });
+        return json({ ok: true, ticket, approved: matched });
+      }
+      // Is this device locked (sign-in screen poll)?
+      if (url.pathname === '/auth/device' && req.method === 'GET') {
+        const l = await deviceLock(deviceId(url.searchParams.get('device')));
+        return json({ ok: true, locked: !!l, until: l ? l.until : 0 });
       }
       if (url.pathname === '/auth/pin-request' && req.method === 'GET') {
         const user = String(url.searchParams.get('user') || '').trim().toLowerCase();
@@ -2177,8 +2340,13 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         if (await isLockedOut(kv, 'login', ip)) { await noteSec('login_lockout'); return json({ ok: false, error: 'too many attempts — try again later' }, 429); }
         const body = await readJson();
         const user = String(body.user || '').trim();
+        const dev = deviceId(body.device);
+        const locked = await deviceLock(dev);
+        if (locked) return lockedResponse(locked);
         if (!allowedUser(await getConfig(kv), user)) {
           await noteSec('not_allowed', { user, note: 'login' });
+          const l = await deviceFail(dev, 'notAllowed', user);
+          if (l) return lockedResponse(l);
           return json({ ok: false, error: ACCESS_DENIED, notAllowed: true }, 403);
         }
         const verifier = String(body.verifier || '');
@@ -2194,6 +2362,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           if (!(await timingSafeEqualStr(normInvite(body.invite), normInvite(reset.code)))) {
             await noteFailure(kv, 'login', ip);
             await noteSec('pinreset_wrong', { user: acct.user });
+            const l = await deviceFail(dev, 'wrong', acct.user);
+            if (l) return lockedResponse(l);
             return json({ ok: false, error: 'That reset code isn’t right.', inviteRequired: true, pinReset: true, wrongInvite: true }, 403);
           }
           const salt = randHex(16);
@@ -2209,6 +2379,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         if (!ok) {
           await noteFailure(kv, 'login', ip);
           await noteSec('login_failed', { user: acct.user });
+          const l = await deviceFail(dev, 'wrong', acct.user);
+          if (l) return lockedResponse(l);
           return json({ ok: false, error: 'wrong PIN for this account' }, 401);
         }
         if (acct.disabled) { await noteSec('login_disabled', { user: acct.user }); return json({ ok: false, error: 'this account is disabled' }, 403); }
@@ -2246,6 +2418,28 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       const p = await resolvePrincipal();
       if (!p || p.kind !== 'session') return json({ ok: false, error: 'not signed in', reason: sessionProblem || 'no_session' }, 401);
 
+      // The signed-in person's school student number (6 digits), asked for once
+      // at sign-in and required before the console opens; only the owner or an
+      // admin can change it afterwards. One account per number.
+      if (url.pathname === '/auth/student-id' && req.method === 'POST') {
+        const body = await readJson();
+        const sid = String(body.studentId || '').trim();
+        if (!SCHOOL_ID_RE.test(sid) || String(body.confirm || '').trim() !== sid) return json({ ok: false, error: 'Type the same 6 digits in both boxes.' }, 400);
+        if (p.acct.studentId) return json({ ok: false, error: 'Your student number is already saved. Ask the owner to change it.', saved: true }, 409);
+        const taken = await kv.get('sid:' + sid);
+        if (taken && taken !== p.acct.user.toLowerCase()) {
+          await noteSec('student_id_taken', { user: p.acct.user, note: sid });
+          return json({ ok: false, error: 'That student number is already on another account. Check it, or ask the owner.' }, 409);
+        }
+        p.acct.studentId = sid;
+        await kv.put(acctKey(p.acct.user), JSON.stringify(p.acct));
+        await kv.put('sid:' + sid, p.acct.user.toLowerCase());
+        const email = sid + '@' + SCHOOL_DOMAIN;
+        const cfg = await getConfig(kv);
+        if (cfg.subscriptions && cfg.subscriptions[p.acct.user.toLowerCase()]) { cfg.subscriptions[p.acct.user.toLowerCase()].email = email; await kv.put('config', JSON.stringify(cfg)); }
+        await signinLog({ type: 'sid', user: p.acct.user, email, detail: 'added at sign-in' });
+        return json({ ok: true, email });
+      }
       if (url.pathname === '/auth/me' && req.method === 'GET') {
         if (appGateOn(await getConfig(kv)) && fromApp() && !appStaffRole(p.role)) return json({ ok: false, error: APP_STAFF_ONLY_MSG, appStaffOnly: true }, 403);
         // Sliding renewal: past half its life, a fresh token comes back.
@@ -2928,6 +3122,9 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       const kv = env && env.TELEMETRY;
       const cfg = await getConfig(kv);
       const name = String(url.searchParams.get('user') || '').slice(0, 80);
+      const dev = deviceId(url.searchParams.get('device'));
+      const locked = await deviceLock(dev);
+      if (locked) return json({ allowed: false, deviceLocked: true, until: locked.until, error: 'This device is locked after too many sign-in attempts. The owner has been told.' });
       const ok = allowedUser(cfg, name);
       // sessionRequired: the console must finish a PIN-checked server sign-in
       // before it opens (one sign-in per name).
@@ -2937,6 +3134,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       // account, as before.)
       if (ok) return json({ allowed: true, sessionRequired: singleSession(cfg, name), ...(appGateOn(cfg) && fromApp() && name.trim().toLowerCase() !== OWNER ? { appStaffOnly: true } : {}) });
       if (name) await noteSec('not_allowed', { user: name, note: 'sign-in screen' });
+      const nowLocked = name && dev ? await deviceFail(dev, 'notAllowed', name) : null;
+      if (nowLocked) return json({ allowed: false, deviceLocked: true, until: nowLocked.until, error: 'This device is locked after too many sign-in attempts. The owner has been told.' });
       let request = null;
       if (kv && name) {
         const rec = await kv.get(accessReqKey(name), 'json');
@@ -3006,6 +3205,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         memoryEnabled: cfg.memoryEnabled !== false,
         usage: r.state === 'active' ? await usageMeter(kv, statusUser, mod, cfg) : null,
         subscription: mySubscription(cfg, statusUser),
+        // Only the browser tests turn this off (STUDENT_ID_OPTIONAL=1); production always asks.
+        needsStudentId: statusId.verified && statusUser.toLowerCase() !== OWNER && !(env && env.STUDENT_ID_OPTIONAL === '1') ? !(((await getAcct(kv, statusUser)) || { studentId: 'x' }).studentId) : false,
         // What this account already dismissed (banner text hash, popup id), so
         // a dismissal sticks on every site, browser and the home-screen app.
         dismissed: dismissed ? { broadcast: dismissed.broadcast || null, announcement: dismissed.announcement || null } : null
@@ -3597,11 +3798,21 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           if ((rec.emailChanges || 0) >= 3) return json({ ok: false, error: 'Your email was already sent. To change it, email ' + supportEmail(env) + '.' }, 409);
           const email = sid + '@' + SCHOOL_DOMAIN;
           const user = rec.user, key = user.toLowerCase(), now = Date.now();
+          const takenBy = await kv.get('sid:' + sid);
+          if (takenBy && takenBy !== key) return json({ ok: false, error: 'That student number is already on another account. Check it, or email ' + supportEmail(env) + '.' }, 409);
+          const sacct = await getAcct(kv, key);
+          if (sacct) {
+            if (sacct.studentId && sacct.studentId !== sid) await kv.delete('sid:' + sacct.studentId);
+            sacct.studentId = sid;
+            await kv.put(acctKey(key), JSON.stringify(sacct));
+            await kv.put('sid:' + sid, key);
+          }
           await kv.put('subpay:' + id, JSON.stringify({ ...rec, email, emailChanges: (rec.emailChanges || 0) + 1 }), { expirationTtl: 30 * 24 * 3600 });
           const cfg = await getConfig(kv);
           if (cfg.subscriptions && cfg.subscriptions[key]) cfg.subscriptions[key].email = email;
           const list = Array.isArray(cfg.subEmails) ? cfg.subEmails.filter((x) => x && String(x.user).toLowerCase() !== key) : [];
           cfg.subEmails = [{ user, email, at: now }, ...list].slice(0, 300);
+          await signinLog({ type: 'sid', user, email, detail: 'subscribe page' });
           await kv.put('config', JSON.stringify(cfg));
           const changed = (rec.emailChanges || 0) > 0;
           const alert = { title: (changed ? 'Email changed: ' : 'New subscriber email: ') + user, body: email + ' · Share the setup Google Doc with them in Admin → Security → New subscribers.', url: adminLink('security', { focus: 'emails', user }), tag: 'subemail-' + key };
@@ -4615,7 +4826,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         const u = String(body.u || '').toLowerCase().slice(0, 40);
         const action = String(body.action || '');
         if (!u) return json({ error: 'u required' }, 400);
-        const need = { setrole: 'owner', release: 'owner', resetpin: 'owner', resetcancel: 'owner', pinapprove: 'owner', pindeny: 'owner', delete: 'users.delete', disable: 'users.suspend', enable: 'users.suspend', revokesessions: 'users.manage', quota: 'ai.manage', flair: 'users.manage' }[action];
+        const need = { setrole: 'owner', release: 'owner', resetpin: 'owner', resetcancel: 'owner', pinapprove: 'users.manage', pindeny: 'users.manage', clearsid: 'users.manage', delete: 'users.delete', disable: 'users.suspend', enable: 'users.suspend', revokesessions: 'users.manage', quota: 'ai.manage', flair: 'users.manage' }[action];
         if (!need) return json({ error: 'unknown action' }, 400);
         const denied = await guard(req, url, env, need);
         if (denied) return denied;
@@ -4694,13 +4905,29 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
             if (!a) return json({ error: 'no account' }, 404);
             a.salt = rq.salt; a.verifier = rq.verifier;
             a.epoch = (a.epoch || 0) + 1; a.sessions = [];
+            // Approving also keeps the student number they gave (if none was on file).
+            if (!a.studentId && rq.studentId && !(await kv.get('sid:' + rq.studentId))) { a.studentId = rq.studentId; await kv.put('sid:' + rq.studentId, a.user.toLowerCase()); }
             await kv.put(acctKey(u), JSON.stringify(a));
             await kv.delete(pinResetKey(u));
           }
           rq.status = action === 'pinapprove' ? 'approved' : 'denied'; rq.decidedAt = Date.now();
+          const prin = await resolvePrincipal();
+          rq.decidedBy = prin && prin.role === 'owner' ? OWNER : String((prin && (prin.user || prin.actor)) || 'admin');
           await kv.put('pinreq:' + u, JSON.stringify(rq), { expirationTtl: 24 * 3600 });
+          await signinLog({ type: action, user: rq.user, by: rq.decidedBy, email: rq.studentId ? rq.studentId + '@' + SCHOOL_DOMAIN : '' });
           await logAudit(kv, { route: url.pathname, action, target: u });
           return json({ ok: true, status: rq.status });
+        }
+        if (action === 'clearsid') {
+          // A wrong student number on file: clear it, and they're asked for it at their next sign-in.
+          if (!a) return json({ error: 'no account' }, 404);
+          const was = a.studentId || '';
+          delete a.studentId;
+          await kv.put(acctKey(u), JSON.stringify(a));
+          if (was) await kv.delete('sid:' + was);
+          await signinLog({ type: 'sidclear', user: a.user, email: was ? was + '@' + SCHOOL_DOMAIN : '' });
+          await logAudit(kv, { route: url.pathname, action, target: u });
+          return json({ ok: true });
         }
         if (action === 'resetcancel') {
           await kv.delete(pinResetKey(u));
@@ -4802,10 +5029,10 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
               const s = a && (a.sessions || [])[0];
               const inv = a ? null : await kv.get(inviteKey(u), 'json');
               const rs = a && authedLevel === 'owner' ? await kv.get(pinResetKey(u), 'json') : null;   // the code is the owner's to give
-              const pq = a && authedLevel === 'owner' ? await kv.get('pinreq:' + u, 'json') : null;
+              const pq = a && (authedLevel === 'owner' || authedLevel === 'admin') ? await kv.get('pinreq:' + u, 'json') : null;
               return { user: u, claimed: !!a, createdAt: a ? a.createdAt || 0 : 0, signedIn: !!(a && liveSession(a, Date.now())),
                 lastSeen: s ? s.lastSeen || s.createdAt || 0 : 0, country: s ? s.country || '' : '', device: s ? s.ua || '' : '',
-                invite: inv ? inv.code : '', pinReset: rs && rs.until > Date.now() ? rs.code : '',
+                invite: inv ? inv.code : '', pinReset: rs && rs.until > Date.now() ? rs.code : '', email: a && a.studentId ? a.studentId + '@' + SCHOOL_DOMAIN : '',
                 pinRequest: pq && pq.status === 'pending' && pq.until > Date.now() ? { at: pq.at, sameDevice: !!pq.sameDevice, sameBrowser: !!pq.sameBrowser, ua: pq.ua, country: pq.country, note: pq.note || '' } : null };
             })),
             blockedCountries: cfg.blockedCountries || [], allowedOrigins: cfg.allowedOrigins || []

@@ -13,6 +13,18 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **Student number required + Forgot PIN by student number + locked
+  devices + Sign-in help** (owner: "if their email isn't logged and saved
+  to their account… they have to enter their student number… don't let them
+  ignore it… force them to read it… when they reset their pin it will ask
+  for the 6 digits… if they match… that allows them to reset their pin"
+  — then "it doesn't have to match their usual device just as long as the
+  school email the 6 digits match"; "if a unauthorized user… tries to
+  signin or brute force… their screen locks… notifications… approve it or
+  just have it lock until the end of the day session (day session starts at
+  7am EST and ends 12pm EST)"; "prompt them to check back every 10 mins").
+  Read "12pm" literally as noon (`SESSION_END_HOUR = 12` in worker.js; say
+  so if the owner meant midnight). Before that:
   **Forgot PIN? from the sign-in screen** (owner: "what if i'm not able to
   communicate with them at all… what's the best fix") + **instructions via
   Google Docs** (owner: "make it say that they will have to login and check
@@ -484,6 +496,38 @@ day, 14 days; not system notices), `trivia` (#public only). Memory only:
   Status fix: `applyStatus` returns early (no overlay) when `notAllowed`
   and nobody is signed in. Tests: worker.test.mjs "Forgot PIN",
   subscribe.mjs end.
+  **Now (2026-10-19 later):** `/auth/pin-request` needs `studentId`; it
+  must equal `acct.studentId` (timing-safe) → the new PIN is set at once
+  (`approved: true`, log `pinauto`); wrong → 403 `wrongStudent`, counts as a
+  wrong try; no number on file → `pending` for the owner **or admins**
+  (`pinapprove`/`pindeny` need `users.manage`; approving also saves the
+  number given). Alerts go to the owner and admins (`notifyStaff`: owner
+  push + `notifyUser` for each admin with alerts on).
+  **Student number:** `acct.studentId` (6 digits) + index `sid:<digits>` →
+  name (one account per number). Set by `/subscribe/email`, by
+  `POST /auth/student-id {studentId, confirm}` (session; once; 409 after),
+  or by approving a request; cleared by `clearsid` (owner/admin). `view()`
+  and `/status` return `needsStudentId` (everyone but the owner) unless
+  `env.STUDENT_ID_OPTIONAL === '1'`, which **only the browser test env sets**
+  (tests/browser/env.mjs; suites testing it pass '0'). Client:
+  `showStudentGate()` (no close, Escape eaten, rest inert, 8 s read timer +
+  tick box, digits only, typed twice) from `applyModeration` and right
+  after sign-in (`pollStatus`).
+  **Locked devices:** client `consoleDeviceId()` (random, localStorage
+  `gpa_device_id`) sent as `device` on `/access`, `/auth/login`,
+  `/auth/register`, `/auth/pin-request`. Worker `deviceFail()` counts per
+  device per hour in `devfail:<id>:<hour>` (not allowed ≥ 3, wrong ≥ 5) →
+  `devlock:<id>` `{until: sessionEnd() (next 12:00 PM New York), names,
+  ua, country}`, alert to owner + admins, log `lock`; locked requests get
+  423 `deviceLocked` (or `/access` `{deviceLocked}`). Client
+  `showDeviceLock()` covers the panel, makes everything inert and disables
+  the sign-in fields, survives reloads (`gpa_device_locked`), polls
+  `GET /auth/device` every 30 s. **Sign-in help:** `/admin/signin-help`
+  (`users.manage`) list/unlock/keep → people + emails, pending requests,
+  locks, `signinlog` (300). Card `helpCard()`/`wireSigninHelp()` in
+  Security for owner + admins; deep link `focus=signinhelp`. Tests:
+  worker.test.mjs "Forgot PIN", "Locked devices", "day session end";
+  browser `signin-help.mjs` (new, 28 checks). It and other suites share the local data in one loop, so tests must use unique student numbers (one account per number).
 
 ### 4.2 Chat
 All rooms live in `ChatRoom` DOs. The console polls every 3 s while Chat is
@@ -679,7 +723,7 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 ## 6. Testing
 
 ```bash
-npm test                                   # node --test tests/*.test.mjs (122 tests)
+npm test                                   # node --test tests/*.test.mjs (124 tests)
 npx wrangler deploy --dry-run --outdir /tmp/x   # bundle/config check, deploys nothing
 # Browser suites (Playwright vs local workerd), each takes an output dir for screenshots:
 node tests/browser/eaglercraft.e2e.mjs     # 83
@@ -705,7 +749,8 @@ node tests/browser/my-music.mjs            # 15
 node tests/browser/admin-app.mjs           # 20
 node tests/browser/playlists.mjs           # 23
 node tests/browser/mp3.mjs                 # 51 (+1 NOT RUN: real YouTube download; needs ffmpeg/ffprobe)
-node tests/browser/subscribe.mjs           # 63
+node tests/browser/subscribe.mjs           # 61
+node tests/browser/signin-help.mjs         # 28
 node tests/browser/usage-meter.mjs         # 16
 node tests/browser/usage-meter-sizes.mjs   # 25
 node tests/browser/ask-photo-size.mjs      # 6

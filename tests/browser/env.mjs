@@ -77,6 +77,9 @@ export async function startEnv({ relay = !!process.env.RELAY_JAR, extraEnv = {},
       EAGLER_LOADER: `http://127.0.0.1:${files.port}/loader/`,
       EAGLER_RELAYS: relay ? `ws://127.0.0.1:${relayPort}/` : 'wss://relay.example.invalid/',
       EAGLER_SERVERS: `Echo test|ws://127.0.0.1:${echoPort}/`,
+      // The required student-number screen would cover every suite's console;
+      // suites that test it pass STUDENT_ID_OPTIONAL: '0'. (Always on in production.)
+      STUDENT_ID_OPTIONAL: '1',
       ...extraEnv
     }
   });

@@ -1157,50 +1157,111 @@ test('PIN reset: the owner gets a one-time code; with it the person sets a new P
   assert.equal((await act({ u: 'boss', action: 'resetpin' })).status, 400);
 });
 
-test('Forgot PIN: the person asks from the sign-in screen with a new PIN; the owner approves (or denies); no code needed', async () => {
+test('Forgot PIN: the student number on the account resets it right away; no number on file → the owner or an admin approves', async () => {
   const env = makeEnv(); const c = makeClient(env);
   const ua = { 'User-Agent': 'Mozilla/5.0 (iPhone) Safari' };
-  await signUp(c, 'ivy', '1234', { headers: ua });
-  const ask = (pin, headers = ua, ip = '1.2.3.4') => c.call('/auth/pin-request', { method: 'POST', headers, ip, body: { user: 'ivy', verifier: verifierFor('ivy', pin), note: 'it’s me' } });
-  const status = (ticket) => c.call('/auth/pin-request?user=ivy&ticket=' + ticket);
+  await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: ['ivy', 'kit', 'adm'] } } });
+  const ivyTok = (await signUp(c, 'ivy', '1234', { headers: ua })).data.token;
+  await signUp(c, 'kit'); await signUp(c, 'adm');
   const act = (body, headers = owner) => c.call('/admin/user/action', { method: 'POST', headers, body });
-  // Unknown names and bad input.
-  assert.equal((await c.call('/auth/pin-request', { method: 'POST', body: { user: 'ghost', verifier: verifierFor('ghost', '1') } })).status, 404);
-  assert.equal((await c.call('/auth/pin-request', { method: 'POST', body: { user: 'ivy', verifier: '1234' } })).status, 400, 'only a verifier, never a PIN');
-  // From the device ivy uses: the owner sees that.
-  const r = await ask('7531');
-  assert.equal(r.status, 200);
-  assert.match(r.data.ticket, /^[0-9a-f]{32}$/);
-  assert.equal((await status(r.data.ticket)).data.status, 'pending');
-  assert.equal((await status('0'.repeat(32))).status, 404, 'someone else can’t watch the request');
-  await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: ['ivy'] } } });
-  const view = async () => (await c.call('/admin/security', { headers: owner })).data.config.allowAccounts.find((x) => x.user === 'ivy');
-  const pq = (await view()).pinRequest;
-  assert.deepEqual([pq.sameDevice, pq.note], [true, 'it’s me']);
-  await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: ['ivy', 'adm'] } } });
-  await signUp(c, 'adm');
   await act({ u: 'adm', action: 'setrole', role: 'admin' });
   const admTok = (await c.call('/auth/login', { method: 'POST', body: { user: 'adm', verifier: verifierFor('adm', '1234'), takeover: true } })).data.token;
-  const admSec = await c.call('/admin/security', { headers: sess(admTok) });
-  assert.equal(admSec.data.config.allowAccounts.find((x) => x.user === 'ivy').pinRequest, null, 'only the owner sees it, not admins');
-  // The old PIN works until the owner decides; only the owner can decide.
-  assert.equal((await act({ u: 'ivy', action: 'pinapprove' }, coadmin)).status, 403);
-  assert.equal((await act({ u: 'ivy', action: 'pinapprove' })).status, 200);
-  assert.equal((await status(r.data.ticket)).data.status, 'approved');
-  const login = (pin) => c.call('/auth/login', { method: 'POST', body: { user: 'ivy', verifier: verifierFor('ivy', pin), takeover: true } });
-  assert.equal((await login('7531')).status, 200, 'the new PIN works');
-  assert.equal((await login('1234')).status, 401, 'the old one doesn’t');
-  assert.equal((await act({ u: 'ivy', action: 'pinapprove' })).status, 404, 'nothing waiting any more');
-  // From a device ivy never used: flagged; the owner denies it; nothing changes.
-  const r2 = await ask('0909', { 'User-Agent': 'Mozilla/5.0 (Windows) Chrome' }, '9.9.9.9');
-  assert.deepEqual([(await view()).pinRequest.sameDevice, (await view()).pinRequest.sameBrowser], [false, false]);
-  assert.equal((await act({ u: 'ivy', action: 'pindeny' })).status, 200);
-  assert.equal((await status(r2.data.ticket)).data.status, 'denied');
-  assert.equal((await login('0909')).status, 401);
-  assert.equal((await login('7531')).status, 200);
+  // ivy saves her student number (asked at sign-in): typed twice, 6 digits only, once.
+  const sidCall = (body, tok = ivyTok) => c.call('/auth/student-id', { method: 'POST', headers: sess(tok), body });
+  assert.equal((await sidCall({ studentId: '22392', confirm: '22392' })).status, 400);
+  assert.equal((await sidCall({ studentId: '223929', confirm: '223928' })).status, 400, 'the two boxes must match');
+  const saved = await sidCall({ studentId: '223929', confirm: '223929' });
+  assert.deepEqual([saved.status, saved.data.email], [200, '223929@alseducation.onmicrosoft.com']);
+  assert.equal((await sidCall({ studentId: '111111', confirm: '111111' })).data.saved, true, 'can’t change it yourself');
+  assert.equal((await c.call('/status?user=ivy', { headers: sess(ivyTok) })).data.needsStudentId, false);
+  // kit has none: asked at sign-in, and the same number as ivy is refused.
+  const kitTok = (await c.call('/auth/login', { method: 'POST', body: { user: 'kit', verifier: verifierFor('kit', '1234'), takeover: true } })).data.token;
+  assert.equal((await c.call('/status?user=kit', { headers: sess(kitTok) })).data.needsStudentId, true);
+  assert.match((await sidCall({ studentId: '223929', confirm: '223929' }, kitTok)).data.error, /already on another account/);
+  const ask = (user, pin, studentId, headers = {}) => c.call('/auth/pin-request', { method: 'POST', headers, body: { user, verifier: verifierFor(user, pin), studentId, note: 'it’s me' } });
+  const login = (user, pin) => c.call('/auth/login', { method: 'POST', body: { user, verifier: verifierFor(user, pin), takeover: true } });
+  // A student number is required.
+  assert.equal((await ask('ivy', '7531', '')).status, 400);
+  // Wrong number: refused, nothing changes.
+  const wrong = await ask('ivy', '7531', '000001');
+  assert.deepEqual([wrong.status, wrong.data.wrongStudent], [403, true]);
+  assert.equal((await login('ivy', '7531')).status, 401);
+  // Right number, any device: the new PIN works right away.
+  const ok = await ask('ivy', '7531', '223929', { 'User-Agent': 'Mozilla/5.0 (Windows) Chrome' });
+  assert.deepEqual([ok.status, ok.data.approved], [200, true]);
+  assert.equal((await c.call('/auth/pin-request?user=ivy&ticket=' + ok.data.ticket)).data.status, 'approved');
+  assert.equal((await login('ivy', '7531')).status, 200);
+  assert.equal((await login('ivy', '1234')).status, 401);
+  // kit (no number on file): waits for the owner or an admin; admins see it and can approve.
+  const k = await ask('kit', '8642', '554433');
+  assert.deepEqual([k.status, k.data.approved], [200, false]);
+  assert.equal((await c.call('/auth/pin-request?user=kit&ticket=' + k.data.ticket)).data.status, 'pending');
+  const help = await c.call('/admin/signin-help', { method: 'POST', headers: sess(admTok), body: { action: 'list' } });
+  assert.equal(help.status, 200, 'admins get Sign-in help');
+  assert.deepEqual(help.data.requests.map((r) => [r.user, r.email]), [['kit', '554433@alseducation.onmicrosoft.com']]);
+  assert.deepEqual(help.data.people.map((x) => [x.user, x.email]).sort(), [['adm', ''], ['ivy', '223929@alseducation.onmicrosoft.com'], ['kit', '']]);
+  assert.equal((await c.call('/admin/signin-help', { method: 'POST', headers: coadmin, body: { action: 'list' } })).status, 403, 'not moderators');
+  assert.equal((await act({ u: 'kit', action: 'pinapprove' }, sess(admTok))).status, 200, 'an admin can approve');
+  assert.equal((await login('kit', '8642')).status, 200);
+  assert.equal(JSON.parse(await env.TELEMETRY.get('acct:kit')).studentId, '554433', 'approving saves the number they gave');
+  // The log has it all.
+  const log = (await c.call('/admin/signin-help', { method: 'POST', headers: owner, body: { action: 'list' } })).data.log.map((x) => x.type);
+  for (const t of ['sid', 'pinwrong', 'pinauto', 'pinreq', 'pinapprove']) assert.ok(log.includes(t), t + ' in ' + log.join(','));
+  // The owner (or an admin) can clear a wrong number; then they're asked again.
+  assert.equal((await act({ u: 'ivy', action: 'clearsid' }, sess(admTok))).status, 200);
+  const ivy2 = (await login('ivy', '7531')).data.token;
+  assert.equal((await c.call('/status?user=ivy', { headers: sess(ivy2) })).data.needsStudentId, true);
+  assert.equal((await c.call('/auth/student-id', { method: 'POST', headers: sess(ivy2), body: { studentId: '223929', confirm: '223929' } })).status, 200, 'the number is free again');
   // At most 5 requests an hour from one network.
-  for (let i = 0; i < 4; i++) await ask('2468');   // 1 earlier + 4 = 5 from this network
-  assert.equal((await ask('2468')).status, 429);
+  for (let i = 0; i < 3; i++) await ask('ivy', '2468', '223929');
+  assert.equal((await ask('ivy', '2468', '223929')).status, 429);
+});
+
+test('Locked devices: names that aren’t allowed (3) or wrong PINs (5) lock that device until the end of the day session; the owner or an admin can unlock', async () => {
+  const env = makeEnv(); const c = makeClient(env);
+  await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: ['amy'] } } });
+  await signUp(c, 'amy');
+  const devA = 'a'.repeat(32), devB = 'b'.repeat(32);
+  const access = (name, device) => c.call('/access?user=' + name + '&device=' + device);
+  assert.equal((await access('stranger1', devA)).data.allowed, false);
+  assert.equal((await access('stranger2', devA)).data.deviceLocked, undefined);
+  const third = await access('stranger3', devA);
+  assert.equal(third.data.deviceLocked, true, 'third name that isn’t allowed locks it');
+  // Locked: even a real name can't sign in from it; another device still can.
+  assert.equal((await c.call('/auth/login', { method: 'POST', body: { user: 'amy', verifier: verifierFor('amy', '1234'), device: devA, takeover: true } })).status, 423);
+  assert.equal((await c.call('/auth/login', { method: 'POST', body: { user: 'amy', verifier: verifierFor('amy', '1234'), device: devB, takeover: true } })).status, 200);
+  assert.equal((await c.call('/auth/device?device=' + devA)).data.locked, true);
+  assert.equal((await c.call('/auth/device?device=' + devB)).data.locked, false);
+  // Until 12 PM New York: today's if before noon, else tomorrow's.
+  const lock = JSON.parse(await env.TELEMETRY.get('devlock:' + devA));
+  const ny = (t) => new Date(t).toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
+  assert.equal(ny(lock.until), '12:00 PM');
+  assert.ok(lock.until > Date.now() && lock.until - Date.now() <= 24 * 3600e3);
+  // The owner and admins see it in Sign-in help; Keep, then Unlock.
+  const help = (body) => c.call('/admin/signin-help', { method: 'POST', headers: owner, body });
+  const l = (await help({ action: 'list' })).data.locks;
+  assert.deepEqual(l.map((x) => [x.id, x.names.join(','), x.notAllowed]), [[devA, 'stranger1,stranger2,stranger3', 3]]);
+  assert.equal((await help({ action: 'keep', id: devA })).data.locks[0].kept, true);
+  assert.deepEqual((await help({ action: 'unlock', id: devA })).data.locks, []);
+  assert.equal((await c.call('/auth/device?device=' + devA)).data.locked, false);
+  // Wrong PINs: the 5th locks it.
+  for (let i = 0; i < 4; i++) assert.equal((await c.call('/auth/login', { method: 'POST', body: { user: 'amy', verifier: verifierFor('amy', '000' + i), device: devB } })).status, 401);
+  assert.equal((await c.call('/auth/login', { method: 'POST', body: { user: 'amy', verifier: verifierFor('amy', '0009'), device: devB } })).status, 423);
+});
+
+test('day session end: 12 PM New York, today before noon, tomorrow after (DST-safe)', async () => {
+  const realNow = Date.now;
+  const env = makeEnv(); const c = makeClient(env);
+  try {
+    await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: ['amy'] } } });
+    const cases = [['2026-10-19T13:00:00Z', '2026-10-19T16:00:00Z'], ['2026-10-19T17:00:00Z', '2026-10-20T16:00:00Z'], ['2026-12-01T12:00:00Z', '2026-12-01T17:00:00Z'], ['2026-11-01T03:30:00Z', '2026-11-01T17:00:00Z']];
+    for (const [now, end] of cases) {
+      Date.now = () => Date.parse(now);
+      const dev = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
+      for (const n of ['x1', 'x2', 'x3']) await c.call('/access?user=' + n + '&device=' + dev);
+      assert.equal(JSON.parse(await env.TELEMETRY.get('devlock:' + dev)).until, Date.parse(end), now);
+    }
+  } finally { Date.now = realNow; }
 });
 
 test('subscribers: month math keeps the day, or the month’s last day', async () => {

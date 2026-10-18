@@ -795,7 +795,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       console: ['change', 'Sign-in asks for the owner’s reset code when a PIN was reset; the subscribe page’s checkbox matches the page’s style'] } },
     { at: '2026-10-19T05:00:00-04:00', commit: '', title: 'Forgot PIN? from the sign-in screen; instructions via Google Docs', parts: {
       console: ['feature', 'Sign-in: Forgot PIN? sends a new PIN to the owner; once approved, the waiting screen signs in by itself (no code to pass along). Signed out from elsewhere, the sign-in screen is no longer covered by “Blocked by the owner”'],
-      admin: ['feature', 'Allowed users: Forgot PIN requests with the device they came from (usual device or not), Approve new PIN / Deny; New subscribers: Share the Doc (subscribers check Google Docs at school)'] } }
+      admin: ['feature', 'Allowed users: Forgot PIN requests with the device they came from (usual device or not), Approve new PIN / Deny; New subscribers: Share the Doc (subscribers check Google Docs at school)'] } },
+    { at: '2026-10-19T06:00:00-04:00', commit: '', title: 'Student numbers, PIN resets by student number, locked devices', parts: {
+      console: ['feature', 'Everyone signs in with their school student number on file (a screen you can’t skip asks once); Forgot PIN resets right away when the student number matches; too many unauthorized sign-in attempts lock the device until 12 PM'],
+      admin: ['feature', 'Security → Sign-in help (owner and admins): locked devices (Approve / keep locked), Forgot-PIN requests, everyone’s school email, and a log; alerts to the owner and admins'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -2213,6 +2216,16 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gac-fold-head[aria-expanded="true"]::after { transform: rotate(225deg); }
       .gac-fold-body[hidden] { display: none !important; }
       .gac-email-addr { color: var(--gpa-text); font-weight: 600; word-break: break-all; }
+      .gac-help-h { margin: 12px 0 6px; font-size: 12.5px; color: var(--gpa-text); }
+      .gac-help-fold { margin-top: 10px; border: 1px solid var(--gpa-border); border-radius: var(--gps-r2); padding: 8px 10px; }
+      .gac-help-fold summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--gpa-text); }
+      .gac-help-people, .gac-help-log { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+      .gac-help-people li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .gac-help-people li > span:first-child { font-weight: 600; color: var(--gpa-text); min-width: 7em; }
+      .gac-help-people li > span:nth-child(2) { color: var(--gpa-sub); word-break: break-all; flex: 1 1 12em; }
+      .gac-help-people .gac-help-miss { color: #e5a03a; }
+      .gac-help-people .gps-btn { padding: 4px 10px; min-height: 0; font-size: 11.5px; }
+      .gac-help-log li { color: var(--gpa-sub); line-height: 1.4; } .gac-help-log time { font-variant-numeric: tabular-nums; }
       .gac-req-actions a.gps-btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
       .gac-emails-list .gac-req-actions { flex-wrap: wrap; }
       .gac-emails-list .gac-req-actions > * { flex: 1 1 auto; }
@@ -3140,15 +3153,17 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         </div>
         <div id="gpa-forgot" class="gpa-login-request" hidden>
           <div class="gpa-login-request-head">${GPS_ICONS.key}<span>Forgot your PIN?</span></div>
-          <p class="gpa-login-request-text" id="gpa-forgot-text">Pick a new PIN and send it to the owner. When they approve it, you’re signed in with it right here. Keep this open.</p>
+          <p class="gpa-login-request-text" id="gpa-forgot-text">Type your student number and pick a new PIN. If the number matches the one on your account, the new PIN works right away; if your account has no number yet, the owner or an admin has to approve it.</p>
           <div id="gpa-forgot-form">
+            <label class="gpa-login-label" for="gpa-forgot-sid">Your school email (the 6 digits you used when you subscribed)</label>
+            <div class="gpa-forgot-email"><input id="gpa-forgot-sid" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="off" spellcheck="false" aria-describedby="gpa-forgot-dom" /><span id="gpa-forgot-dom">@alseducation.onmicrosoft.com</span></div>
             <label class="gpa-login-label" for="gpa-forgot-pin">New PIN</label>
             <input id="gpa-forgot-pin" class="gpa-login-input" type="password" placeholder="••••••" autocomplete="off" />
             <label class="gpa-login-label" for="gpa-forgot-pin2">Type it again</label>
             <input id="gpa-forgot-pin2" class="gpa-login-input" type="password" placeholder="••••••" autocomplete="off" />
             <label class="gpa-login-label" for="gpa-forgot-note">Message to the owner (optional)</label>
             <input id="gpa-forgot-note" class="gpa-login-input" maxlength="200" placeholder="e.g. It's Josue, I forgot my PIN" autocomplete="off" />
-            <button id="gpa-forgot-send" class="gpa-login-primary gpa-req-send" type="button">Send to the owner</button>
+            <button id="gpa-forgot-send" class="gpa-login-primary gpa-req-send" type="button">Reset my PIN</button>
           </div>
           <div id="gpa-forgot-wait" class="gpa-forgot-wait" hidden><span class="gpa-forgot-spin" aria-hidden="true"></span><span id="gpa-forgot-status" role="status" aria-live="polite">Waiting for the owner to approve…</span></div>
           <button id="gpa-forgot-back" class="gpa-login-link gpa-forgot-back" type="button">Back to sign in</button>
@@ -6109,6 +6124,31 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpa-forgot-wait { display: flex; align-items: center; gap: 10px; margin: 10px 0 4px; font-size: 12px; color: var(--gpa-text); }
       .gpa-forgot-wait[hidden] { display: none; }
       .gpa-login-card [hidden] { display: none !important; }
+      /* Device lock and student-number gate: cover the whole console */
+      .gpa-gate { position: absolute; inset: 0; z-index: 2147483100; display: flex; align-items: center; justify-content: center; padding: 18px; background: color-mix(in srgb, var(--gpa-bg) 94%, transparent); backdrop-filter: blur(4px); overflow: auto; }
+      .gpa-gate[hidden] { display: none !important; }
+      .gpa-gate-card { width: 100%; max-width: 380px; background: var(--gpa-panel); border: 1px solid var(--gpa-border); border-radius: 16px; padding: 20px; box-shadow: 0 30px 80px -30px rgba(0,0,0,.7); color: var(--gpa-text); }
+      .gpa-gate-card h2 { margin: 0 0 8px; font-size: 17px; }
+      .gpa-gate-card p { margin: 0 0 10px; font-size: 13px; line-height: 1.5; color: var(--gpa-sub); }
+      .gpa-gate-icon { font-size: 34px; text-align: center; margin-bottom: 6px; }
+      .gpa-gate-read { border: 1px solid var(--gpa-border); border-radius: 12px; padding: 12px 14px; background: var(--gpa-field); font-size: 13px; line-height: 1.55; color: var(--gpa-text); margin: 8px 0 12px; }
+      .gpa-gate-read b { color: var(--gpa-text); }
+      .gpa-gate-email { display: flex; align-items: center; background: var(--gpa-field); border: 1px solid var(--gpa-border); border-radius: 10px; padding: 0 12px; margin: 4px 0 10px; }
+      .gpa-gate-email:focus-within { border-color: var(--gpa-accent); }
+      .gpa-gate-email input { width: 7.4ch; flex: 0 0 auto; border: 0; background: none; color: var(--gpa-text); font: 600 15px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .06em; padding: 11px 0; outline: none; }
+      .gpa-gate-email input:disabled { opacity: .5; }
+      .gpa-gate-email span { color: var(--gpa-sub); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+      .gpa-gate-label { display: block; font-size: 11.5px; color: var(--gpa-sub); margin-top: 6px; }
+      .gpa-gate-check { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: var(--gpa-text); margin: 8px 0 10px; cursor: pointer; }
+      .gpa-gate-check input { margin-top: 2px; accent-color: var(--gpa-accent); }
+      .gpa-gate-msg { font-size: 12px; min-height: 16px; margin: 6px 0; color: var(--gpa-sub); }
+      .gpa-gate-msg.bad { color: #e5453a; }
+      .gpa-gate-timer { font-size: 12px; color: var(--gpa-accent); margin: -4px 0 8px; }
+      .gpa-gate .gpa-login-primary { width: 100%; }
+      .gpa-gate .gpa-login-primary:disabled { opacity: .55; cursor: default; }
+      .gpa-forgot-email { display: flex; align-items: center; background: var(--gpa-field); border: 1px solid var(--gpa-border); border-radius: 8px; padding: 0 10px; margin-bottom: 8px; }
+      .gpa-forgot-email input { width: 7.4ch; flex: 0 0 auto; border: 0; background: none; color: var(--gpa-text); font: 600 13px/1 ui-monospace, monospace; padding: 9px 0; outline: none; }
+      .gpa-forgot-email span { color: var(--gpa-sub); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
       .gpa-forgot-spin { width: 16px; height: 16px; flex: 0 0 16px; border-radius: 50%; border: 2px solid var(--gpa-border); border-top-color: var(--gpa-accent); animation: gpaForgotSpin 0.9s linear infinite; }
       @keyframes gpaForgotSpin { to { transform: rotate(360deg); } }
       @media (prefers-reduced-motion: reduce) { .gpa-forgot-spin { animation: none; } }
@@ -15980,9 +16020,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     try {
       const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
       const timer = ctl ? setTimeout(() => ctl.abort(), 6000) : null;
-      const r = await fetch(telemetryEndpoint() + '/access?user=' + encodeURIComponent(user), { cache: 'no-store', signal: ctl ? ctl.signal : undefined });
+      const r = await fetch(telemetryEndpoint() + '/access?user=' + encodeURIComponent(user) + '&device=' + consoleDeviceId(), { cache: 'no-store', signal: ctl ? ctl.signal : undefined });
       if (timer) clearTimeout(timer);
       const d = await r.json().catch(() => ({}));
+      if (d.deviceLocked) { showDeviceLock(d.until); accessDeniedMsg = d.error || 'This device is locked.'; return false; }
       if (d.allowed === false) {
         accessDeniedMsg = typeof d.error === 'string' && d.error ? d.error.slice(0, 160) : ACCESS_DENIED_MSG;
         showAccessRequest(user, d.request, d.subscriptionEnded);
@@ -16131,6 +16172,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const inviteWrap = panel.querySelector('#gpa-login-invite-wrap');
     const invite = inviteWrap && !inviteWrap.hidden ? panel.querySelector('#gpa-login-invite').value.trim() : '';
     const r = await linkServerAccount(user, pin, { register: creating || localOk, takeover: !!takeover, invite });
+    if (!r.ok && r.deviceLocked) return;
     if (!r.ok && r.inviteRequired && inviteWrap) {
       // An invited name: show the code box (only now, so nobody else ever sees it).
       inviteWrap.hidden = false;
@@ -16167,6 +16209,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     // The session was linked before the console knew whose it was, so tell
     // the rest of the console again now (an admin's Admin panel connects here).
     emitSession();
+    // Right away, not at the next poll: a missing student number must be added before anything else.
+    setTimeout(() => { if (typeof pollStatus === 'function') pollStatus(); }, 200);
   }
 
   // ---- Server session (worker accounts) ----------------------------------------
@@ -16179,6 +16223,19 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // The token is stored per browser (never in profile snapshots or sync codes)
   // and expires on its own; the worker can revoke it at any time.
   const SERVER_SESSION_KEY = 'gpa_session_token';
+  // A random id for this browser, sent with sign-in requests so the Worker can
+  // lock one device after unauthorized attempts without locking everyone on
+  // the same school network.
+  function consoleDeviceId() {
+    try {
+      let id = localStorage.getItem('gpa_device_id');
+      if (!/^[0-9a-f]{32}$/.test(id || '')) {
+        id = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
+        localStorage.setItem('gpa_device_id', id);
+      }
+      return id;
+    } catch (e) { return ''; }
+  }
   // Accounts live on the same Worker that enforces the allowed-users list
   // (/access, /status, /track). Normally that is OPENAI_PROXY itself.
   const AUTH_BASE = () => ((typeof telemetryOn === 'function' && telemetryOn() ? telemetryEndpoint() : '') || OPENAI_PROXY);
@@ -16262,7 +16319,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         method: 'POST', headers: { 'Content-Type': 'text/plain', ...(extra || {}) },
         // site: which website this copy of the console is on (shown in the
         // "already signed in on …" warning); takeover: the person confirmed.
-        body: JSON.stringify({ user, verifier, site: location.host, ...(opts && opts.takeover ? { takeover: true } : {}), ...(opts && opts.invite ? { invite: opts.invite } : {}) })
+        body: JSON.stringify({ user, verifier, site: location.host, device: consoleDeviceId(), ...(opts && opts.takeover ? { takeover: true } : {}), ...(opts && opts.invite ? { invite: opts.invite } : {}) })
       }).then(async (r) => ({ status: r.status, data: await r.json().catch(() => ({})) }));
       let r = await post('/auth/login');
       if (r.status === 404 && r.data.missing && !canRegister) {
@@ -16272,6 +16329,11 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       if (r.status === 404 && r.data.missing) {
         const ownerCode = admGet(ADMIN_KEYS.OWNER_CODE);
         r = await post('/auth/register', ownerCode ? { 'X-GPA-Owner': ownerCode } : null);
+      }
+      if (r.status === 423 && r.data.deviceLocked) {
+        showDeviceLock(r.data.until);
+        serverSessionStatus = 'failed'; serverSessionError = r.data.error || 'This device is locked.'; emitSession();
+        return { ok: false, deviceLocked: true };
       }
       if (r.status === 200 && r.data.token) {
         storeServerSession(user, r.data);
@@ -16495,6 +16557,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       try { panel.querySelector('#gpa-forgot-pin').focus(); } catch (e) { /* ignore */ }
     });
     panel.querySelector('#gpa-forgot-back').addEventListener('click', () => { show(false); say(''); });
+    const fsid = panel.querySelector('#gpa-forgot-sid');
+    fsid.addEventListener('input', () => { const v = fsid.value.replace(/\D/g, '').slice(0, 6); if (v !== fsid.value) fsid.value = v; });
     const poll = async () => {
       if (!waiting) return;
       polls++;
@@ -16512,12 +16576,14 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         if (d.status === 'denied') { wait.hidden = true; form.hidden = false; waiting = null; say('The owner didn’t approve this. Ask them, or try again.', true); return; }
         if (d.status === 'expired' || d.status === 'gone') { wait.hidden = true; form.hidden = false; waiting = null; say('The request ran out (24 hours). Send it again.', true); return; }
       } catch (e) { /* offline for a moment: keep waiting */ }
-      if (polls > 360) { status.textContent = 'Still waiting. You can close this and tap Forgot PIN? again later.'; return; }
+      if (polls > 360) { status.textContent = 'Still waiting. Check back every 10 minutes: sign in with your new PIN once they approve.'; return; }
       timer = setTimeout(poll, polls < 30 ? 5000 : 15000);
     };
     panel.querySelector('#gpa-forgot-send').addEventListener('click', async () => {
       const user = loginUserInput.value.trim();
       const p1 = panel.querySelector('#gpa-forgot-pin').value, p2 = panel.querySelector('#gpa-forgot-pin2').value;
+      const sid = panel.querySelector('#gpa-forgot-sid').value;
+      if (!/^\d{6}$/.test(sid)) { say('Type the 6 digits of your school email (before @alseducation.onmicrosoft.com).', true); return; }
       if (p1.length < 4) { say('Use a PIN of at least 4 characters.', true); return; }
       if (p1 !== p2) { say('The two PINs don’t match.', true); return; }
       if (!AUTH_BASE()) { say('Can’t reach the server.', true); return; }
@@ -16525,20 +16591,143 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       btn.disabled = true; say('Sending…');
       try {
         const verifier = await serverVerifier(user, p1);
-        const r = await fetch(AUTH_BASE() + '/auth/pin-request', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ user, verifier, note: panel.querySelector('#gpa-forgot-note').value }) });
+        const r = await fetch(AUTH_BASE() + '/auth/pin-request', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ user, verifier, studentId: sid, device: consoleDeviceId(), note: panel.querySelector('#gpa-forgot-note').value }) });
         const d = await r.json().catch(() => ({}));
+        if (r.status === 423 && d.deviceLocked) { show(false); showDeviceLock(d.until); return; }
         if (!r.ok || !d.ticket) { say(d.error || 'Couldn’t send it. Try again.', true); return; }
-        panel.querySelector('#gpa-forgot-pin').value = ''; panel.querySelector('#gpa-forgot-pin2').value = '';
+        panel.querySelector('#gpa-forgot-pin').value = ''; panel.querySelector('#gpa-forgot-pin2').value = ''; panel.querySelector('#gpa-forgot-sid').value = '';
+        if (d.approved) {
+          // The student number matched: the new PIN works now.
+          show(false);
+          loginUserInput.value = user; loginPinInput.value = p1;
+          say('Your student number matched. Signing in with your new PIN…');
+          await serverFirstSignIn(user, p1, false);
+          return;
+        }
         waiting = { user, pin: p1, ticket: d.ticket };
         polls = 0;
         form.hidden = true; wait.hidden = false;
-        status.textContent = 'Sent. Waiting for the owner to approve… You’ll be signed in here as soon as they do.';
+        status.textContent = 'Sent to the owner and admins. Check back every 10 minutes to see if you can sign in again: if this stays open, it signs you in by itself as soon as they approve.';
         say('');
         timer = setTimeout(poll, 4000);
       } catch (e) { say('Couldn’t reach the server. Try again.', true); }
       finally { btn.disabled = false; }
     });
   })();
+
+  // ---- Device lock (unauthorized sign-in attempts) ----
+  // Covers the whole console; nothing underneath can be used. Checks every 30 s
+  // whether the owner or an admin unlocked it, or the day session ended.
+  let deviceLockEl = null, deviceLockTimer = 0;
+  function showDeviceLock(until) {
+    if (getComputedStyle(panel).position === 'static') panel.style.position = 'relative';
+    if (!deviceLockEl) {
+      deviceLockEl = document.createElement('div');
+      deviceLockEl.className = 'gpa-gate gpa-device-lock';
+      deviceLockEl.setAttribute('role', 'alertdialog');
+      deviceLockEl.setAttribute('aria-modal', 'true');
+      deviceLockEl.setAttribute('aria-label', 'This device is locked');
+      ['keydown', 'keyup', 'keypress', 'pointerdown', 'mousedown', 'click', 'touchstart', 'wheel'].forEach((ev) => deviceLockEl.addEventListener(ev, (e) => { e.stopPropagation(); if (ev !== 'wheel') e.preventDefault(); }, true));
+      panel.appendChild(deviceLockEl);
+    }
+    const when = until ? new Date(until).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '12:00 PM';
+    deviceLockEl.innerHTML = `<div class="gpa-gate-card"><div class="gpa-gate-icon" aria-hidden="true">🔒</div><h2>This device is locked</h2>`
+      + `<p>There were too many sign-in attempts here with names or PINs that aren’t allowed. Only people the owner has approved can use Saints Service.</p>`
+      + `<p>The owner and admins have been notified. This device stays locked until <b>${escapeHtml(when)}</b> (the end of the school day session), unless they unlock it sooner.</p></div>`;
+    deviceLockEl.hidden = false;
+    [...panel.children].forEach((c) => { if (c !== deviceLockEl) c.inert = true; });
+    // Belt and braces: the sign-in fields and buttons themselves are off too.
+    panel.querySelectorAll('#gpa-login input, #gpa-login button, #gpa-login textarea').forEach((el) => { if (!el.disabled) { el.disabled = true; el.dataset.lockOff = '1'; } });
+    try { if (document.activeElement) document.activeElement.blur(); } catch (e) { /* ignore */ }
+    try { localStorage.setItem('gpa_device_locked', String(until || 0)); } catch (e) { /* ignore */ }
+    clearInterval(deviceLockTimer);
+    deviceLockTimer = setInterval(checkDeviceLock, 30000);
+  }
+  function hideDeviceLock() {
+    clearInterval(deviceLockTimer);
+    if (deviceLockEl) deviceLockEl.hidden = true;
+    [...panel.children].forEach((c) => { c.inert = false; });
+    panel.querySelectorAll('[data-lock-off]').forEach((el) => { el.disabled = false; delete el.dataset.lockOff; });
+    try { localStorage.removeItem('gpa_device_locked'); } catch (e) { /* ignore */ }
+  }
+  async function checkDeviceLock() {
+    const base = AUTH_BASE();
+    if (!base) return;
+    try {
+      const d = await (await fetch(base + '/auth/device?device=' + consoleDeviceId(), { cache: 'no-store' })).json();
+      if (d.locked) showDeviceLock(d.until); else if (deviceLockEl && !deviceLockEl.hidden) { hideDeviceLock(); showLoginMsg('This device was unlocked. Sign in with your own username and PIN.'); }
+      else hideDeviceLock();
+    } catch (e) { /* offline: keep what we have */ }
+  }
+  // A lock survives a reload: check on start-up.
+  setTimeout(() => { try { if (localStorage.getItem('gpa_device_locked') !== null) showDeviceLock(Number(localStorage.getItem('gpa_device_locked')) || 0); } catch (e) { /* ignore */ } checkDeviceLock(); }, 0);
+
+  // ---- Student number (required) ----
+  // Anyone signed in without their school student number on file must add it
+  // before using the console: no close button, Escape does nothing, the rest
+  // of the console is inert. The notice has to stay on screen 8 seconds and
+  // be ticked before the boxes work, and the 6 digits are typed twice.
+  let studentGateEl = null;
+  function showStudentGate() {
+    if (getComputedStyle(panel).position === 'static') panel.style.position = 'relative';
+    if (studentGateEl && !studentGateEl.hidden) return;
+    if (!studentGateEl) {
+      studentGateEl = document.createElement('div');
+      studentGateEl.className = 'gpa-gate gpa-student-gate';
+      studentGateEl.setAttribute('role', 'dialog');
+      studentGateEl.setAttribute('aria-modal', 'true');
+      studentGateEl.setAttribute('aria-labelledby', 'gpa-sg-title');
+      studentGateEl.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); } }, true);
+      panel.appendChild(studentGateEl);
+    }
+    studentGateEl.innerHTML = `<form class="gpa-gate-card" id="gpa-sg-form" novalidate><h2 id="gpa-sg-title">Add your school student number</h2>`
+      + `<p>Before you can keep using Saints Service, your account needs your school email. Read this first:</p>`
+      + `<div class="gpa-gate-read" id="gpa-sg-read">Your school email is your <b>6-digit student number</b> followed by <b>@alseducation.onmicrosoft.com</b> (for example 223929@alseducation.onmicrosoft.com).<br><br>`
+      + `It’s saved to your account, and it’s <b>how you reset your PIN</b> if you ever forget it: the number you type then has to match this one.<br><br>`
+      + `Type <b>your own</b> number exactly. Once it’s saved, only the owner can change it, so a wrong number means you can’t reset your PIN yourself.</div>`
+      + `<div class="gpa-gate-timer" id="gpa-sg-timer" aria-live="polite"></div>`
+      + `<label class="gpa-gate-check"><input type="checkbox" id="gpa-sg-ok" disabled> I read this, and the number I’m typing is my own student number.</label>`
+      + `<label class="gpa-gate-label" for="gpa-sg-1">Student number</label><div class="gpa-gate-email"><input id="gpa-sg-1" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="off" spellcheck="false" disabled><span>@alseducation.onmicrosoft.com</span></div>`
+      + `<label class="gpa-gate-label" for="gpa-sg-2">Type it again</label><div class="gpa-gate-email"><input id="gpa-sg-2" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="off" spellcheck="false" disabled><span>@alseducation.onmicrosoft.com</span></div>`
+      + `<div class="gpa-gate-msg" id="gpa-sg-msg" role="status" aria-live="polite"></div>`
+      + `<button class="gpa-login-primary" id="gpa-sg-save" type="submit" disabled>Save my student number</button></form>`;
+    studentGateEl.hidden = false;
+    [...panel.children].forEach((c) => { if (c !== studentGateEl && c !== deviceLockEl) c.inert = true; });
+    const q = (id) => studentGateEl.querySelector('#' + id);
+    const ok = q('gpa-sg-ok'), a = q('gpa-sg-1'), b = q('gpa-sg-2'), save = q('gpa-sg-save'), msg = q('gpa-sg-msg'), timer = q('gpa-sg-timer');
+    let left = 8;
+    const tick = () => {
+      if (left > 0) { timer.textContent = 'Read the notice above: you can continue in ' + left + ' s'; left--; setTimeout(tick, 1000); return; }
+      timer.textContent = ''; ok.disabled = false;
+    };
+    tick();
+    const sync = () => {
+      [a, b].forEach((i) => { const v = i.value.replace(/\D/g, '').slice(0, 6); if (v !== i.value) i.value = v; });
+      a.disabled = b.disabled = !ok.checked;
+      const good = ok.checked && /^\d{6}$/.test(a.value) && a.value === b.value;
+      save.disabled = !good;
+      msg.className = 'gpa-gate-msg';
+      msg.textContent = !ok.checked ? '' : a.value.length < 6 ? 'Numbers only, exactly 6.' : b.value && b.value !== a.value ? 'The two numbers don’t match.' : good ? 'Your school email: ' + a.value + '@alseducation.onmicrosoft.com' : '';
+    };
+    [ok, a, b].forEach((el) => el.addEventListener('input', sync));
+    ok.addEventListener('change', () => { sync(); if (ok.checked) a.focus(); });
+    q('gpa-sg-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (save.disabled) return;
+      save.disabled = true; msg.textContent = 'Saving…';
+      try {
+        const r = await fetch(AUTH_BASE() + '/auth/student-id', { method: 'POST', headers: { 'Content-Type': 'text/plain', 'X-GPA-Session': sessionToken() }, body: JSON.stringify({ studentId: a.value, confirm: b.value }) });
+        const d = await r.json().catch(() => ({}));
+        if (d.ok || d.saved) { hideStudentGate(); showToast('Saved: ' + (d.email || 'your school email') + '.'); return; }
+        msg.className = 'gpa-gate-msg bad'; msg.textContent = d.error || 'Couldn’t save it. Try again.'; save.disabled = false;
+      } catch (err) { msg.className = 'gpa-gate-msg bad'; msg.textContent = 'Couldn’t reach the server. Try again.'; save.disabled = false; }
+    });
+  }
+  function hideStudentGate() {
+    if (!studentGateEl || studentGateEl.hidden) return;
+    studentGateEl.hidden = true;
+    [...panel.children].forEach((c) => { if (c !== deviceLockEl || deviceLockEl.hidden) c.inert = false; });
+  }
 
   panel.querySelector('#gpa-login-restore').addEventListener('click', async () => {
     const code = prompt('Paste the sync code copied from your other device:');
@@ -20151,6 +20340,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     closeLanguagePicker();
     clearServerSession(true);
     currentUser = null;
+    hideStudentGate();
     localStorage.removeItem(SESSION_KEY);
     refreshAccountUI();
     loginUserInput.value = '';
@@ -20592,6 +20782,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
 
   function applyModeration(s) {
     if (!s || typeof s !== 'object') return;
+    if (s.needsStudentId && currentUser && sessionToken()) showStudentGate();
+    else if (s.needsStudentId === false) hideStudentGate();
     if (s.sessionRequired && currentUser) {
       hideModOverlay();
       const who = currentUser;
@@ -21158,6 +21350,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     try { if (typeof saveProgress === 'function') saveProgress(); } catch (e) { /* ignore */ }
     clearServerSession(false);
     currentUser = null;
+    hideStudentGate();
     try { localStorage.removeItem(SESSION_KEY); } catch (e) { /* ignore */ }
     if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
     if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
@@ -21367,6 +21560,57 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const empty = (title, desc) => gpxEmpty({ icon: 'overview', title, desc, cls: 'gac-empty' });
     // ---- Free access: the owner, admins and moderators let someone in for free ----
     // (Security for the owner and admins, Moderation for moderators.)
+    // ---- Sign-in help (owner and admins): locked devices, Forgot-PIN requests,
+    // the approved people with their school emails, and the log ----
+    const helpCard = () => card('Sign-in help', `<div id="gac-help"><p class="gps-hint">Loading…</p></div>`, 'key', 'gac-help-card');
+    function wireSigninHelp(root) {
+      const el = root.querySelector('#gac-help');
+      if (!el) return;
+      const helpDevice = (ua) => {
+        const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android' : /CrOS/.test(ua) ? 'Chromebook' : /Mac OS X|Macintosh/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : /Linux/.test(ua) ? 'Linux' : '';
+        const br = /Edg\//.test(ua) ? 'Edge' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /FxiOS|Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : '';
+        return [os, br].filter(Boolean).join(' · ') || 'Unknown device';
+      };
+      const at = (ts) => new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+      const LOGT = { lock: 'Device locked', unlock: 'Device unlocked', keep: 'Kept locked', pinreq: 'Forgot PIN (waiting)', pinauto: 'New PIN (student number matched)', pinwrong: 'Wrong student number', pinapprove: 'New PIN approved', pindeny: 'PIN request denied', sid: 'Student number saved', sidclear: 'Student number cleared' };
+      const render = (d) => {
+        const missing = d.people.filter((x) => x.account && !x.email).length;
+        el.innerHTML = (d.locks.length ? `<h4 class="gac-help-h">Locked devices</h4><ul class="gac-acct-list">` + d.locks.map((l) => `<li class="gac-acct gac-help-lock" data-id="${esc(l.id)}"><div class="gac-acct-top"><span class="gac-req-name">${esc(l.names.join(', ') || 'Unknown')}</span><span class="gac-req-badge pending">Locked</span></div>`
+            + `<div class="gac-req-meta">${l.notAllowed >= 3 ? 'Tried names that aren’t allowed' : 'Wrong PINs or codes'} · ${esc(helpDevice(l.ua))}${l.country && l.country !== '??' ? ' · ' + esc(l.country) : ''} · ${esc(at(l.at))}. Locked until ${esc(at(l.until))}${l.kept ? ' (kept locked)' : ''}.</div>`
+            + `<div class="gac-req-actions"><button class="gps-btn primary" data-help="unlock" type="button">Approve (unlock)</button>${l.kept ? '' : '<button class="gps-btn" data-help="keep" type="button">Keep locked until the session ends</button>'}</div></li>`).join('') + `</ul>` : '')
+          + (d.requests.length ? `<h4 class="gac-help-h">Forgot PIN, waiting for you</h4><ul class="gac-acct-list">` + d.requests.map((r) => `<li class="gac-acct gac-help-req" data-user="${esc(r.user)}"><div class="gac-acct-top"><span class="gac-req-name">${esc(r.user)}</span><span class="gac-req-badge pending">Forgot PIN</span></div>`
+            + `<div class="gac-req-meta">No student number on file; they gave <b>${esc(r.email)}</b>. From ${r.sameDevice ? 'their usual device' : r.sameBrowser ? 'the same kind of browser, another network' : 'a device they haven’t used before'} (${esc(helpDevice(r.ua))}) · ${esc(at(r.at))}${r.note ? ' · “' + esc(r.note) + '”' : ''}. Approving also saves that student number.</div>`
+            + `<div class="gac-req-actions"><button class="gps-btn primary" data-help="pinapprove" type="button">Approve new PIN</button><button class="gps-btn" data-help="pindeny" type="button">Deny</button></div></li>`).join('') + `</ul>` : '')
+          + (!d.locks.length && !d.requests.length ? `<p class="gps-hint">Nothing waiting. Locked devices and Forgot-PIN requests show up here (and as alerts).</p>` : '')
+          + `<details class="gac-help-fold"${missing ? ' open' : ''}><summary>Approved people and their school emails (${d.people.length}${missing ? ', ' + missing + ' missing' : ''})</summary>`
+          + (d.people.length ? `<ul class="gac-help-people">` + d.people.map((x) => `<li data-user="${esc(x.user)}"><span>${esc(x.user)}</span><span class="${x.email ? '' : 'gac-help-miss'}">${esc(x.email || (x.account ? 'Not added yet (asked at next sign-in)' : 'No account yet'))}</span>${x.email ? '<button class="gps-btn" data-help="clearsid" type="button">Clear</button>' : ''}</li>`).join('') + `</ul>` : '<p class="gps-hint">Nobody on Allowed users yet.</p>')
+          + `</details>`
+          + `<details class="gac-help-fold"><summary>Log (${d.log.length})</summary>` + (d.log.length ? `<ul class="gac-help-log">` + d.log.map((x) => `<li><time>${esc(at(x.at))}</time> <b>${esc(LOGT[x.type] || x.type)}</b> · ${esc(x.user || '')}${x.email ? ' · ' + esc(x.email) : ''}${x.by ? ' · by ' + esc(x.by) : ''}${x.detail ? ' · ' + esc(x.detail) : ''}</li>`).join('') + `</ul>` : '<p class="gps-hint">Nothing yet.</p>') + `</details>`;
+      };
+      const load = () => api('/admin/signin-help', { method: 'POST', body: { action: 'list' } }).then(render, (err) => { el.innerHTML = '<p class="gps-hint">Couldn’t load: ' + esc(err.message) + '</p>'; });
+      el.addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-help]');
+        if (!b) return;
+        const act = b.dataset.help;
+        b.disabled = true;
+        try {
+          if (act === 'unlock' || act === 'keep') {
+            const id = b.closest('.gac-help-lock').dataset.id;
+            if (act === 'unlock' && !confirm('Unlock this device? Whoever is using it can try to sign in again.')) { b.disabled = false; return; }
+            render(await api('/admin/signin-help', { method: 'POST', body: { action: act, id } }));
+            showToast(act === 'unlock' ? 'Device unlocked.' : 'It stays locked until the session ends.');
+          } else {
+            const user = b.closest('[data-user]').dataset.user;
+            if (act === 'pinapprove' && !confirm('Approve the new PIN for “' + user + '”? Only if you’re sure the request is theirs.')) { b.disabled = false; return; }
+            if (act === 'clearsid' && !confirm('Clear ' + user + '’s student number? They’re asked for it again at their next sign-in.')) { b.disabled = false; return; }
+            await api('/admin/user/action', { method: 'POST', body: { u: user, action: act } });
+            showToast(act === 'pinapprove' ? user + '’s new PIN is approved. Their screen signs in by itself.' : act === 'pindeny' ? user + '’s request was denied.' : user + '’s student number was cleared.');
+            load();
+          }
+        } catch (err) { b.disabled = false; showToast(err.message, { type: 'danger' }); }
+      });
+      load();
+    }
     // ---- New subscribers' school emails (owner and admins): send the setup instructions ----
     const emailsCard = () => card('New subscribers', `<div id="gac-emails"><p class="gps-hint">Loading…</p></div>`, 'send', 'gac-emails-card');
     function wireSubEmails(root) {
@@ -21709,6 +21953,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           + (isOwner() ? card('Phone app', `<div class="gac-allow-row"><span>Only you and admins can use the app</span><button class="gps-switch${d.config.appStaffOnly !== false ? ' primary' : ''}" id="gac-app-staff" type="button" aria-pressed="${d.config.appStaffOnly !== false}" aria-label="Only you and admins can use the app">Only you and admins can use the app</button></div>`
             + `<p class="gps-hint">The home-screen app (<code>/console/</code>) signs in with a name and PIN. With this on, only you and people with the <b>admin</b> role get in; everyone else is told to use the console on a computer. To make someone an admin: Users → their name → Role: admin → Change role (they sign in again once). Admins never need the admin token: the Admin panel opens from their role, and they can be signed in on their phone and a computer at the same time.</p>`, 'account', 'gac-app-card') : '')
           + (isOwner() ? card('Access requests', `<div id="gac-access-req"><p class="gps-hint">Loading…</p></div>`, 'key') : '')
+          + (can('users.manage') ? helpCard() : '')
           + (can('users.manage') ? emailsCard() : '')
           + freeCard()
           + (isOwner() ? card('Subscribers', `<div id="gac-subs"><p class="gps-hint">Loading…</p></div>`, 'timer', 'gac-subs-card') : '')
@@ -21721,7 +21966,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
               + `<span class="gac-req-badge ${a.signedIn || a.pinRequest ? 'pending' : ''}">${a.pinRequest ? 'Forgot PIN' : a.pinReset ? 'PIN reset' : a.signedIn ? 'Signed in' : a.claimed ? 'Signed out' : 'No PIN yet'}</span></div>`
               + `<div class="gac-req-meta">${a.pinRequest ? `<b>Asked for a new PIN</b> ${esc(ago(a.pinRequest.at))} from <b>${a.pinRequest.sameDevice ? 'the device they usually use' : a.pinRequest.sameBrowser ? 'the same kind of browser, another network' : 'a device they haven’t used before'}</b> (${esc(deviceName(a.pinRequest.ua))}${a.pinRequest.country && a.pinRequest.country !== '??' ? ' · ' + esc(a.pinRequest.country) : ''})${a.pinRequest.note ? ': “' + esc(a.pinRequest.note) + '”' : ''}. Approve and their screen signs in with the PIN they picked.`
                 : a.pinReset ? `Reset code <code class="gac-invite-code">${esc(a.pinReset)}</code> · give it to ${esc(a.user)}: on the sign-in screen they type “${esc(a.user)}”, a <b>new</b> PIN and this code, then tap Sign in. Works once, for 7 days; their old PIN still works until then.`
-                : a.claimed ? (a.lastSeen ? 'Last used ' + ago(a.lastSeen) + (a.country && a.country !== '??' ? ' · ' + esc(a.country) : '') + (a.device ? ' · ' + esc(deviceName(a.device)) : '') : 'PIN set ' + (a.createdAt ? ago(a.createdAt) : ''))
+                : a.claimed ? (a.email ? '<b class="gac-email-addr">' + esc(a.email) + '</b> · ' : '<span class="gac-help-miss">No school email yet</span> · ') + (a.lastSeen ? 'Last used ' + ago(a.lastSeen) + (a.country && a.country !== '??' ? ' · ' + esc(a.country) : '') + (a.device ? ' · ' + esc(deviceName(a.device)) : '') : 'PIN set ' + (a.createdAt ? ago(a.createdAt) : ''))
                 : a.invite ? `Invite code <code class="gac-invite-code">${esc(a.invite)}</code> · only someone with this code can create “${esc(a.user)}”. Give it to them.`
                   : 'The first person to create this account sets its PIN. Make sure it’s them, or make an invite code.'}</div>`
               + (a.claimed && a.pinRequest ? `<div class="gac-req-actions"><button class="gps-btn primary" data-acct="pinapprove" type="button">Approve new PIN</button><button class="gps-btn" data-acct="pindeny" type="button">Deny</button></div>`
@@ -21733,6 +21978,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         wireFold(b, 'gac-sec-events', 'gac_sec_events_open');
         wireFreeAccess(b, () => loadSubs());
         wireSubEmails(b);
+        wireSigninHelp(b);
         // ---- Subscribers: paid access for a set time ----
         const subsEl = b.querySelector('#gac-subs');
         const fmtDay = (ts) => new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric', year: new Date(ts).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
@@ -22303,6 +22549,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       }
       else if (sec === 'security' && p.focus === 'allow') await land(() => (user && byUser('#gac-allow-accts .gac-acct', user)) || gac.querySelector('#gac-sec-events'));
       else if (sec === 'security' && p.focus === 'events') await land(() => { const ev = gac.querySelector('#gac-sec-events'); const h = ev && ev.querySelector('.gac-fold-head'); if (h && h.getAttribute('aria-expanded') !== 'true') h.click(); return ev; });
+      else if (sec === 'security' && p.focus === 'signinhelp') await land(() => { const box = gac.querySelector('#gac-help'); if (!box || /Loading/.test(box.textContent)) return null; return (user && byUser('.gac-help-req', user)) || box.closest('.gac-card'); });
       else if (sec === 'security' && p.focus === 'emails') await land(() => { const box = gac.querySelector('#gac-emails'); if (!box || /Loading/.test(box.textContent)) return null; return (user && byUser('.gac-email-row', user)) || box.closest('.gac-card'); });
       else if (sec === 'security' && p.focus === 'free') await land(() => { const box = gac.querySelector('#gac-free'); if (!box || /Loading/.test(box.textContent)) return null; return (user && byUser('.gac-free-row', user)) || box.closest('.gac-card'); });
       else if (sec === 'security' && p.focus === 'subs') {

@@ -14,6 +14,7 @@ new subscriber and then the owner would see things.
 | [3-playlists](#3-playlists-everyone-signed-in) | Spotify / Apple Music playlist → YouTube links, for everyone |
 | [4-youtube-to-mp3](#4-youtube-to-mp3-owner) | The MP3 converter in Music → My music |
 | [5-subscribe-page](#5-subscribe-page) | The payment page and the $6 contribution box |
+| [7-student-number-and-locks](#7-student-numbers-forgot-pin-and-locked-devices) | **New:** the required student-number screen, Forgot PIN by student number, locked devices, your Sign-in help card |
 | [6-pin-reset](#6-resetting-a-forgotten-pin-owner) | Forgotten PINs: **Forgot PIN?** request + your Approve (no contact needed), or a reset code |
 
 ---
@@ -175,3 +176,48 @@ request, whether it came from **the device they usually use**, their message,
 and **Approve new PIN** / **Deny**.
 
 <img src="6-pin-reset/5-owner-approves.png" width="420" alt="Allowed users row: Forgot PIN, from the device they usually use, Approve new PIN / Deny">
+
+---
+
+## 7. Student numbers, Forgot PIN and locked devices
+
+**Required student number.** Anyone signed in without one on file gets this
+screen. It can't be closed or skipped, the boxes stay off for 8 seconds so
+they read it, they tick the box, and they type the 6 digits twice (digits
+only).
+
+<img src="7-student-number-and-locks/1-student-number-required.png" width="640" alt="Add your school student number: read first, boxes off">
+
+<img src="7-student-number-and-locks/2-student-number-filled.png" width="640" alt="Student number typed twice, Save turns on">
+
+**Forgot PIN asks for the student number.** A wrong number is refused (shown
+here); the right one sets the new PIN at once and signs them in.
+
+<img src="7-student-number-and-locks/3-forgot-pin-wrong-number.png" width="640" alt="Forgot PIN with a student number; wrong number refused">
+
+**No number on file:** it goes to you and your admins, and they're told to
+check back every 10 minutes.
+
+<img src="7-student-number-and-locks/4-waiting-check-back-10-min.png" width="640" alt="Sent to the owner and admins, check back every 10 minutes">
+
+**Your Sign-in help card** (Admin → Security, you and admins): the request
+with the number they gave, **Approve new PIN** / **Deny**.
+
+<img src="7-student-number-and-locks/5-owner-request.png" width="420" alt="Sign-in help: Forgot PIN request">
+
+**Unauthorized attempts lock the device** (3 names that aren't approved, or 5
+wrong PINs/codes/numbers in an hour) until the end of the day session (12 PM
+New York time; this test computer shows its own time zone). Nothing under it
+works, and reloading doesn't help.
+
+<img src="7-student-number-and-locks/6-device-locked.png" width="640" alt="This device is locked">
+
+**You and your admins** get an alert, and Sign-in help shows the device and
+the names it tried: **Approve (unlock)** or **Keep locked until the session
+ends**.
+
+<img src="7-student-number-and-locks/7-owner-locked-device.png" width="420" alt="Sign-in help: locked device with Approve (unlock) / Keep locked">
+
+**Everyone's school email and the log.**
+
+<img src="7-student-number-and-locks/8-owner-emails-and-log.png" width="420" alt="Approved people with school emails, and the Sign-in help log">
