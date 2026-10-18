@@ -472,7 +472,10 @@ await env3.close();
 
 await step('worker unreachable', async () => {
   const c = await newContext();
-  const p = await openConsole(c, HOST, { patch: (code) => code.split('https://donnajbe.viztrrx.workers.dev').join('http://127.0.0.1:9') });
+  // Signing in needs the Worker (the console never opens without it), so sign
+  // in first, then make the Worker's game files unreachable.
+  const p = await openConsole(c, HOST, { patch });
+  await c.route((u) => new URL(u).pathname.startsWith('/eagler/'), (route) => route.abort('connectionrefused'));
   await openTab(p, 'eaglercraft');
   await p.click('#gpa-eag-fs');
   await until(() => R(p, (r) => !r.querySelector('#gpa-eag-here').disabled));
