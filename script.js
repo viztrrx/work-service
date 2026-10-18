@@ -1,5 +1,5 @@
 /*!
- * Agent Console — injectable console/bookmarklet AI overlay (OpenAI only)
+ * Saints Service — injectable console/bookmarklet AI overlay (OpenAI only)
  * -------------------------------------------------------------
  * WHAT THIS DOES
  *  - "Page Insights" tab: reads the visible TEXT of the current page
@@ -127,7 +127,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // "what can you do?" get a real answer. Injected into the chat-facing
   // system prompts (Ask AI + page Q&A), not into the JSON-only ones.
   const CAPABILITIES_BRIEF = [
-    'ABOUT YOU: You are the AI inside "Agent Console", a floating assistant panel the user runs on any web page.',
+    'ABOUT YOU: You are the AI inside "Saints Service", a floating assistant panel the user runs on any web page.',
     'Its features: PAGE INSIGHTS — reads the current page\'s text and/or a screenshot, summarizes, analyzes, answers questions about the page, solves quizzes and multiple-choice questions found on the page (answer grid with highlights on the page), auto-fills form fields with mock values, extracts tables to CSV, watches the page for changes the user cares about, and follows natural-language page commands like "click the third link".',
     'ASK AI — general chat like this conversation, with voice input and spoken answers.',
     'MUSIC — plays songs via YouTube search, SoundCloud links, or a local audio library.',
@@ -158,6 +158,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // fills the screen edge to edge, and there is no page underneath to close
   // or collapse to.
   const APP_MODE = window.__agentConsoleApp === true;
+  // The Saints Service planet (sign-in card): tapping it creates an account,
+  // as the ＋ used to. Inlined so it shows on any website.
+  const SAINTS_LOGO = 'data:image/png;base64,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';
   const FULL_MARGIN = APP_MODE ? 0 : 16;
   // "Centered" (the default whenever the console is injected into a website):
   // a moderate window in the middle of the page, so it isn't obvious from
@@ -288,7 +291,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   function consoleKeydown(e) {
     if (!e.repeat) swallowKeyups.delete(e.code);   // a fresh press clears any keyup that never arrived
     for (const c of consoleKeyCommands) {
-      try { if (c.fn(e) === true) return; } catch (err) { console.warn('[Agent Console] shortcut "' + c.id + '" failed:', err); }
+      try { if (c.fn(e) === true) return; } catch (err) { console.warn('[Saints Service] shortcut "' + c.id + '" failed:', err); }
     }
   }
   function consoleKeyup(e) { if (swallowKeyups.delete(e.code)) { e.preventDefault(); e.stopImmediatePropagation(); } }
@@ -614,7 +617,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // 'admin#<section>' for Admin sections; 'theme#*' / 'admin#*' mean every
   // section of that screen.
   const CHANGELOG = [
-    { at: '2026-09-18T17:15:35-04:00', commit: '313bfeb', title: 'First release of Agent Console (Saints edition)', parts: {
+    { at: '2026-09-18T17:15:35-04:00', commit: '313bfeb', title: 'First release of Saints Service (Saints edition)', parts: {
       console: ['added'], selection: ['added'], scan: ['added'], ask: ['added'], chat: ['added'], music: ['added'], browser: ['added'],
       games: ['added'], study: ['added'], notes: ['added'], saved: ['added'], theme: ['added'], admin: ['added', 'Hidden owner console'] } },
     { at: '2026-09-18T18:21:44-04:00', commit: 'd0a354a', title: 'Bug fixes, collapsible sidebar, chat redesign, remote key push, admin expansion', parts: {
@@ -716,7 +719,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       chat: ['fix', 'Line icon for the photo button'], music: ['fix', 'Line icons in the player and library'],
       games: ['fix', 'Line icons for pause, resume and fullscreen'], eaglercraft: ['fix', 'Fullscreen buttons use the fullscreen icon'],
       study: ['fix', 'Line icons on deck controls'], saved: ['fix', 'Line icons and larger insight actions'] } },
-    { at: '2026-10-14T21:00:00-04:00', commit: '', title: 'Agent Console as an iPhone home-screen app', parts: {
+    { at: '2026-10-14T21:00:00-04:00', commit: '', title: 'Saints Service as an iPhone home-screen app', parts: {
       console: ['feature', 'App mode for /console/ on the Worker: full screen, safe areas, offline launch, no zoom on typing'] } },
     { at: '2026-10-14T23:00:00-04:00', commit: '', title: 'Dismissed announcements stay dismissed', parts: {
       console: ['fix', 'Owner banner and popup remember a dismissal for your account on every site and in the app; banner is tappable in the iPhone app'] } },
@@ -811,7 +814,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       console: ['feature', 'Everyone signs in with their school student number on file (a screen you can’t skip asks once); Forgot PIN resets right away when the student number matches; too many unauthorized sign-in attempts lock the device until 12 PM'],
       admin: ['feature', 'Security → Sign-in help (owner and admins): locked devices (Approve / keep locked), Forgot-PIN requests, everyone’s school email, and a log; alerts to the owner and admins'] } },
     { at: '2026-10-19T07:00:00-04:00', commit: '', title: 'Opens centered, not full screen', parts: {
-      console: ['change', 'Injected into a website, only the sign-in card shows (centered, the page around it still usable); signed in, the console is a centered window (about 60% of the page) instead of the whole screen; Full page is still in Settings → Size']} }
+      console: ['change', 'Injected into a website, only the sign-in card shows (centered, the page around it still usable); signed in, the console is a centered window (about 60% of the page) instead of the whole screen; Full page is still in Settings → Size']} },
+    { at: '2026-10-19T08:00:00-04:00', commit: '', title: 'Now called Saints Service, with the planet icon', parts: {
+      console: ['change', 'The console is now called Saints Service everywhere; on the sign-in card the planet icon replaces ＋ and does the same thing (create an account)'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -895,7 +900,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     check: gpsSvg('<path d="M5 12.5l4.2 4.2L19 7"/>'),
     warn: gpsSvg('<path d="M12 4l9 16H3z"/><path d="M12 10v4.5M12 17.2v.3"/>')
   };
-  // A miniature Agent Console built from plain divs. Sized in em, so one
+  // A miniature Saints Service built from plain divs. Sized in em, so one
   // font-size (--mc) scales the whole thing; colored entirely by the theme
   // variables, so a scoped override of those variables re-themes just it.
   function gpsMiniConsole() {
@@ -3102,12 +3107,12 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   panel.innerHTML = `
     <div class="gpa-header" id="gpa-drag">
       <button id="gpa-sidebar-toggle" title="Show/hide the sidebar" aria-label="Show or hide the sidebar">${GPS_ICONS.menu}</button>
-      <button id="gpa-min" title="Collapse Agent Console (↓ ↓)" aria-label="Collapse Agent Console" aria-controls="gpa-body" aria-expanded="true">${GPS_ICONS.minus}</button>
-      <span class="gpa-title">Agent Console</span>
+      <button id="gpa-min" title="Collapse Saints Service (↓ ↓)" aria-label="Collapse Saints Service" aria-controls="gpa-body" aria-expanded="true">${GPS_ICONS.minus}</button>
+      <span class="gpa-title">Saints Service</span>
       <span class="gpa-dot"></span>
       <button id="gpa-reload" title="Reload the console — fetches the latest script and restarts it" aria-label="Reload the console">${GPS_ICONS.refresh}</button>
       <button id="gpa-console-fullscreen" title="Fullscreen the whole console" aria-label="Fullscreen the whole console">${GPS_ICONS.maximize}</button>
-      <button id="gpa-close" title="Close" aria-label="Close Agent Console">${GPS_ICONS.x}</button>
+      <button id="gpa-close" title="Close" aria-label="Close Saints Service">${GPS_ICONS.x}</button>
     </div>
     <div class="gpa-usage" id="gpa-usage" hidden>
       <div class="gpa-usage-row">
@@ -3129,13 +3134,13 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     <div class="gpa-login" id="gpa-login">
       <div class="gpa-login-card">
         <div class="gpa-login-brand">
-          <button id="gpa-signup-btn" class="gpa-login-logo" title="Register new account">＋</button>
+          <button id="gpa-signup-btn" class="gpa-login-logo" title="Create a new account" aria-label="Create a new account"><img src="${SAINTS_LOGO}" alt="" draggable="false"></button>
           <div class="gpa-login-brandtext">
-            <div class="gpa-login-company">Agent Console</div>
+            <div class="gpa-login-company">Saints Service</div>
             <div class="gpa-login-dept">Sign in to continue</div>
           </div>
           <div class="gpa-login-winbtns">
-            <button id="gpa-login-min" class="gpa-login-winbtn" title="Collapse Agent Console (↓ ↓)" aria-label="Collapse Agent Console">&minus;</button>
+            <button id="gpa-login-min" class="gpa-login-winbtn" title="Collapse Saints Service (↓ ↓)" aria-label="Collapse Saints Service">&minus;</button>
             <button id="gpa-login-close" class="gpa-login-winbtn" title="Close">&times;</button>
           </div>
         </div>
@@ -3208,7 +3213,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       </div>
     </div>
     <div class="gpa-body" id="gpa-body">
-      <nav class="gpa-sidebar" aria-label="Agent Console sections">
+      <nav class="gpa-sidebar" aria-label="Saints Service sections">
       <div class="gpa-dropdown" id="gpa-dropdown">
         <button class="gpa-dropdown-btn" id="gpa-dropdown-btn">
           <span id="gpa-dropdown-label">Page Insights</span>
@@ -4664,7 +4669,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
 
             <div class="gpa-sub" style="margin:14px 0 4px;">🎨 Branding &amp; limits — applies to everyone</div>
             <div class="gpa-row">
-              <input id="gpa-adm-brand" class="gpa-input" placeholder='Console name (blank = "Agent Console")' maxlength="60" autocomplete="off" />
+              <input id="gpa-adm-brand" class="gpa-input" placeholder='Console name (blank = "Saints Service")' maxlength="60" autocomplete="off" />
             </div>
             <div class="gpa-row">
               <select id="gpa-adm-def-theme" class="gpa-input" style="flex:1;">
@@ -4866,10 +4871,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // be a real, keyboard-reachable button, not just a clickable div.
   minimized.setAttribute('role', 'button');
   minimized.setAttribute('tabindex', '0');
-  minimized.setAttribute('aria-label', 'Open Agent Console');
+  minimized.setAttribute('aria-label', 'Open Saints Service');
   minimized.setAttribute('aria-controls', 'gpa-body');
   minimized.setAttribute('aria-expanded', 'false');
-  minimized.title = 'Open Agent Console (↓ ↓)';
+  minimized.title = 'Open Saints Service (↓ ↓)';
   panel.appendChild(minimized);
 
   // ---- Toasts ---------------------------------------------------------
@@ -6118,6 +6123,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         transition: transform 0.1s ease, box-shadow 0.15s ease;
       }
       .gpa-login-logo:hover { box-shadow: 0 0 0 3px color-mix(in srgb, var(--gpa-accent) 20%, transparent); }
+      .gpa-login-logo { background: #11161c; overflow: hidden; border: 1px solid var(--gpa-border); }
+      .gpa-login-logo img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; -webkit-user-drag: none; }
       .gpa-login-logo:active { transform: scale(0.94); }
       .gpa-login-company { font-size: 15px; font-weight: 600; color: var(--gpa-text); line-height: 1.2; }
       .gpa-login-dept { font-size: 11px; color: var(--gpa-sub); margin-top: 2px; }
@@ -7048,8 +7055,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const hour = new Date().getHours();
     const part = hour < 5 ? 'Good night' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
     const fullText = currentUser
-      ? `${part}, ${currentUser}, welcome to the Agent Console`
-      : `${part}, welcome to the Agent Console`;
+      ? `${part}, ${currentUser}, welcome to the Saints Service`
+      : `${part}, welcome to the Saints Service`;
     typeWelcomeGreeting(greetEl, fullText);
     if (subEl) {
       subEl.textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -7576,7 +7583,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       'Chat': 'Chat', 'Music': 'Música', 'Proxy': 'Proxy', 'Eaglercraft': 'Eaglercraft', 'Games': 'Juegos',
       'Study': 'Estudio', 'Notes': 'Notas', 'Humanize': 'Humanizar', 'Grammar': 'Gramática', 'Saved': 'Guardado', 'Settings': 'Ajustes',
       'Assistant': 'Asistente', 'Play': 'Diversión', 'Study & write': 'Estudio y escritura', 'Library': 'Biblioteca',
-      'Agent Console': 'Consola del Agente',
+      'Saints Service': 'Saints Service',
       'Sign in to continue': 'Inicia sesión para continuar',
       'Welcome back': 'Bienvenido de nuevo',
       'Username': 'Usuario', 'PIN': 'PIN', 'Sign in': 'Iniciar sesión',
@@ -7598,8 +7605,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const titleEl = panel.querySelector('.gpa-title');
     // Only translate the built-in name — an owner-set brand name (see
     // applyBrandName) always wins and is left exactly as the owner typed it.
-    if (titleEl && (titleEl.textContent === 'Agent Console' || titleEl.textContent === t('Agent Console'))) {
-      titleEl.textContent = t('Agent Console');
+    if (titleEl && (titleEl.textContent === 'Saints Service' || titleEl.textContent === t('Saints Service'))) {
+      titleEl.textContent = t('Saints Service');
     }
     const map = {
       '.gpa-login-heading': 'Welcome back',
@@ -8143,7 +8150,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const clean = sanitizeKey(raw);
     if (clean !== raw) {
       if (clean) localStorage.setItem(storageKey, clean);
-      console.info('[Agent Console] removed ' + (raw.length - clean.length) + ' invisible/illegal character(s) from the saved key');
+      console.info('[Saints Service] removed ' + (raw.length - clean.length) + ' invisible/illegal character(s) from the saved key');
     }
     return clean;
   }
@@ -8379,7 +8386,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       try {
         return await rawFetchCache.fn(url, opts);
       } catch (e) {
-        console.warn('[Agent Console] fetch transport "' + rawFetchCache.name + '" stopped working:', e && e.message);
+        console.warn('[Saints Service] fetch transport "' + rawFetchCache.name + '" stopped working:', e && e.message);
         rawFetchCache = null;
       }
     }
@@ -8402,19 +8409,19 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         if (res.status === 401) {
           const bodyText = await res.clone().text().catch(() => '');
           if (/didn'?t provide an API key|No API key provided|api key was not provided/i.test(bodyText)) {
-            console.warn('[Agent Console] fetch transport "' + transport.name + '" strips the Authorization header — skipping it');
+            console.warn('[Saints Service] fetch transport "' + transport.name + '" strips the Authorization header — skipping it');
             lastErr = new Error('OpenAI API error (401): ' + bodyText.slice(0, 300));
             continue;
           }
         }
         rawFetchCache = transport;
         if (transport.name !== 'iframe') {
-          console.info('[Agent Console] page fetch unavailable — using ' + transport.name + ' transport instead');
+          console.info('[Saints Service] page fetch unavailable — using ' + transport.name + ' transport instead');
         }
         return res;
       } catch (e) {
         lastErr = e;
-        console.warn('[Agent Console] fetch transport "' + transport.name + '" failed:', e && e.message);
+        console.warn('[Saints Service] fetch transport "' + transport.name + '" failed:', e && e.message);
       }
     }
     throw lastErr || new TypeError('Failed to fetch');
@@ -8612,7 +8619,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     // looks like a credential masked, since upstream errors echo the key that
     // failed and consoles get screenshotted and pasted into chats.
     const raw = redactSecrets(String((err && err.message) || err));
-    console.error('[Agent Console] raw error from', label, ':', raw);
+    console.error('[Saints Service] raw error from', label, ':', raw);
     el.innerHTML = `<div class="gpa-error" role="alert"><span class="gpa-error-icon">${GPS_ICONS.warn}</span>`
       + `<div class="gpa-error-body"><div class="gpa-error-title">That didn't go through</div>`
       + `<div>${escapeHtml(explainError(err, label))}</div>`
@@ -9105,7 +9112,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       const el = tutorAnchors.get(q);
       showTutorPopup(el && el.isConnected ? el.getBoundingClientRect() : null, item);
     } catch (e) {
-      console.warn('[Agent Console] auto-explain scan failed:', e && e.message);
+      console.warn('[Saints Service] auto-explain scan failed:', e && e.message);
     } finally {
       // Highlighting and showing the popup are themselves DOM mutations. Let
       // them settle before the observer may queue another scan, or injecting
@@ -10391,7 +10398,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     if (!pageText && !screenshotDataUrl) { scanOutput.textContent = 'Scan the page or capture the screen first.'; return; }
     scanOutput.innerHTML = SKELETON_HTML;
     try {
-      const sys = 'You are the AI inside the user\'s "Agent Console" panel, answering about the web page they are viewing. ' + CAPABILITIES_BRIEF + ' Answer the question using ONLY the provided context (page text and/or screenshot). Before finalizing, double-check your answer against the context. If — and only if — the question is asking for answers to multiple numbered items (like a quiz, worksheet, or multiple-choice list), respond with ONLY a JSON array and nothing else, in exactly this shape: [{"q":"1","a":"B","c":90,"h":"exact verbatim phrase from PAGE TEXT near this question"}] — "q" is the item number/label as a string, "a" is the short answer, "c" is your confidence (0-100), "h" is a short exact quote (copied verbatim from PAGE TEXT, not paraphrased) that pinpoints where that question/answer appears, one object per item, no extra commentary. For any other kind of question, answer in brief plain sentences with no markdown formatting (no asterisks, headers, or lists), then two more lines: first exactly "CONFIDENCE: NN" (0-100, your confidence the answer is correct), then exactly "HIGHLIGHT: " followed by a short exact verbatim quote from PAGE TEXT that contains or supports the answer (empty if none applies). If the answer is not in the content, say so in one short sentence and use a low confidence number.';
+      const sys = 'You are the AI inside the user\'s "Saints Service" panel, answering about the web page they are viewing. ' + CAPABILITIES_BRIEF + ' Answer the question using ONLY the provided context (page text and/or screenshot). Before finalizing, double-check your answer against the context. If — and only if — the question is asking for answers to multiple numbered items (like a quiz, worksheet, or multiple-choice list), respond with ONLY a JSON array and nothing else, in exactly this shape: [{"q":"1","a":"B","c":90,"h":"exact verbatim phrase from PAGE TEXT near this question"}] — "q" is the item number/label as a string, "a" is the short answer, "c" is your confidence (0-100), "h" is a short exact quote (copied verbatim from PAGE TEXT, not paraphrased) that pinpoints where that question/answer appears, one object per item, no extra commentary. For any other kind of question, answer in brief plain sentences with no markdown formatting (no asterisks, headers, or lists), then two more lines: first exactly "CONFIDENCE: NN" (0-100, your confidence the answer is correct), then exactly "HIGHLIGHT: " followed by a short exact verbatim quote from PAGE TEXT that contains or supports the answer (empty if none applies). If the answer is not in the content, say so in one short sentence and use a low confidence number.';
       const textPart = `${pageText ? `PAGE TEXT:\n${pageText}\n\n` : ''}QUESTION:\n${q}`;
       const images = screenshotDataUrl ? [screenshotDataUrl] : null;
       const hard = isHardQuestion(q) || !!screenshotDataUrl;
@@ -10959,7 +10966,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   }
   async function mp3LoadCore(onBytes, signal) {
     if (mp3.core) return mp3.core;
-    if (!(window.isSecureContext && window.crypto && crypto.subtle)) throw new Error('This page isn’t secure (https), so FFmpeg can’t be checked and won’t run here. Use the Agent Console app.');
+    if (!(window.isSecureContext && window.crypto && crypto.subtle)) throw new Error('This page isn’t secure (https), so FFmpeg can’t be checked and won’t run here. Use the Saints Service app.');
     let cache = null;
     try { if (window.caches) cache = await caches.open('gpa-ffmpeg-' + MP3_CORE.version); } catch (e) { cache = null; }
     const got = {};
@@ -10983,7 +10990,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           break;
         } catch (e) { if (signal && signal.aborted) throw e; why = why || 'network'; }
       }
-      if (!got[part]) throw new Error(why === 'checksum' ? 'The FFmpeg download didn’t match its fingerprint, so it wasn’t run.' : 'Couldn’t download FFmpeg (31 MB, one time). Check your connection; some websites block it, so try the Agent Console app.');
+      if (!got[part]) throw new Error(why === 'checksum' ? 'The FFmpeg download didn’t match its fingerprint, so it wasn’t run.' : 'Couldn’t download FFmpeg (31 MB, one time). Check your connection; some websites block it, so try the Saints Service app.');
       done += meta.bytes;
     }
     mp3.core = got;
@@ -11077,7 +11084,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         coreUrl = URL.createObjectURL(new Blob([core.js], { type: 'text/javascript' }));
         workerUrl = URL.createObjectURL(new Blob(['(' + mp3WorkerMain.toString() + ')();'], { type: 'text/javascript' }));
         try { worker = new Worker(workerUrl); }
-        catch (e) { throw new Error('This website doesn’t allow the converter to start. Use the Agent Console app.'); }
+        catch (e) { throw new Error('This website doesn’t allow the converter to start. Use the Saints Service app.'); }
         const limit = mp3TimeoutMs();
         const limitText = limit < 60000 ? Math.round(limit / 1000) + ' seconds' : Math.round(limit / 60000) + ' minutes';
         timer = setTimeout(() => rejectRun(Object.assign(new Error('The conversion took longer than ' + limitText + ' and was stopped. Try a shorter file.'), { timeout: true })), limit);
@@ -11099,7 +11106,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         };
         // Before its first message, an error means FFmpeg never started (a
         // website's security rules can block it); after, it ran out of room.
-        worker.onerror = (e) => { if (e && e.preventDefault) e.preventDefault(); rejectRun(new Error(heard ? 'FFmpeg stopped unexpectedly. The device may have run out of memory; try a smaller file.' : 'FFmpeg couldn’t start here. This website may block it; use the Agent Console app.')); };
+        worker.onerror = (e) => { if (e && e.preventDefault) e.preventDefault(); rejectRun(new Error(heard ? 'FFmpeg stopped unexpectedly. The device may have run out of memory; try a smaller file.' : 'FFmpeg couldn’t start here. This website may block it; use the Saints Service app.')); };
         worker.postMessage({ coreUrl, wasm: core.wasm, input, ext: opts.ext, kbps: opts.kbps, title: opts.title, artist: opts.artist }, [input]);
       })().catch((e) => rejectRun(e));
     });
@@ -13677,8 +13684,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       toggle.classList.toggle('primary', !dev);
       actions.hidden = !dev;
       toggle.disabled = !supported || !APP_MODE || !sessionToken();
-      hint.textContent = !supported ? (isIOS ? 'Add Agent Console to your Home Screen (Share → Add to Home Screen), open it from there, then turn this on.' : 'This browser can’t receive notifications.')
-        : !APP_MODE ? 'Open the Agent Console app (/console/ on the Worker) to turn on mention alerts for this device.'
+      hint.textContent = !supported ? (isIOS ? 'Add Saints Service to your Home Screen (Share → Add to Home Screen), open it from there, then turn this on.' : 'This browser can’t receive notifications.')
+        : !APP_MODE ? 'Open the Saints Service app (/console/ on the Worker) to turn on mention alerts for this device.'
           : !sessionToken() ? 'Sign in with your PIN to turn on mention alerts.'
             : dev ? 'This device gets a notification when someone @mentions you in #public or staff chat.'
               : 'A notification on this device when someone @mentions you in #public or staff chat.';
@@ -13695,7 +13702,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         return;
       }
       const perm = await Notification.requestPermission();
-      if (perm !== 'granted') { say('Notifications are blocked. Turn them on in your phone’s Settings → Notifications → Agent Console.'); return; }
+      if (perm !== 'granted') { say('Notifications are blocked. Turn them on in your phone’s Settings → Notifications → Saints Service.'); return; }
       toggle.disabled = true;
       say('Turning on…');
       try {
@@ -15232,7 +15239,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           const why = out.replace(/^YES:\s*/i, '').trim();
           stop(`🔔 ${why}`);
           speak('Watch triggered. ' + why);
-          try { if (window.Notification && Notification.permission === 'granted') new Notification('Agent Console', { body: why }); } catch (e) { /* optional */ }
+          try { if (window.Notification && Notification.permission === 'granted') new Notification('Saints Service', { body: why }); } catch (e) { /* optional */ }
         }
       } catch (e) { /* transient errors: keep watching */ }
     }
@@ -16397,7 +16404,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           : r.status === 409 && r.data.inUse ? '“' + user + '” is already signed in on another device. Sign out there first, or try again in about ' + (r.data.waitMin || 15) + ' min. The owner can also sign it out.'
             : r.status === 409 && r.data.exists ? 'That name is already taken.'
               : r.status === 403 && r.data.inviteRequired && r.data.pinReset ? (r.data.wrongInvite ? 'That reset code isn’t right. Check it with the owner.' : 'The owner reset the PIN for “' + user + '”. Type the new PIN you want above and the reset code below, then tap Sign in.')
-              : r.status === 403 && r.data.inviteRequired ? (r.data.wrongInvite ? 'That invite code isn’t right. Check it with the owner.' : '“' + user + '” needs its sign-up code (from your payment page, or the owner). Enter it below, then tap ＋ (create account) again.')
+              : r.status === 403 && r.data.inviteRequired ? (r.data.wrongInvite ? 'That invite code isn’t right. Check it with the owner.' : '“' + user + '” needs its sign-up code (from your payment page, or the owner). Enter it below, then tap the planet icon (create account) again.')
               : r.status === 403 && /reserved/.test(r.data.error || '') ? "This name is reserved for the console's owner."
                 : r.status === 403 && r.data.notAllowed ? ACCESS_DENIED_MSG
                   : r.status === 429 ? 'Too many attempts. Try again in a few minutes.'
@@ -16427,7 +16434,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     try {
       const r = await fetch(AUTH_BASE() + '/auth/me', { headers: { 'X-GPA-Session': t } });
       const d = await r.json().catch(() => ({}));
-      if (r.status === 403 && d.appStaffOnly) { signOutWith(d.error || 'The Agent Console app is only for the owner and admins.', true); return; }
+      if (r.status === 403 && d.appStaffOnly) { signOutWith(d.error || 'The Saints Service app is only for the owner and admins.', true); return; }
       if (r.ok && d.ok) {
         serverSession.role = d.account.role;
         if (d.token) serverSession.token = d.token;
@@ -20674,11 +20681,11 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     }
   }
   // Owner-set brand name (admin console → Control → Branding) replaces the
-  // built-in "Agent Console" name in the header and login screen. Not
+  // built-in "Saints Service" name in the header and login screen. Not
   // persisted locally — like the broadcast banner, it just reapplies from
   // the next poll, so clearing it on the owner's end reverts everyone.
   function applyBrandName(name) {
-    const n = (name || '').trim() || (typeof t === 'function' ? t('Agent Console') : 'Agent Console');
+    const n = (name || '').trim() || (typeof t === 'function' ? t('Saints Service') : 'Saints Service');
     const title = panel.querySelector('.gpa-title');
     const loginCompany = panel.querySelector('.gpa-login-company');
     if (title) title.textContent = n;
@@ -21100,10 +21107,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       if (!supported) {
         toggle.disabled = true;
         hint.textContent = isIOS && !APP_MODE
-          ? 'Add Agent Console to your Home Screen (Share → Add to Home Screen), open it from there, then turn this on.'
+          ? 'Add Saints Service to your Home Screen (Share → Add to Home Screen), open it from there, then turn this on.'
           : 'This browser can’t receive push notifications. On iPhone, use the Home Screen app (iOS 16.4 or later).';
       } else if (!APP_MODE) {
-        hint.textContent = 'Open the Agent Console app (/console/ on your Worker) to turn on notifications for this device.';
+        hint.textContent = 'Open the Saints Service app (/console/ on your Worker) to turn on notifications for this device.';
         toggle.disabled = true;
       } else {
         hint.textContent = on
@@ -21115,7 +21122,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       say('');
       // iOS only shows the permission prompt from a direct tap: ask first.
       const perm = await Notification.requestPermission();
-      if (perm !== 'granted') { say('Notifications are blocked. Turn them on in iPhone Settings → Notifications → Agent Console.'); return; }
+      if (perm !== 'granted') { say('Notifications are blocked. Turn them on in iPhone Settings → Notifications → Saints Service.'); return; }
       toggle.disabled = true;
       say('Turning on…');
       try {
@@ -24733,7 +24740,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       if (!copy) return;
       const ok = await confirmReset(copy[0], copy[1], which === 'all' ? 'Reset all' : 'Reset');
       if (!ok) return;
-      (RESET_GROUPS[which] || [which]).forEach((g) => { try { RESETS[g](); } catch (err) { console.warn('[Agent Console] reset failed:', g, err); } });
+      (RESET_GROUPS[which] || [which]).forEach((g) => { try { RESETS[g](); } catch (err) { console.warn('[Saints Service] reset failed:', g, err); } });
       if (typeof saveProgress === 'function') { try { saveProgress(); } catch (err) { /* not signed in */ } }
       refreshAll();
       showToast(copy[0].replace('?', '') + ' done.');
@@ -25611,7 +25618,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       card.dataset.k = 'version history changelog release updates what changed last updated about';
       const ids = Object.keys(PART_NAMES);
       card.innerHTML = `<div class="gps-label">Version history</div>`
-        + `<p class="gps-hint">Agent Console <b>v${escapeHtml(APP_VERSION)}</b> · updated ${timeTag(VERSIONS.updated)}. Every version below comes from this project's commit history.</p>`
+        + `<p class="gps-hint">Saints Service <b>v${escapeHtml(APP_VERSION)}</b> · updated ${timeTag(VERSIONS.updated)}. Every version below comes from this project's commit history.</p>`
         + `<div class="gvh-table" role="table" aria-label="Component versions"><div role="row" class="gvh-tr gvh-th"><span role="columnheader">Part</span><span role="columnheader">Version</span><span role="columnheader">Last updated</span></div>`
         + ids.filter((id) => VERSIONS.parts[id]).map((id) => `<div role="row" class="gvh-tr"><span role="cell">${escapeHtml(PART_NAMES[id])}</span><span role="cell"><code>v${escapeHtml(VERSIONS.parts[id].version)}</code></span><span role="cell">${timeTag(VERSIONS.parts[id].updated)}</span></div>`).join('')
         + `</div><details class="gpx-details gvh-all"><summary>All releases (${VERSIONS.releases.length})</summary><ol class="gvh-list">`

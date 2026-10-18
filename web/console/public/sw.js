@@ -1,4 +1,4 @@
-// Offline shell and owner notifications for the Agent Console app. Only the
+// Offline shell and owner notifications for the Saints Service app. Only the
 // app's own files are cached (shell, icons and the console script); API
 // calls, chat, AI answers and anything from other origins always go to the
 // network. Push messages come from the Worker (web/console/push.js).
@@ -29,7 +29,7 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
   let m = {};
   try { m = event.data ? event.data.json() : {}; } catch (e) { m = { body: event.data ? event.data.text() : '' }; }
-  const title = m.title || 'Agent Console';
+  const title = m.title || 'Saints Service';
   // "Who's online" carries the count for the app icon badge (iOS 16.4+).
   if (typeof m.badge === 'number' && self.navigator && self.navigator.setAppBadge) {
     try { (m.badge > 0 ? self.navigator.setAppBadge(m.badge) : self.navigator.clearAppBadge()).catch(() => {}); } catch (e) { /* unsupported */ }

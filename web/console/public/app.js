@@ -1,4 +1,4 @@
-// Agent Console home-screen app: starts the same console script the
+// Saints Service home-screen app: starts the same console script the
 // bookmarklet injects, in app mode (full screen, safe areas, no close).
 (function () {
   'use strict';
@@ -43,7 +43,7 @@
 
   try { var seen = localStorage.getItem('agent-console-app.install-seen') === '1'; } catch (e) { seen = true; }
   if (!standalone && iPhoneSafari && !seen) {
-    msg.textContent = 'Add Agent Console to your Home Screen to use it as an app.';
+    msg.textContent = 'Add Saints Service to your Home Screen to use it as an app.';
     install.hidden = false;
     document.getElementById('install-continue').addEventListener('click', function () {
       try { localStorage.setItem('agent-console-app.install-seen', '1'); } catch (e) { /* private mode */ }

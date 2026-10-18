@@ -110,7 +110,7 @@
   // "what can you do?" get a real answer. Injected into the chat-facing
   // system prompts (Ask AI + page Q&A), not into the JSON-only ones.
   const CAPABILITIES_BRIEF = [
-    'ABOUT YOU: You are the AI inside "Agent Console", a floating assistant panel the user runs on any web page.',
+    'ABOUT YOU: You are the AI inside "Saints Service", a floating assistant panel the user runs on any web page.',
     'Its features: PAGE INSIGHTS — reads the current page\'s text and/or a screenshot, summarizes, analyzes, answers questions about the page, solves quizzes and multiple-choice questions found on the page (answer grid with highlights on the page), auto-fills form fields with mock values, extracts tables to CSV, watches the page for changes the user cares about, and follows natural-language page commands like "click the third link".',
     'ASK AI — general chat like this conversation, with voice input and spoken answers.',
     'MUSIC — plays songs via YouTube search, SoundCloud links, or a local audio library.',
@@ -278,7 +278,7 @@
     <div class="gpa-scanline"></div>
     <div class="gpa-header" id="gpa-drag">
       <button id="gpa-min" title="Minimize">&minus;</button>
-      <span class="gpa-title">Agent Console</span>
+      <span class="gpa-title">Saints Service</span>
       <span class="gpa-dot"></span>
       <button id="gpa-reload" title="Reload the console — fetches the latest script and restarts it">&#10227;</button>
       <button id="gpa-close" title="Close">&times;</button>
@@ -2359,7 +2359,7 @@
     const clean = sanitizeKey(raw);
     if (clean !== raw) {
       if (clean) localStorage.setItem(storageKey, clean);
-      console.info('[Agent Console] removed ' + (raw.length - clean.length) + ' invisible/illegal character(s) from the saved key');
+      console.info('[Saints Service] removed ' + (raw.length - clean.length) + ' invisible/illegal character(s) from the saved key');
     }
     return clean;
   }
@@ -2584,7 +2584,7 @@
       try {
         return await rawFetchCache.fn(url, opts);
       } catch (e) {
-        console.warn('[Agent Console] fetch transport "' + rawFetchCache.name + '" stopped working:', e && e.message);
+        console.warn('[Saints Service] fetch transport "' + rawFetchCache.name + '" stopped working:', e && e.message);
         rawFetchCache = null;
       }
     }
@@ -2607,19 +2607,19 @@
         if (res.status === 401) {
           const bodyText = await res.clone().text().catch(() => '');
           if (/didn'?t provide an API key|No API key provided|api key was not provided/i.test(bodyText)) {
-            console.warn('[Agent Console] fetch transport "' + transport.name + '" strips the Authorization header — skipping it');
+            console.warn('[Saints Service] fetch transport "' + transport.name + '" strips the Authorization header — skipping it');
             lastErr = new Error('OpenAI API error (401): ' + bodyText.slice(0, 300));
             continue;
           }
         }
         rawFetchCache = transport;
         if (transport.name !== 'iframe') {
-          console.info('[Agent Console] page fetch unavailable — using ' + transport.name + ' transport instead');
+          console.info('[Saints Service] page fetch unavailable — using ' + transport.name + ' transport instead');
         }
         return res;
       } catch (e) {
         lastErr = e;
-        console.warn('[Agent Console] fetch transport "' + transport.name + '" failed:', e && e.message);
+        console.warn('[Saints Service] fetch transport "' + transport.name + '" failed:', e && e.message);
       }
     }
     throw lastErr || new TypeError('Failed to fetch');
@@ -2790,7 +2790,7 @@
   function showError(el, err, label) {
     // The panel shows a friendly sentence; the full raw error lands in the
     // DevTools console so the real cause is never hidden behind it.
-    console.error('[Agent Console] raw error from', label, ':', err);
+    console.error('[Saints Service] raw error from', label, ':', err);
     el.innerHTML = `<div class="gpa-error"><span class="gpa-error-icon">⚠</span><span>${explainError(err, label)}</span></div>`;
   }
 
@@ -3249,7 +3249,7 @@
       const el = tutorAnchors.get(q);
       showTutorPopup(el && el.isConnected ? el.getBoundingClientRect() : null, item);
     } catch (e) {
-      console.warn('[Agent Console] auto-explain scan failed:', e && e.message);
+      console.warn('[Saints Service] auto-explain scan failed:', e && e.message);
     } finally {
       // Highlighting and showing the popup are themselves DOM mutations. Let
       // them settle before the observer may queue another scan, or injecting
@@ -4272,7 +4272,7 @@
     if (!pageText && !screenshotDataUrl) { scanOutput.textContent = 'Scan the page or capture the screen first.'; return; }
     scanOutput.textContent = 'Thinking…';
     try {
-      const sys = 'You are the AI inside the user\'s "Agent Console" panel, answering about the web page they are viewing. ' + CAPABILITIES_BRIEF + ' Answer the question using ONLY the provided context (page text and/or screenshot). Before finalizing, double-check your answer against the context. If — and only if — the question is asking for answers to multiple numbered items (like a quiz, worksheet, or multiple-choice list), respond with ONLY a JSON array and nothing else, in exactly this shape: [{"q":"1","a":"B","c":90,"h":"exact verbatim phrase from PAGE TEXT near this question"}] — "q" is the item number/label as a string, "a" is the short answer, "c" is your confidence (0-100), "h" is a short exact quote (copied verbatim from PAGE TEXT, not paraphrased) that pinpoints where that question/answer appears, one object per item, no extra commentary. For any other kind of question, answer in brief plain sentences with no markdown formatting (no asterisks, headers, or lists), then two more lines: first exactly "CONFIDENCE: NN" (0-100, your confidence the answer is correct), then exactly "HIGHLIGHT: " followed by a short exact verbatim quote from PAGE TEXT that contains or supports the answer (empty if none applies). If the answer is not in the content, say so in one short sentence and use a low confidence number.';
+      const sys = 'You are the AI inside the user\'s "Saints Service" panel, answering about the web page they are viewing. ' + CAPABILITIES_BRIEF + ' Answer the question using ONLY the provided context (page text and/or screenshot). Before finalizing, double-check your answer against the context. If — and only if — the question is asking for answers to multiple numbered items (like a quiz, worksheet, or multiple-choice list), respond with ONLY a JSON array and nothing else, in exactly this shape: [{"q":"1","a":"B","c":90,"h":"exact verbatim phrase from PAGE TEXT near this question"}] — "q" is the item number/label as a string, "a" is the short answer, "c" is your confidence (0-100), "h" is a short exact quote (copied verbatim from PAGE TEXT, not paraphrased) that pinpoints where that question/answer appears, one object per item, no extra commentary. For any other kind of question, answer in brief plain sentences with no markdown formatting (no asterisks, headers, or lists), then two more lines: first exactly "CONFIDENCE: NN" (0-100, your confidence the answer is correct), then exactly "HIGHLIGHT: " followed by a short exact verbatim quote from PAGE TEXT that contains or supports the answer (empty if none applies). If the answer is not in the content, say so in one short sentence and use a low confidence number.';
       const textPart = `${pageText ? `PAGE TEXT:\n${pageText}\n\n` : ''}QUESTION:\n${q}`;
       const images = screenshotDataUrl ? [screenshotDataUrl] : null;
       const hard = isHardQuestion(q) || !!screenshotDataUrl;
@@ -5126,7 +5126,7 @@
           const why = out.replace(/^YES:\s*/i, '').trim();
           stop(`🔔 ${why}`);
           speak('Watch triggered. ' + why);
-          try { if (window.Notification && Notification.permission === 'granted') new Notification('Agent Console', { body: why }); } catch (e) { /* optional */ }
+          try { if (window.Notification && Notification.permission === 'granted') new Notification('Saints Service', { body: why }); } catch (e) { /* optional */ }
         }
       } catch (e) { /* transient errors: keep watching */ }
     }

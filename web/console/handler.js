@@ -1,4 +1,4 @@
-// Agent Console home-screen web app, served by the Worker at /console/.
+// Saints Service home-screen web app, served by the Worker at /console/.
 // The page is a small shell (web/console/public) that loads the same
 // script.js the bookmarklet injects, in app mode. script.js is fetched from
 // the repository's main branch and served same-origin with a JavaScript type,

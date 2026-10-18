@@ -1,4 +1,4 @@
-# Agent Console {#agent-console}
+# Saints Service {#agent-console}
 
 A floating AI assistant panel you can drop onto **any web page** — no extension, no install, no build step. It's one self\-contained JavaScript file you paste into the browser console (or run as a bookmarklet), plus an optional Cloudflare Worker that proxies API calls.
 
@@ -177,7 +177,7 @@ the MP3's title and artist.
    MB per song (an MP3 bigger than that can still be downloaded), 50 songs,
    300 MB, 30 uploads a day.
 
-It works in the Agent Console app (`/console/`) and on most websites. Some
+It works in the Saints Service app (`/console/`) and on most websites. Some
 websites' security rules block it (the section says so); use the app there.
 The page must be https.
 
@@ -270,13 +270,13 @@ change it in Stripe. Without it the Worker uses `SUB_PRICE_CENTS` (default
    authenticator app or passkey.
 2. Stay in **test mode** (the "Test mode" switch, top right) for steps 3–7,
    try it, then repeat them in live mode.
-3. **Product catalog → Add product**: name "Agent Console subscription",
+3. **Product catalog → Add product**: name "Saints Service subscription",
    price **$13.80**, **Recurring**, **Monthly** → Save. Open the price and
    copy its ID (`price_…`). Cloudflare → Workers & Pages → `donnajbe` →
    Settings → Variables and Secrets → **Add** → Type **Text**, name
    `STRIPE_PRICE_ID`, value the ID.
 4. **Developers → API keys → Create restricted key** (safer than the full
-   secret key): name "Agent Console Worker"; permissions **Checkout
+   secret key): name "Saints Service Worker"; permissions **Checkout
    Sessions: Write**, **Subscriptions: Read**, **Prices: Read**; everything
    else None → Create, copy the `rk_…` key. Cloudflare → **Add** → Type
    **Secret**, name `STRIPE_SECRET_KEY`.
@@ -406,7 +406,7 @@ not enough to get in:
 **Invite codes.** A name you add to the list now gets an invite code (like
 `K7MQ-4X2P`), shown on its row under Allowed users with **Copy code** and
 **Remove code**. Only someone with that code can create the account: they
-tap ＋ on the sign-in screen, the console asks for the code, a wrong code is
+tap the planet icon on the sign-in screen (it used to be ＋), the console asks for the code, a wrong code is
 refused (and counts toward the sign-in lockout), and the code is used up once
 the account exists. Names that were already on the list before invite codes
 existed have no code and work exactly as before; you can give one a code with
@@ -452,7 +452,7 @@ The sign-in screen asks the Worker; if the Worker can't be reached the
 console still opens offline, but every server feature stays refused for names
 that aren't listed.
 
-## Agent Console as an iPhone app {#iphone-app}
+## Saints Service as an iPhone app {#iphone-app}
 
 The Worker also serves the whole console as a home-screen web app at
 `https://donnajbe.viztrrx.workers.dev/console/`. It's for you and your admins
@@ -837,7 +837,7 @@ Every tab, every Settings section and every Admin section shows its own version 
 
 To ship a change, add one entry to `CHANGELOG`. Every chip, the Advanced table and the tables below follow from it.
 
-**Current version: Agent Console `v8.2.2`**, updated Oct 6, 2026, 10:30 PM EDT.
+**Current version: Saints Service `v8.2.2`**, updated Oct 6, 2026, 10:30 PM EDT.
 
 | Part | Version | Last updated |
 | --- | --- | --- |
@@ -916,7 +916,7 @@ To ship a change, add one entry to `CHANGELOG`. Every chip, the Advanced table a
 | `v2.1.1` | Sep 18, 2026, 7:26 PM EDT | Fix games going blank in fullscreen | `3464101` |
 | `v2.1.0` | Sep 18, 2026, 6:58 PM EDT | Moderation, security and admin features in the worker, wired into the UI | `97d7441` |
 | `v2.0.0` | Sep 18, 2026, 6:21 PM EDT | Bug fixes, collapsible sidebar, chat redesign, remote key push, admin expansion | `d0a354a` |
-| `v1.0.0` | Sep 18, 2026, 5:15 PM EDT | First release of Agent Console (Saints edition) | `313bfeb` |
+| `v1.0.0` | Sep 18, 2026, 5:15 PM EDT | First release of Saints Service (Saints edition) | `313bfeb` |
 
 </details>
 

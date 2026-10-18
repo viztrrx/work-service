@@ -1,6 +1,6 @@
 {
   "id": "/console/",
-  "name": "Agent Console",
+  "name": "Saints Service",
   "short_name": "Console",
   "description": "Ask AI, Chat, Music, Games, Study, Notes, Eaglercraft and more, as a full-screen app.",
   "start_url": "/console/",

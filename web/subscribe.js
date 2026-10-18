@@ -334,7 +334,7 @@ export function subscribePage(env, { ready, cents }) {
       <div id="pin-hint" class="hint" role="status" aria-live="polite"></div>
       <button id="pin-go" type="submit">Create my account</button>
       <details class="alt" id="pin-alt"><summary>Rather create your account in the app?</summary>
-        <p class="hint">In Saints Service, tap <b>＋</b> (create account), type your username and a PIN, and enter this one-time sign-up code when it asks:</p>
+        <p class="hint">In Saints Service, tap the <b>planet icon</b> at the top of the sign-in card (create account), type your username and a PIN, and enter this one-time sign-up code when it asks:</p>
         <div class="code" id="code"></div>
       </details>
     </form>
@@ -348,11 +348,11 @@ export function subscribePage(env, { ready, cents }) {
     </form>
     <p class="hint ok" id="email-sent" hidden></p>
     <ol id="steps-ready" hidden>
-      <li>Open Saints Service (the Agent Console) the way the owner showed you.</li>
+      <li>Open Saints Service the way the owner showed you.</li>
       <li>Type your username <b class="u"></b> and the PIN you just made, then tap <b>Sign in</b>.</li>
     </ol>
     <ol id="steps-back" hidden>
-      <li>Open Saints Service (the Agent Console) and sign in as <b class="u"></b> with your PIN, as before.</li>
+      <li>Open Saints Service and sign in as <b class="u"></b> with your PIN, as before.</li>
     </ol>
     <p class="small">Your subscription renews monthly until you cancel. Stripe emails you a receipt.<span id="keep-open" hidden> Keep this page open until you’ve finished these steps.</span>${portal ? ` · <a href="${esc(portal)}" target="_blank" rel="noopener">Manage or cancel</a>` : ` To cancel, email <a href="mailto:${esc(supportEmail(env))}">${esc(supportEmail(env))}</a>.`}</p>
   </section>

@@ -1,4 +1,4 @@
-// The Agent Console home-screen web app served by the Worker at /console/.
+// The Saints Service home-screen web app served by the Worker at /console/.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
@@ -21,7 +21,7 @@ test('console app: shell is an iOS home-screen web app', async () => {
   const html = await r.text();
   for (const re of [/name="apple-mobile-web-app-capable" content="yes"/, /viewport-fit=cover/,
     /rel="apple-touch-icon" href="\/console\/icon-180.png"/, /rel="manifest" href="\/console\/manifest.webmanifest"/,
-    /apple-mobile-web-app-title" content="Agent Console"/]) assert.match(html, re);
+    /apple-mobile-web-app-title" content="Saints Service"/]) assert.match(html, re);
   assert.doesNotMatch(html, /<script>(?!<\/script>)/, 'no inline scripts');
 });
 

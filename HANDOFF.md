@@ -1,4 +1,4 @@
-# Handoff: Agent Console (donnajbesaints)
+# Handoff: Saints Service (donnajbesaints)
 
 Everything the next Claude session needs: who the owner is and how they
 work, what the project is, how it's built, every feature and where it lives,
@@ -13,6 +13,18 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **Renamed to Saints Service + planet icon** (owner: "change it from Agent
+  Console to Saints Service… instead of the plus change the plus for this
+  image icon… same features"): every visible "Agent Console" in the repo is
+  now "Saints Service" (UI, AI prompts, notifications, docs, tests, the
+  backup copies saints.js/acp.js/backup.js; `web/console/assets.generated.js`
+  regenerated with `npm run build:web`). Not changed: internal ids and
+  storage keys (`__agentConsoleApp`, `agent-console-*` in eaglercraft) so
+  saved data survives, and `donnajbe-fixes.patch` (a diff for the other
+  repo; editing it would break it). The sign-in card's `#gpa-signup-btn`
+  shows the owner's planet image (`SAINTS_LOGO`, a 112 px PNG inlined as a
+  data URI) and still calls `doSignUp`; texts that said "tap ＋" say "the
+  planet icon". Before that:
   **Opens centered** (owner: "make it so it doesn't take up the whole
   screen on injection… a decent size and centered in the middle of the
   website so it's not obvious"): new size key `'center'` (`centeredSize()`:
@@ -159,7 +171,7 @@ list (rounds 1–3) was finished and pushed.
 
 ## 1. What this project is
 
-**Agent Console**: one injectable web interface (`script.js`, ~24k lines)
+**Saints Service**: one injectable web interface (`script.js`, ~24k lines)
 that runs inside a Shadow DOM on any page (bookmarklet / DevTools snippet
 `fetch(raw script.js).then(r=>r.text()).then(eval)`), plus its backend, a
 Cloudflare Worker (`worker.js`, ~5k lines).

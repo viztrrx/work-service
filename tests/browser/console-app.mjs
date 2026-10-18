@@ -1,4 +1,4 @@
-// The Agent Console home-screen web app (/console/) on an emulated iPhone,
+// The Saints Service home-screen web app (/console/) on an emulated iPhone,
 // against worker.js running in workerd.
 //   node tests/browser/console-app.mjs [outDir]
 // The Worker fetches script.js from a local file host (CONSOLE_SCRIPT_URL),

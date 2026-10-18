@@ -1,4 +1,4 @@
-// Web Push to the owner's devices (the Agent Console home-screen app).
+// Web Push to the owner's devices (the Saints Service home-screen app).
 //
 // Standard Web Push, which iOS supports for Home Screen web apps (16.4+):
 // the Worker encrypts each notification for the device (RFC 8291,
@@ -241,7 +241,7 @@ export async function notifyOwner(env, event, origin) {
     if (!keys) return { sent: 0 };
     const subject = env.VAPID_SUBJECT || origin || 'https://donnajbe.viztrrx.workers.dev';
     const message = {
-      title: String(event.title || 'Agent Console').slice(0, 120),
+      title: String(event.title || 'Saints Service').slice(0, 120),
       body: String(event.body || '').slice(0, 400),
       tag: event.tag ? String(event.tag).slice(0, 64) : undefined,
       url: event.url || '/console/',
@@ -305,7 +305,7 @@ export async function notifyUser(env, user, event, origin) {
     const keys = await vapidKeys(env);
     if (!keys) return { sent: 0 };
     const subject = env.VAPID_SUBJECT || origin || 'https://donnajbe.viztrrx.workers.dev';
-    const message = { title: String(event.title || 'Agent Console').slice(0, 120), body: String(event.body || '').slice(0, 400),
+    const message = { title: String(event.title || 'Saints Service').slice(0, 120), body: String(event.body || '').slice(0, 400),
       tag: event.tag ? String(event.tag).slice(0, 64) : undefined, url: event.url || '/console/', cat: 'mention', ts: Date.now(), urgency: 'high' };
     const results = await Promise.all(subs.map((s) => sendPush(s, message, keys, subject)));
     const gone = subs.filter((s, i) => results[i].gone).map((s) => s.id);

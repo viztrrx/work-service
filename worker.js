@@ -13,7 +13,7 @@ export { AdminMobileState };
 import { ChatRoom, chatRoomCall } from './chat/room.js';
 import { TRIVIA } from './chat/trivia.js';
 export { ChatRoom };
-// Agent Console — Cloudflare Worker proxy
+// Saints Service — Cloudflare Worker proxy
 // Deploy through the repository Wrangler build: npx wrangler deploy.
 // Mobile helpers are bundled imports; do not paste this file alone in the dashboard.
 //
@@ -1075,7 +1075,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     // The home-screen app (/console/) is for the owner and admins only (owner
     // switch config.appStaffOnly, on unless turned off). The app runs on the
     // Worker's own origin; the injected console runs on other websites.
-    const APP_STAFF_ONLY_MSG = 'The Agent Console app is only for the owner and admins. You can still use the console on a computer.';
+    const APP_STAFF_ONLY_MSG = 'The Saints Service app is only for the owner and admins. You can still use the console on a computer.';
     const appGateOn = (cfg) => !!cfg && cfg.appStaffOnly !== false && !!sessionKey();
     const fromApp = () => (req.headers.get('Origin') || '') === url.origin || (req.headers.get('Referer') || '').startsWith(url.origin + '/console/');
     const appStaffRole = (role) => role === 'owner' || role === 'admin';
@@ -1404,7 +1404,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       allowlist: { on: false, users: [] },
       subscriptions: {},    // paying subscribers: { name: { user, startedAt, expiresAt, period, note, ended } }
       dailyQuota: 0,        // OpenAI requests/day per non-owner user; 0 = unlimited
-      brandName: '',        // '' = client keeps its own built-in "Agent Console" name
+      brandName: '',        // '' = client keeps its own built-in "Saints Service" name
       defaultTheme: '',     // '' = client keeps its own built-in default theme
       readOnly: false,          // true = only the owner can post to chat
       approvalMode: false,      // true = a brand-new username starts pending, needs /admin/moderate approve
@@ -3254,7 +3254,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         if (!mine) return json({ error: 'unknown device' }, 404);
         if (url.pathname === '/push/me/status') return json({ ok: true, subscription: { id: mine.id, name: mine.name, created: mine.created } });
         if (url.pathname === '/push/me/test') {
-          const r = await sendPush(mine, { title: 'Agent Console', body: 'Mention alerts are working. Sent at ' + ownerTime(env) + '.', cat: 'test', url: appLink('chat', {}), ts: Date.now() }, await vapidKeys(env), env.VAPID_SUBJECT || url.origin);
+          const r = await sendPush(mine, { title: 'Saints Service', body: 'Mention alerts are working. Sent at ' + ownerTime(env) + '.', cat: 'test', url: appLink('chat', {}), ts: Date.now() }, await vapidKeys(env), env.VAPID_SUBJECT || url.origin);
           return json({ ok: r.ok, status: r.status }, r.ok ? 200 : 502);
         }
         return json({ error: 'not found' }, 404);
@@ -3274,7 +3274,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         const sub = await getSubscription(env, id, key);
         if (!sub) return json({ error: 'unknown device' }, 404);
         const keys = await vapidKeys(env);
-        const r = await sendPush(sub, { title: 'Agent Console', body: 'Notifications are working. Sent at ' + ownerTime(env) + '.', cat: 'test', url: appLink('theme', { sec: 'account', focus: 'push' }), ts: Date.now() }, keys, env.VAPID_SUBJECT || url.origin);
+        const r = await sendPush(sub, { title: 'Saints Service', body: 'Notifications are working. Sent at ' + ownerTime(env) + '.', cat: 'test', url: appLink('theme', { sec: 'account', focus: 'push' }), ts: Date.now() }, keys, env.VAPID_SUBJECT || url.origin);
         return json({ ok: r.ok, status: r.status }, r.ok ? 200 : 502);
       }
       return json({ error: 'not found' }, 404);

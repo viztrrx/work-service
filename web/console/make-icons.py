@@ -1,4 +1,4 @@
-"""Draws the Agent Console home-screen icons (no image libraries needed).
+"""Draws the Saints Service home-screen icons (no image libraries needed).
 
     python3 web/console/make-icons.py
 

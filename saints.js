@@ -1,5 +1,5 @@
 /*!
- * Agent Console — injectable console/bookmarklet AI overlay (OpenAI only)
+ * Saints Service — injectable console/bookmarklet AI overlay (OpenAI only)
  * -------------------------------------------------------------
  * WHAT THIS DOES
  *  - "Page Insights" tab: reads the visible TEXT of the current page
@@ -127,7 +127,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // "what can you do?" get a real answer. Injected into the chat-facing
   // system prompts (Ask AI + page Q&A), not into the JSON-only ones.
   const CAPABILITIES_BRIEF = [
-    'ABOUT YOU: You are the AI inside "Agent Console", a floating assistant panel the user runs on any web page.',
+    'ABOUT YOU: You are the AI inside "Saints Service", a floating assistant panel the user runs on any web page.',
     'Its features: PAGE INSIGHTS — reads the current page\'s text and/or a screenshot, summarizes, analyzes, answers questions about the page, solves quizzes and multiple-choice questions found on the page (answer grid with highlights on the page), auto-fills form fields with mock values, extracts tables to CSV, watches the page for changes the user cares about, and follows natural-language page commands like "click the third link".',
     'ASK AI — general chat like this conversation, with voice input and spoken answers.',
     'MUSIC — plays songs via YouTube search, SoundCloud links, or a local audio library.',
@@ -307,7 +307,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     <div class="gpa-header" id="gpa-drag">
       <button id="gpa-sidebar-toggle" title="Show/hide the sidebar">&#9776;</button>
       <button id="gpa-min" title="Minimize">&minus;</button>
-      <span class="gpa-title">Agent Console</span>
+      <span class="gpa-title">Saints Service</span>
       <span class="gpa-dot"></span>
       <button id="gpa-reload" title="Reload the console — fetches the latest script and restarts it">&#10227;</button>
       <button id="gpa-console-fullscreen" title="Fullscreen the whole console">⛶</button>
@@ -319,7 +319,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         <div class="gpa-login-brand">
           <button id="gpa-signup-btn" class="gpa-login-logo" title="Register new account">＋</button>
           <div class="gpa-login-brandtext">
-            <div class="gpa-login-company">Agent Console</div>
+            <div class="gpa-login-company">Saints Service</div>
             <div class="gpa-login-dept">Sign in to continue</div>
           </div>
           <div class="gpa-login-winbtns">
@@ -360,7 +360,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       </div>
     </div>
     <div class="gpa-body" id="gpa-body">
-      <nav class="gpa-sidebar" aria-label="Agent Console sections">
+      <nav class="gpa-sidebar" aria-label="Saints Service sections">
       <div class="gpa-dropdown" id="gpa-dropdown">
         <button class="gpa-dropdown-btn" id="gpa-dropdown-btn">
           <span id="gpa-dropdown-label">Page Insights</span>
@@ -1047,7 +1047,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
 
             <div class="gpa-sub" style="margin:14px 0 4px;">🎨 Branding &amp; limits — applies to everyone</div>
             <div class="gpa-row">
-              <input id="gpa-adm-brand" class="gpa-input" placeholder='Console name (blank = "Agent Console")' maxlength="60" autocomplete="off" />
+              <input id="gpa-adm-brand" class="gpa-input" placeholder='Console name (blank = "Saints Service")' maxlength="60" autocomplete="off" />
             </div>
             <div class="gpa-row">
               <select id="gpa-adm-def-theme" class="gpa-input" style="flex:1;">
@@ -2647,8 +2647,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const hour = new Date().getHours();
     const part = hour < 5 ? 'Good night' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
     const fullText = currentUser
-      ? `${part}, ${currentUser}, welcome to the Agent Console`
-      : `${part}, welcome to the Agent Console`;
+      ? `${part}, ${currentUser}, welcome to the Saints Service`
+      : `${part}, welcome to the Saints Service`;
     typeWelcomeGreeting(greetEl, fullText);
     if (subEl) {
       subEl.textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -3146,7 +3146,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       'Page Insights': 'Información de la página', 'Ask AI': 'Preguntar a la IA',
       'Chat': 'Chat', 'Music': 'Música', 'Proxy': 'Proxy', 'Games': 'Juegos',
       'Study': 'Estudio', 'Notes': 'Notas', 'Humanize': 'Humanizar', 'Grammar': 'Gramática', 'Saved': 'Guardado', 'Settings': 'Ajustes',
-      'Agent Console': 'Consola del Agente',
+      'Saints Service': 'Consola del Agente',
       'Sign in to continue': 'Inicia sesión para continuar',
       'Welcome back': 'Bienvenido de nuevo',
       'Username': 'Usuario', 'PIN': 'PIN', 'Sign in': 'Iniciar sesión',
@@ -3167,8 +3167,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const titleEl = panel.querySelector('.gpa-title');
     // Only translate the built-in name — an owner-set brand name (see
     // applyBrandName) always wins and is left exactly as the owner typed it.
-    if (titleEl && (titleEl.textContent === 'Agent Console' || titleEl.textContent === t('Agent Console'))) {
-      titleEl.textContent = t('Agent Console');
+    if (titleEl && (titleEl.textContent === 'Saints Service' || titleEl.textContent === t('Saints Service'))) {
+      titleEl.textContent = t('Saints Service');
     }
     const map = {
       '.gpa-login-heading': 'Welcome back',
@@ -3647,7 +3647,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const clean = sanitizeKey(raw);
     if (clean !== raw) {
       if (clean) localStorage.setItem(storageKey, clean);
-      console.info('[Agent Console] removed ' + (raw.length - clean.length) + ' invisible/illegal character(s) from the saved key');
+      console.info('[Saints Service] removed ' + (raw.length - clean.length) + ' invisible/illegal character(s) from the saved key');
     }
     return clean;
   }
@@ -3883,7 +3883,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       try {
         return await rawFetchCache.fn(url, opts);
       } catch (e) {
-        console.warn('[Agent Console] fetch transport "' + rawFetchCache.name + '" stopped working:', e && e.message);
+        console.warn('[Saints Service] fetch transport "' + rawFetchCache.name + '" stopped working:', e && e.message);
         rawFetchCache = null;
       }
     }
@@ -3906,19 +3906,19 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         if (res.status === 401) {
           const bodyText = await res.clone().text().catch(() => '');
           if (/didn'?t provide an API key|No API key provided|api key was not provided/i.test(bodyText)) {
-            console.warn('[Agent Console] fetch transport "' + transport.name + '" strips the Authorization header — skipping it');
+            console.warn('[Saints Service] fetch transport "' + transport.name + '" strips the Authorization header — skipping it');
             lastErr = new Error('OpenAI API error (401): ' + bodyText.slice(0, 300));
             continue;
           }
         }
         rawFetchCache = transport;
         if (transport.name !== 'iframe') {
-          console.info('[Agent Console] page fetch unavailable — using ' + transport.name + ' transport instead');
+          console.info('[Saints Service] page fetch unavailable — using ' + transport.name + ' transport instead');
         }
         return res;
       } catch (e) {
         lastErr = e;
-        console.warn('[Agent Console] fetch transport "' + transport.name + '" failed:', e && e.message);
+        console.warn('[Saints Service] fetch transport "' + transport.name + '" failed:', e && e.message);
       }
     }
     throw lastErr || new TypeError('Failed to fetch');
@@ -4095,7 +4095,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     // console so the real cause is never hidden behind it — with anything that
     // looks like a credential masked, since upstream errors echo the key that
     // failed and consoles get screenshotted and pasted into chats.
-    console.error('[Agent Console] raw error from', label, ':', redactSecrets((err && err.message) || err));
+    console.error('[Saints Service] raw error from', label, ':', redactSecrets((err && err.message) || err));
     el.innerHTML = `<div class="gpa-error"><span class="gpa-error-icon">⚠</span><span>${explainError(err, label)}</span></div>`;
   }
 
@@ -4584,7 +4584,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       const el = tutorAnchors.get(q);
       showTutorPopup(el && el.isConnected ? el.getBoundingClientRect() : null, item);
     } catch (e) {
-      console.warn('[Agent Console] auto-explain scan failed:', e && e.message);
+      console.warn('[Saints Service] auto-explain scan failed:', e && e.message);
     } finally {
       // Highlighting and showing the popup are themselves DOM mutations. Let
       // them settle before the observer may queue another scan, or injecting
@@ -5866,7 +5866,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     if (!pageText && !screenshotDataUrl) { scanOutput.textContent = 'Scan the page or capture the screen first.'; return; }
     scanOutput.innerHTML = SKELETON_HTML;
     try {
-      const sys = 'You are the AI inside the user\'s "Agent Console" panel, answering about the web page they are viewing. ' + CAPABILITIES_BRIEF + ' Answer the question using ONLY the provided context (page text and/or screenshot). Before finalizing, double-check your answer against the context. If — and only if — the question is asking for answers to multiple numbered items (like a quiz, worksheet, or multiple-choice list), respond with ONLY a JSON array and nothing else, in exactly this shape: [{"q":"1","a":"B","c":90,"h":"exact verbatim phrase from PAGE TEXT near this question"}] — "q" is the item number/label as a string, "a" is the short answer, "c" is your confidence (0-100), "h" is a short exact quote (copied verbatim from PAGE TEXT, not paraphrased) that pinpoints where that question/answer appears, one object per item, no extra commentary. For any other kind of question, answer in brief plain sentences with no markdown formatting (no asterisks, headers, or lists), then two more lines: first exactly "CONFIDENCE: NN" (0-100, your confidence the answer is correct), then exactly "HIGHLIGHT: " followed by a short exact verbatim quote from PAGE TEXT that contains or supports the answer (empty if none applies). If the answer is not in the content, say so in one short sentence and use a low confidence number.';
+      const sys = 'You are the AI inside the user\'s "Saints Service" panel, answering about the web page they are viewing. ' + CAPABILITIES_BRIEF + ' Answer the question using ONLY the provided context (page text and/or screenshot). Before finalizing, double-check your answer against the context. If — and only if — the question is asking for answers to multiple numbered items (like a quiz, worksheet, or multiple-choice list), respond with ONLY a JSON array and nothing else, in exactly this shape: [{"q":"1","a":"B","c":90,"h":"exact verbatim phrase from PAGE TEXT near this question"}] — "q" is the item number/label as a string, "a" is the short answer, "c" is your confidence (0-100), "h" is a short exact quote (copied verbatim from PAGE TEXT, not paraphrased) that pinpoints where that question/answer appears, one object per item, no extra commentary. For any other kind of question, answer in brief plain sentences with no markdown formatting (no asterisks, headers, or lists), then two more lines: first exactly "CONFIDENCE: NN" (0-100, your confidence the answer is correct), then exactly "HIGHLIGHT: " followed by a short exact verbatim quote from PAGE TEXT that contains or supports the answer (empty if none applies). If the answer is not in the content, say so in one short sentence and use a low confidence number.';
       const textPart = `${pageText ? `PAGE TEXT:\n${pageText}\n\n` : ''}QUESTION:\n${q}`;
       const images = screenshotDataUrl ? [screenshotDataUrl] : null;
       const hard = isHardQuestion(q) || !!screenshotDataUrl;
@@ -7266,7 +7266,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           const why = out.replace(/^YES:\s*/i, '').trim();
           stop(`🔔 ${why}`);
           speak('Watch triggered. ' + why);
-          try { if (window.Notification && Notification.permission === 'granted') new Notification('Agent Console', { body: why }); } catch (e) { /* optional */ }
+          try { if (window.Notification && Notification.permission === 'granted') new Notification('Saints Service', { body: why }); } catch (e) { /* optional */ }
         }
       } catch (e) { /* transient errors: keep watching */ }
     }
@@ -11962,11 +11962,11 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     }
   }
   // Owner-set brand name (admin console → Control → Branding) replaces the
-  // built-in "Agent Console" name in the header and login screen. Not
+  // built-in "Saints Service" name in the header and login screen. Not
   // persisted locally — like the broadcast banner, it just reapplies from
   // the next poll, so clearing it on the owner's end reverts everyone.
   function applyBrandName(name) {
-    const n = (name || '').trim() || (typeof t === 'function' ? t('Agent Console') : 'Agent Console');
+    const n = (name || '').trim() || (typeof t === 'function' ? t('Saints Service') : 'Saints Service');
     const title = panel.querySelector('.gpa-title');
     const loginCompany = panel.querySelector('.gpa-login-company');
     if (title) title.textContent = n;
