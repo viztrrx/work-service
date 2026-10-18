@@ -75,7 +75,7 @@ export function checkoutParams(env, origin, user) {
     client_reference_id: user,
     metadata: { user },
     subscription_data: { metadata: { user } },
-    line_items: { 0: pid ? { quantity: 1, price: pid } : { quantity: 1, price_data: { currency: 'usd', unit_amount: priceCents(env), recurring: { interval: 'month' }, product_data: { name: 'Agent Console subscription', description: 'Monthly access for ' + user } } } },
+    line_items: { 0: pid ? { quantity: 1, price: pid } : { quantity: 1, price_data: { currency: 'usd', unit_amount: priceCents(env), recurring: { interval: 'month' }, product_data: { name: 'Saints Service', description: 'Monthly access for ' + user } } } },
     integration_identifier: INTEGRATION_ID,
     success_url: origin + '/subscribe/?done={CHECKOUT_SESSION_ID}',
     cancel_url: origin + '/subscribe/?canceled=1',
@@ -150,42 +150,47 @@ export function subscribePage(env, { ready, cents }) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#111111"><meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#14171d"><meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Subscribe"><meta name="robots" content="noindex">
-<title>Subscribe · Agent Console</title>
+<title>Subscribe · Saints Service</title>
 <link rel="apple-touch-icon" href="/console/icon-180.png">
 <style>
-  :root { --bg: #111; --card: #1b1b1b; --field: #232323; --border: #2e2e2e; --text: #ededed; --sub: #9a9a9a; --accent: #d9d9d9; --accent-fg: #111; --ok: #4ade80; --bad: #f87171; }
+  :root {
+    /* The planet icon's colors: its dark sky, and the ring from teal to violet. */
+    --bg: #14171d; --card: #1b1f27; --field: #222833; --border: #2c3442; --text: #eef1f6; --sub: #9aa4b5;
+    --teal: #28b3a2; --violet: #7250cb; --planet: #6f97b7;
+    --accent: linear-gradient(100deg, var(--teal), var(--violet)); --accent-fg: #fff; --ok: #3ccbb6; --bad: #f87171;
+  }
   * { box-sizing: border-box; }
-  html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  html, body { margin: 0; background: radial-gradient(120% 70% at 50% 0%, #1b2530 0%, var(--bg) 60%) fixed, var(--bg); color: var(--text); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
   main { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: max(24px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
-  .card { width: 100%; max-width: 420px; background: var(--card); border: 1px solid var(--border); border-radius: 22px; padding: 28px 24px; box-shadow: 0 30px 80px -40px #000; }
+  .card { width: 100%; max-width: 420px; background: var(--card); border: 1px solid var(--border); box-shadow: 0 0 0 1px rgba(114,80,203,0.08), 0 30px 80px -40px #000; border-radius: 22px; padding: 28px 24px; }
   .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
-  .logo { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(145deg, #3a3a3a, #1e1e1e); border: 1px solid var(--border); display: grid; place-items: center; font-weight: 700; }
+  .logo { width: 48px; height: 48px; border-radius: 12px; display: block; border: 1px solid var(--border); box-shadow: 0 0 18px -6px rgba(40,179,162,0.6); }
   .brand b { display: block; font-size: 17px; } .brand span { font-size: 13px; color: var(--sub); }
   h1 { font-size: 24px; margin: 4px 0 6px; letter-spacing: -0.01em; }
   .price { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; margin: 10px 0 2px; }
   .price small { font-size: 15px; font-weight: 500; color: var(--sub); }
   ul { padding: 0; margin: 14px 0 20px; list-style: none; color: var(--sub); font-size: 14px; }
-  ul li { padding-left: 22px; position: relative; margin: 6px 0; } ul li::before { content: "✓"; position: absolute; left: 0; color: var(--ok); }
+  ul li { padding-left: 22px; position: relative; margin: 6px 0; } ul li::before { content: "✓"; position: absolute; left: 0; color: var(--teal); font-weight: 700; }
   ol li { margin: 6px 0; }
   label { display: block; font-size: 13px; color: var(--sub); margin-bottom: 6px; }
   input { width: 100%; font: inherit; font-size: 16px; color: var(--text); background: var(--field); border: 1px solid var(--border); border-radius: 12px; padding: 13px 14px; outline: none; }
-  input:focus { border-color: #555; }
+  input:focus { border-color: var(--violet); box-shadow: 0 0 0 3px rgba(114,80,203,0.25); }
   .hint { font-size: 13px; min-height: 20px; margin: 6px 2px 14px; color: var(--sub); }
   .hint.ok { color: var(--ok); } .hint.bad { color: var(--bad); }
-  button, .btn { display: block; width: 100%; font: inherit; font-weight: 600; font-size: 16px; padding: 14px; border-radius: 12px; border: 0; background: var(--accent); color: var(--accent-fg); cursor: pointer; text-align: center; text-decoration: none; }
+  button, .btn { display: block; width: 100%; font: inherit; font-weight: 600; font-size: 16px; padding: 14px; border-radius: 12px; border: 0; background: var(--accent); color: var(--accent-fg); cursor: pointer; text-align: center; text-decoration: none; box-shadow: 0 10px 24px -12px rgba(114,80,203,0.8); }
   button[disabled] { opacity: .5; cursor: default; }
   .small { font-size: 12.5px; color: var(--sub); margin-top: 14px; text-align: center; }
-  .small a { color: var(--text); }
-  .code { font: 600 26px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.08em; text-align: center; padding: 14px; border-radius: 12px; background: var(--field); border: 1px dashed #555; margin: 10px 0; user-select: all; }
+  .small a { color: var(--ok); }
+  .code { font: 600 26px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.08em; text-align: center; padding: 14px; border-radius: 12px; background: var(--field); border: 1px dashed var(--violet); color: #fff; margin: 10px 0; user-select: all; }
   ol { padding-left: 20px; color: var(--sub); font-size: 14px; } ol b { color: var(--text); }
-  .spin { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--border); border-top-color: var(--accent); animation: s 0.9s linear infinite; margin: 18px auto; }
+  .spin { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--border); border-top-color: var(--teal); border-right-color: var(--violet); animation: s 0.9s linear infinite; margin: 18px auto; }
   @keyframes s { to { transform: rotate(360deg); } }
   [hidden] { display: none !important; }
 </style></head>
 <body><main><div class="card">
-  <div class="brand"><div class="logo">A</div><div><b>Agent Console</b><span>Subscription</span></div></div>
+  <div class="brand"><img class="logo" src="/console/icon-180.png" alt="" width="48" height="48"><div><b>Saints Service</b><span>Subscription</span></div></div>
 
   <section id="closed" ${ready ? 'hidden' : ''}>
     <h1>Subscriptions aren’t open yet</h1>
@@ -195,7 +200,7 @@ export function subscribePage(env, { ready, cents }) {
   <section id="form" ${ready ? '' : 'hidden'}>
     <h1>Subscribe</h1>
     <div class="price">${esc(price)} <small>/ month</small></div>
-    <ul><li>Full access to the Agent Console</li><li>Your username is approved as soon as your payment goes through</li><li>Renews monthly · cancel any time</li></ul>
+    <ul><li>Full access to Saints Service</li><li>Your username is approved as soon as your payment goes through</li><li>Renews monthly · cancel any time</li></ul>
     <label for="user">Username you’ll sign in with</label>
     <input id="user" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="40" placeholder="e.g. jsmith" inputmode="text">
     <div id="hint" class="hint" role="status" aria-live="polite">Letters, numbers, dot, dash or underscore.</div>
@@ -217,12 +222,12 @@ export function subscribePage(env, { ready, cents }) {
       <div class="code" id="code"></div>
     </div>
     <ol id="steps-new" hidden>
-      <li>Open the Agent Console the way the owner showed you.</li>
+      <li>Open Saints Service (the Agent Console) the way the owner showed you.</li>
       <li>Tap <b>＋</b> (create account) and type your username <b class="u"></b> and a PIN.</li>
       <li>When it asks, enter the sign-up code above.</li>
     </ol>
     <ol id="steps-back" hidden>
-      <li>Open the Agent Console and sign in as <b class="u"></b> with your PIN, as before.</li>
+      <li>Open Saints Service (the Agent Console) and sign in as <b class="u"></b> with your PIN, as before.</li>
     </ol>
     <p class="small">Your subscription renews monthly. Keep this page or a screenshot of your code until you’ve signed in.${portal ? ` · <a href="${esc(portal)}" target="_blank" rel="noopener">Manage or cancel</a>` : ''}</p>
   </section>

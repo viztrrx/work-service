@@ -295,6 +295,11 @@ day, 14 days; not system notices), `trivia` (#public only). Memory only:
   is not on (needs registrations; owner to decide). The Stripe plugin is
   installed in this environment but its MCP server (mcp.stripe.com) and
   api.stripe.com are blocked by the network policy.
+  Branding (owner's request): the page is "Saints Service" (the Stripe
+  product's name too), shows the console's planet icon
+  (`/console/icon-180.png`) and uses the icon's colors: dark #14171d
+  background, teal #28b3a2 → violet #7250cb for the button, checks, focus and
+  the sign-up code. The owner's live price is $14.00/month (STRIPE_PRICE_ID).
 - **Invite codes** (round 1): names added to the list *after* this shipped
   get a one-time code (`invite:<name>`, `/admin/invites`); registering that
   name needs it (`body.invite`; wrong code counts toward the lockout).
