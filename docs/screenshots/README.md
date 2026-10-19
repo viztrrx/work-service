@@ -11,7 +11,7 @@ new subscriber and then the owner would see things.
 | [0-subscriber-walkthrough](#0-what-a-new-subscriber-sees-step-by-step) | **Start here:** every screen a new subscriber sees after paying, in order |
 | [1-new-subscriber](#1-a-new-subscriber-after-paying-close-ups) | Making the PIN, the school email box, the confirmation, signed in |
 | [2-admin-security](#2-admin--security-owner-admins-moderators) | New subscribers card, automatic month, Recent events folding, Free access |
-| [3-playlists](#3-playlists-everyone-signed-in) | Spotify / Apple Music playlist → YouTube links, for everyone |
+| [3-playlists](#3-playlists-everyone-signed-in) | Spotify / Apple Music playlist → YouTube links, for everyone; **new:** 10 new songs a day each, your limit card |
 | [4-youtube-to-mp3](#4-youtube-to-mp3-owner) | The MP3 converter in Music → My music |
 | [5-subscribe-page](#5-subscribe-page) | The payment page, the $6 contribution box, and **new:** your $1 test (owner only) |
 | [9-fold-top-card](#9-fold-the-top-card) | **New:** the Ask AI card (and every tab's top card) folds to a thin bar |
@@ -120,6 +120,13 @@ song's YouTube link; and Playlists in the console on a website.
 <img src="3-playlists/1-regular-user.png" width="320" alt="Regular user's Playlists"> <img src="3-playlists/2-links-found.png" width="320" alt="Spotify playlist with YouTube links">
 
 <img src="3-playlists/3-on-a-website.png" width="640" alt="Playlists in the console on a website">
+
+**New: 10 new songs a day per person** (admins too; only you have no limit).
+The card shows how many are left ("New songs left today: 8 of 10", in the
+first picture above). Songs someone already looked up are free. You change
+the number in **Admin → Moderation → Playlists limit** (shown set to 15):
+
+<img src="3-playlists/4-owner-limit-card.png" width="640" alt="Playlists limit card: new songs per person a day, Save">
 
 ---
 

@@ -820,7 +820,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     { at: '2026-10-19T08:30:00-04:00', commit: '', title: 'No way in without the server', parts: {
       console: ['fix', 'Signing in or creating an account (planet icon) is refused when the server can’t be reached, and a saved sign-in only comes back after the server checks it, so blocking the server or faking browser data can’t open the console'] } },
     { at: '2026-10-19T09:00:00-04:00', commit: '', title: 'Fold the top card', parts: {
-      console: ['feature', 'Every tab’s top card (Ask AI, Music, Chat…) has an arrow to fold it into a thin bar with just its title and buttons, so answers get the room; each tab remembers it'] } }
+      console: ['feature', 'Every tab’s top card (Ask AI, Music, Chat…) has an arrow to fold it into a thin bar with just its title and buttons, so answers get the room; each tab remembers it'] } },
+    { at: '2026-10-19T10:00:00-04:00', commit: '', title: 'Playlists: 10 new songs a day per person', parts: {
+      music: ['change', 'Playlists stay open to everyone (admins too); each person can look up 10 new songs a day (songs someone already found are free), with a “New songs left today” count'],
+      admin: ['feature', 'Moderation → Playlists limit (owner): set how many new songs each person can look up a day'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -3672,7 +3675,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           </section>
           <section class="gpa-card gpx-card gpx-src-panel" data-src-panel="lists">
             <div class="gpx-card-head">${GPS_ICONS.link}<div class="gpa-card-title">Playlist → YouTube links</div></div>
-            <p class="gpa-sub">Paste a Spotify or Apple Music playlist or album link. You get each song's official YouTube video, organized by playlist and saved to your account. Songs someone already looked up show right away; each person can look up 40 new songs a day.</p>
+            <p class="gpa-sub">Paste a Spotify or Apple Music playlist or album link. You get each song's official YouTube video, organized by playlist and saved to your account. Songs someone already looked up show right away and don't count; new songs are limited per person a day.</p>
+            <p id="gpa-lists-quota" class="gpa-sub gpa-lists-quota" role="status" hidden></p>
             <div class="gpa-row gpx-composer">
               <input id="gpa-lists-url" class="gpa-input" placeholder="open.spotify.com/playlist/… or music.apple.com/…" aria-label="Spotify or Apple Music playlist link" autocomplete="off" />
               <button id="gpa-lists-go" class="gpa-btn primary" type="button">Get links</button>
@@ -11318,8 +11322,14 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   const lists = {
     btn: panel.querySelector('.gpx-src[data-src="lists"]'), url: panel.querySelector('#gpa-lists-url'), go: panel.querySelector('#gpa-lists-go'),
     status: panel.querySelector('#gpa-lists-status'), keyBox: panel.querySelector('#gpa-lists-key'), view: panel.querySelector('#gpa-lists-view'),
-    saved: panel.querySelector('#gpa-lists-saved'), player: panel.querySelector('#gpa-lists-player'), open: null, finding: false
+    saved: panel.querySelector('#gpa-lists-saved'), player: panel.querySelector('#gpa-lists-player'), quota: panel.querySelector('#gpa-lists-quota'), open: null, finding: false
   };
+  // "New songs left today: 7 of 10" (null from the Worker: no limit, the owner).
+  function showSongsLeft(songs) {
+    if (!lists.quota || songs === undefined) return;
+    lists.quota.hidden = false;
+    lists.quota.textContent = songs ? 'New songs left today: ' + songs.left + ' of ' + songs.perDay + '.' : 'No daily limit for you (owner).';
+  }
   const SERVICE_NAME = { spotify: 'Spotify', apple: 'Apple Music' };
   // Everyone signed in (owner's call), in the app or on the website.
   const listsStaff = () => !!sessionToken() || !!admGet(ADMIN_KEYS.TELE_TOKEN) || !!admGet(ADMIN_KEYS.OWNER_CODE);
@@ -11431,6 +11441,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     try {
       const d = await listsCall('/music/lists');
       lists.keyBox.hidden = !!d.canFind || !d.lists.some((l) => l.pending);
+      showSongsLeft(d.songs);
       renderSaved(d.lists);
       if (!lists.open && !d.lists.length) lists.status.textContent = 'Paste a link to get started.';
     } catch (e) { lists.status.textContent = e.message; }
@@ -11441,6 +11452,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     try {
       for (let guard = 0; guard < 60; guard++) {
         const d = await listsCall('/music/lists/find', { id });
+        showSongsLeft(d.songs);
         if (d.list && lists.open && lists.open.id === id) renderList(d.list);
         if (d.needKey) { lists.keyBox.hidden = false; lists.status.textContent = 'Got ' + d.list.count + ' songs. Each has a YouTube search link until the YouTube key is added on the Worker.'; break; }
         if (d.error) { lists.status.textContent = d.error; break; }
@@ -22318,6 +22330,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             + `<div class="gac-allow-row"><span>🧠 Daily trivia at 12 PM (first correct answer wins a point)</span><button class="gps-switch${!d.fun || d.fun.trivia ? ' primary' : ''}" data-fun="trivia" type="button" aria-pressed="${!d.fun || d.fun.trivia}" aria-label="Daily trivia">Daily trivia</button></div>`
             + `<div class="gac-allow-row"><span>🏆 Announce new game records</span><button class="gps-switch${!d.fun || d.fun.shoutouts ? ' primary' : ''}" data-fun="shoutouts" type="button" aria-pressed="${!d.fun || d.fun.shoutouts}" aria-label="Announce new game records">Announce new game records</button></div>`
             + `<div class="gac-actions"><button class="gps-btn" id="gac-trivia-now" type="button">Ask a trivia question now</button></div>`, 'sparkle', 'gac-fun-card') : '')
+          + (can('system.manage') ? card('Playlists limit', `<p class="gps-hint">Music → Playlists is open to everyone signed in. Each new song costs a lookup on your YouTube key, so each person (admins too) gets this many new songs a day; songs someone already looked up are free. You have no limit.</p>`
+            + `<div class="gac-allow-row"><label>New songs per person a day <input id="gac-lists-songs" class="gpa-input" type="number" inputmode="numeric" min="0" max="500" step="1" value="${Number(d.listsDailySongs) >= 0 ? Number(d.listsDailySongs) : 10}" aria-label="New songs per person a day"></label><button class="gps-btn" id="gac-lists-save" type="button">Save</button></div>`, 'link', 'gac-lists-card') : '')
           + (can('security.view') ? '' : freeCard())
           + `<div id="gac-legacy-moderation"></div>`;
         b.querySelectorAll('.gac-report blockquote').forEach((q, i) => { q.textContent = list[i].msgText; });
@@ -22338,6 +22352,14 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             sw.classList.toggle('primary', fun[sw.dataset.fun]); sw.setAttribute('aria-pressed', String(fun[sw.dataset.fun]));
             showToast((sw.dataset.fun === 'trivia' ? 'Daily trivia ' : 'Game record posts ') + (fun[sw.dataset.fun] ? 'on.' : 'off.'));
           } catch (err) { showToast(err.message, { type: 'danger' }); }
+        });
+        const listsCard = b.querySelector('#gac-lists-card');
+        if (listsCard) listsCard.querySelector('#gac-lists-save').addEventListener('click', async () => {
+          const n = Number(listsCard.querySelector('#gac-lists-songs').value);
+          try {
+            await api('/admin/config', { method: 'POST', body: { listsDailySongs: n } });
+            showToast('Playlists: ' + n + ' new song' + (n === 1 ? '' : 's') + ' per person a day.');
+          } catch (e) { showToast(e.message, { type: 'danger' }); }
         });
         const quietCard = b.querySelector('#gac-quiet-card');
         if (quietCard) {

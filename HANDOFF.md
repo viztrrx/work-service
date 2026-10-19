@@ -13,6 +13,17 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **Playlists: 10 new songs a day** (owner: "admins also have access… everyone
+  has access to it but set a limited quota by default of 10 songs per user so
+  it doesn't run up my youtube api key"): admins already had access; now
+  `LISTS_DAILY_SONGS = 10` new lookups a day per person, admins included
+  (`unlimited` = only the owner: staff() returning OWNER). Owner-set
+  `config.listsDailySongs` (0–500, `/admin/config`, system.manage = owner)
+  via Admin → Moderation → Playlists limit (`#gac-lists-card`; value from
+  `/admin/reports`). `/music/lists` and `/find` return `songs: {perDay,
+  left}` (null for the owner); the card shows "New songs left today: X of
+  N" (`#gpa-lists-quota`). Imports stay 10 playlists/day (staff 30). Tests:
+  playlists.test.mjs, playlists.mjs (27), fun.mjs (20). Before that:
   **Owner $1 test contribution** (owner: "only me the owner (viztrrx) can
   contribute $1 so i can test out the subscribe page"): `nameStatus` returns
   `ownerTest: true` for OWNER (still never a subscription); the page shows
@@ -757,7 +768,8 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 
 | Commit | What |
 |---|---|
-| (this) | Owner-only $1 test contribution on the subscribe page |
+| (this) | Playlists: 10 new songs a day per person (admins too), owner-set |
+| `f11590c` | Owner-only $1 test contribution on the subscribe page |
 | `ccd4577` | Fold the top card (Ask AI and every tab) |
 | (earlier) | YouTube to MP3 (owner): real FFmpeg in the browser, verified MP3, Save to My music |
 | `5098fca`, `f748097` | Subscribe page: own PIN after paying, no paying twice, contributions note |

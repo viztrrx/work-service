@@ -109,9 +109,11 @@ The Music tab needs no YouTube key and no sign-in:
     song in another playlist or for anyone else costs nothing, and opening
     saved playlists never searches. A free key covers about 100 new songs a
     day for everyone together; the rest are found the next day. So one person
-    can't use it all up, each regular user gets **40 new song lookups a day**
-    (songs someone already found don't count); you and admins have no limit. Without the key every song gets a
-    YouTube search link.
+    can't use it all up, each person, **admins included**, gets **10 new
+    songs a day** (songs someone already found don't count), and the card
+    shows "New songs left today: 7 of 10". Only you have no limit. Change the
+    number in **Admin → Moderation → Playlists limit** (0–500; only you can).
+    Without the key every song gets a YouTube search link.
   - Spotify playlists are read from Spotify's public embed page, which shows
     the first 100 songs. For longer playlists, add `SPOTIFY_CLIENT_ID` and
     `SPOTIFY_CLIENT_SECRET` (a free app at developer.spotify.com) as Worker

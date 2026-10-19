@@ -449,9 +449,12 @@ const adminLink = (sec, params) => appLink('admin', { sec, ...(params || {}) });
 const SUB_PERIODS = { '1w': { days: 7 }, '2w': { days: 14 }, '1m': { months: 1 }, '3m': { months: 3 }, '6m': { months: 6 }, '12m': { months: 12 } };
 const SUB_PERIOD_LABEL = { '1w': '1 week', '2w': '2 weeks', '1m': '1 month', '3m': '3 months', '6m': '6 months', '12m': '1 year' };
 const SUB_REMIND_MS = 3 * 24 * 3600 * 1000;
-// Playlists for everyone: per person a day (the owner and admins: 30 imports, no lookup cap).
+// Playlists for everyone: per person a day, 10 playlist imports (staff 30)
+// and LISTS_DAILY_SONGS new song lookups (admins included; the owner can
+// change it, config.listsDailySongs; the owner has no lookup cap).
 const LISTS_USER_IMPORTS = 10;
-const LISTS_USER_SEARCHES = 40;
+const LISTS_DAILY_SONGS = 10;
+const listsSongCap = (cfg) => (Number.isInteger(cfg && cfg.listsDailySongs) ? cfg.listsDailySongs : LISTS_DAILY_SONGS);
 // New subscribers' school email: their 6-digit student number at this domain.
 const SCHOOL_ID_RE = /^\d{6}$/;
 // Names with the admin role (for alerts that go to the owner and admins).
@@ -3413,6 +3416,12 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         for (const u of back) { const s = cfg.subscriptions && cfg.subscriptions[u]; if (s && s.auto && (s.ended || s.expiresAt <= Date.now())) delete cfg.subscriptions[u]; }
         await autoSubscribeListed(env, cfg);
       }
+      // Playlists: new song lookups per person a day (YouTube key quota).
+      if ('listsDailySongs' in body) {
+        const n = Number(body.listsDailySongs);
+        if (!Number.isInteger(n) || n < 0 || n > 500) return json({ error: 'Pick a number of songs from 0 to 500.' }, 400);
+        cfg.listsDailySongs = n;
+      }
       if ('monthlyQuota' in body) cfg.monthlyQuota = Math.max(0, parseInt(body.monthlyQuota, 10) || 0);
       if ('rpm' in body) cfg.rpm = Math.max(0, parseInt(body.rpm, 10) || 0);
       if ('requireSessions' in body) cfg.requireSessions = !!body.requireSessions;
@@ -3996,18 +4005,23 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         // The YouTube key is the Worker secret YOUTUBE_API_KEY: it never
         // leaves the Worker and is only used to look up a song nobody has
         // looked up before. Those new lookups are limited per person a day
-        // (LISTS_USER_SEARCHES) except for the owner and admins, so one
-        // person can't use up the key's daily quota for everyone.
+        // (listsSongCap, 10 unless the owner changes it), admins included;
+        // only the owner is unlimited, so nobody runs up the key's quota.
         if (url.pathname.startsWith('/music/lists')) {
           const boss = await staff();
+          const unlimited = !!boss && String(boss).toLowerCase() === OWNER;
+          const songCap = listsSongCap(cfg);
+          const sk = 'ytlists-search:' + dayKey() + ':';
           const me = String(listener || '').trim();
           const who = boss || (who0.verified && me && me.toLowerCase() !== 'anonymous' ? me : '');
           if (!who) return json({ ok: false, signIn: true, error: 'Sign in to use Playlists.' }, 401);
           if (!kv) return json({ ok: false, error: 'storage not configured' }, 503);
           const lists = await readLists(kv, who);
           const ytKey = String((env && env.YOUTUBE_API_KEY) || '').trim();
+          // New song lookups left today (null: no limit, the owner).
+          const songsInfo = async (usedNow) => (unlimited ? null : { perDay: songCap, left: Math.max(0, songCap - (usedNow !== undefined ? usedNow : (parseInt(await kv.get(sk + String(who).toLowerCase()), 10) || 0))) });
           if (url.pathname === '/music/lists' && req.method === 'GET') {
-            return json({ ok: true, lists: lists.map(listSummary), canFind: !!ytKey });
+            return json({ ok: true, lists: lists.map(listSummary), canFind: !!ytKey, songs: await songsInfo() });
           }
           if (url.pathname === '/music/lists/one' && req.method === 'GET') {
             const l = lists.find((x) => x.id === url.searchParams.get('id'));
@@ -4034,10 +4048,10 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
             // (ytm:<song>) and cost no YouTube search; only new songs are
             // searched, a few per request (the app keeps asking until done).
             let error = '', quota = false, searched = 0, changed = 0, scanned = 0, needKey = false, capped = false;
-            // New lookups left today for this person (unlimited for the owner and admins).
-            const sk = 'ytlists-search:' + dayKey() + ':' + String(who).toLowerCase();
-            const used = boss ? 0 : parseInt(await kv.get(sk), 10) || 0;
-            const left = boss ? Infinity : Math.max(0, LISTS_USER_SEARCHES - used);
+            // New lookups left today for this person (no limit for the owner).
+            const sku = sk + String(who).toLowerCase();
+            const used = unlimited ? 0 : parseInt(await kv.get(sku), 10) || 0;
+            const left = unlimited ? Infinity : Math.max(0, songCap - used);
             for (const t of l.tracks) {
               if (searched >= MATCH_BATCH || scanned >= MATCH_SCAN) break;
               if (t.m !== undefined) continue;
@@ -4054,17 +4068,18 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
               } catch (e) { error = e.message; quota = !!e.quota || !!e.badKey; break; }
             }
             if (changed) await writeLists(kv, who, lists);
-            if (!boss && searched) await kv.put(sk, String(used + searched), { expirationTtl: 2 * 24 * 3600 });
+            if (!unlimited && searched) await kv.put(sku, String(used + searched), { expirationTtl: 2 * 24 * 3600 });
+            const songs = await songsInfo(used + searched);
             if (capped && !error) {
               const pub = publicList(l);
-              return json({ ok: false, capped: true, stop: true, error: 'That’s ' + LISTS_USER_SEARCHES + ' new song lookups today. The rest are looked up tomorrow (songs someone already found show right away).', list: pub, more: false, searched });
+              return json({ ok: false, capped: true, stop: true, error: 'That’s your ' + songCap + ' new song' + (songCap === 1 ? '' : 's') + ' for today. The rest are looked up tomorrow (songs someone already found show right away).', list: pub, more: false, searched, songs });
             }
             if (needKey && !error) {
               const pub = publicList(l);
-              return json({ ok: false, needKey: true, error: 'Finding videos needs the YouTube key on the Worker (YOUTUBE_API_KEY).', list: pub, more: false, searched }, 200);
+              return json({ ok: false, needKey: true, error: 'Finding videos needs the YouTube key on the Worker (YOUTUBE_API_KEY).', list: pub, more: false, searched, songs }, 200);
             }
             const pub = publicList(l);
-            return json({ ok: !error, error: error || undefined, stop: quota, list: pub, more: !error && pub.pending > 0, searched });
+            return json({ ok: !error, error: error || undefined, stop: quota, list: pub, more: !error && pub.pending > 0, searched, songs });
           }
           if (url.pathname === '/music/lists/retry' && req.method === 'POST') {
             // Look a song up again (e.g. it found the wrong video).
@@ -5065,7 +5080,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         // Moderation also shows the chat quiet-hours setting (owner changes it).
         const mcfg = await getConfig(kv);
         const cq = mcfg.chatQuiet || { on: false, start: 23, end: 6 };
-        return json({ ok: true, reports: reports.sort((a, b) => b.createdAt - a.createdAt), chatQuiet: cq, fun: { trivia: funOn(mcfg, 'trivia'), shoutouts: funOn(mcfg, 'shoutouts') } });
+        return json({ ok: true, reports: reports.sort((a, b) => b.createdAt - a.createdAt), chatQuiet: cq, fun: { trivia: funOn(mcfg, 'trivia'), shoutouts: funOn(mcfg, 'shoutouts') }, listsDailySongs: listsSongCap(mcfg) });
       }
 
       if (url.pathname === '/admin/reports/action') {

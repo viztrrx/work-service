@@ -123,11 +123,14 @@ try {
   check('kj (regular user) signs in; Music has the Playlists button', s.inside && await R(kj.page, (r) => !r.querySelector('.gpx-src[data-src="lists"]').hidden), JSON.stringify(s));
   await R(kj.page, (r) => r.querySelector('.gpx-src[data-src="lists"]').click());
   await kj.page.waitForTimeout(600);
-  check('…the card says everyone can use it, 40 new songs a day', /40 new songs a day/.test(await R(kj.page, (r) => r.querySelector('[data-src-panel="lists"] .gpa-sub').textContent)));
+  check('…the card says new songs are limited per person a day', /new songs are limited per person a day/.test(await R(kj.page, (r) => r.querySelector('[data-src-panel="lists"] .gpa-sub').textContent)));
+  const quota = (p) => R(p, (r) => { const q = r.querySelector('#gpa-lists-quota'); return q && !q.hidden ? q.textContent : ''; });
+  check('…and shows “New songs left today: 10 of 10.”', (await quota(kj.page)) === 'New songs left today: 10 of 10.', await quota(kj.page));
   await kj.page.fill(sr('#gpa-lists-url'), 'https://music.apple.com/us/playlist/chill-mix/pl.u-abcdefgh123');
   await kj.page.click(sr('#gpa-lists-go'));
   const kjApple = await waitFor(kj.page, (r) => /Chill Mix/.test(r.querySelector('#gpa-lists-view .gpa-yl-name') ? r.querySelector('#gpa-lists-view .gpa-yl-name').textContent : '') && /Found 2 of 2/.test(r.querySelector('#gpa-lists-status').textContent), null, 20000);
   check('kj pastes an Apple Music link → “Chill Mix”, both songs found (2 YouTube searches)', kjApple && ytSearches === 2, JSON.stringify(await rows(kj.page)) + ' searches ' + ytSearches);
+  check('…the count goes down by the 2 new songs: “8 of 10”', (await quota(kj.page)) === 'New songs left today: 8 of 10.', await quota(kj.page));
   await shot(kj.page, '00-regular-user-playlists.png');
 
   // ana: account, then admin, then signs in again.
@@ -152,6 +155,7 @@ try {
   check('Spotify link → the official videos, found with the Worker’s key (no key asked for)', found && list[0].href === 'https://youtu.be/4NRXx6U8ABQ' && list[1].href === 'https://youtu.be/TUVcZfQe-Kw' && await R(ana.page, (r) => r.querySelector('#gpa-lists-key').hidden), JSON.stringify(list.map((x) => x.t + ': ' + x.href)));
   check('…a song with no clear official video keeps its search link', /Search YouTube/.test(list[2].link) && /search_query=Unknown%20Band/.test(list[2].href));
   check('…3 YouTube searches, one per song', ytSearches === 5, String(ytSearches - 2));
+  check('Admins have the same daily limit: “New songs left today: 7 of 10.”', (await quota(ana.page)) === 'New songs left today: 7 of 10.', await quota(ana.page));
   await shot(ana.page, '01-app-links-found.png');
 
   // 3: an Apple Music playlist.
@@ -159,6 +163,7 @@ try {
   await ana.page.click(sr('#gpa-lists-go'));
   const apple = await waitFor(ana.page, (r) => /Chill Mix/.test(r.querySelector('#gpa-lists-view .gpa-yl-name') ? r.querySelector('#gpa-lists-view .gpa-yl-name').textContent : '') && /Found 2 of 2/.test(r.querySelector('#gpa-lists-status').textContent), null, 20000);
   check('Apple Music link → “Chill Mix”, both songs found, from the cache (kj looked them up): no new searches', apple && ytSearches === 5, JSON.stringify(await rows(ana.page)) + ' searches ' + ytSearches);
+  check('…songs already looked up don’t count: still 7 of 10', (await quota(ana.page)) === 'New songs left today: 7 of 10.', await quota(ana.page));
   const saved = await waitFor(ana.page, (r) => r.querySelectorAll('#gpa-lists-saved .gpa-yl-saved li').length === 2, null, 10000);
   check('“Your playlists” lists both, organized by playlist', saved, await R(ana.page, (r) => r.querySelector('#gpa-lists-saved').textContent.replace(/\s+/g, ' ')));
   await R(ana.page, (r) => r.querySelector('#gpa-lists-saved').scrollIntoView({ block: 'center' }));

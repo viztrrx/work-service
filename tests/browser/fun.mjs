@@ -174,6 +174,16 @@ try {
   await R(own.page, (r) => r.querySelector('.gps-tab[data-asec="moderation"]').click());
   check('Admin → Moderation has Fun features (trivia, record posts)', await waitFor(own.page, (r) => !!r.querySelector('#gac-fun-card [data-fun="trivia"]') && !!r.querySelector('#gac-fun-card [data-fun="shoutouts"]'), null, 15000));
   await own.page.locator(sr('#gac-fun-card')).screenshot({ path: path.join(OUT, '08-admin-fun.png') });
+  // …and the Playlists limit (owner): 10 new songs per person a day by default.
+  const limitCard = await waitFor(own.page, (r) => !!r.querySelector('#gac-lists-card #gac-lists-songs'), null, 10000);
+  check('Admin → Moderation has “Playlists limit”, 10 new songs per person a day by default', limitCard && (await R(own.page, (r) => r.querySelector('#gac-lists-songs').value)) === '10', String(limitCard));
+  await own.page.fill(sr('#gac-lists-songs'), '15');
+  await own.page.click(sr('#gac-lists-save'));
+  await own.page.waitForTimeout(1200);
+  const rep = await admin('/admin/reports');
+  check('…Save changes it to 15 for everyone', rep.listsDailySongs === 15, String(rep.listsDailySongs));
+  await own.page.locator(sr('#gac-lists-card')).screenshot({ path: path.join(OUT, '09-admin-playlists-limit.png') });
+  await admin('/admin/config', { listsDailySongs: 10 });
 
   for (const [n, p] of [['maya', maya], ['kj', kj], ['owner', own]]) check(`No page errors (${n})`, p.page._errors.length === 0, p.page._errors.slice(0, 2).join(' | '));
   for (const p of [maya, kj, own]) await p.ctx.close();

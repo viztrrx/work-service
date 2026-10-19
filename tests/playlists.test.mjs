@@ -170,6 +170,14 @@ test('playlists: everyone signed in, app or website; Worker key only; each song 
       assert.deepEqual(aFind.data.list.tracks.map((t) => t.m && t.m.id), ['4NRXx6U8ABQ', 'TUVcZfQe-Kw', null]);
       assert.equal(aFind.data.searched, 0);
       assert.equal(gSearches(), before, 'no YouTube searches for songs already looked up');
+      // Admins have Playlists too, with the same daily limit as everyone (only the owner has none).
+      assert.deepEqual((await call('/music/lists?user=ana', { headers: anaH })).data.songs, { perDay: 10, left: 10 });
+      const day = new Date().toISOString().slice(0, 10);
+      await env.TELEMETRY.put('ytlists-search:' + day + ':ana', '10');
+      await call('/music/lists/retry?user=ana', { method: 'POST', headers: anaH, body: { id: aImp.data.list.id, i: 0 } });
+      const aCap = await call('/music/lists/find?user=ana', { method: 'POST', headers: anaH, body: { id: aImp.data.list.id } });
+      assert.deepEqual([aCap.data.capped, aCap.data.searched], [true, 0], 'admins are capped too');
+      assert.equal((await call('/admin/config', { method: 'POST', headers: anaH, body: { listsDailySongs: 500 } })).status, 403, 'admins can’t raise it');
       // Her lists are hers; the owner's aren't.
       assert.deepEqual((await call('/music/lists?user=ana', { headers: anaH })).data.lists.map((l) => l.name), ['Late Night Drive']);
       assert.equal((await call('/music/lists/one?user=ana&id=' + id, { headers: anaH })).status, 404);
@@ -204,14 +212,17 @@ test('playlists: a regular signed-in user can use them, with a daily cap on new 
     // kj (a regular user, on the website) imports a playlist.
     const imp = await call('/music/lists/import?user=kj', { method: 'POST', headers: kjH, body: { url: SP } });
     assert.equal(imp.status, 200, JSON.stringify(imp.data));
-    // kj has already used 39 of today's 40 new lookups: one song is looked up, then it stops with a reason.
+    // 10 new songs a day by default, shown to them.
+    assert.deepEqual((await call('/music/lists?user=kj', { headers: kjH })).data.songs, { perDay: 10, left: 10 });
+    // kj has already used 9 of today's 10 new lookups: one song is looked up, then it stops with a reason.
     const day = new Date().toISOString().slice(0, 10);
-    await env.TELEMETRY.put('ytlists-search:' + day + ':kj', '39');
+    await env.TELEMETRY.put('ytlists-search:' + day + ':kj', '9');
     const r1 = await call('/music/lists/find?user=kj', { method: 'POST', headers: kjH, body: { id: imp.data.list.id } });
     assert.deepEqual([r1.data.searched, r1.data.capped, r1.data.stop, r1.data.more], [1, true, true, false]);
-    assert.match(r1.data.error, /40 new song lookups today/);
+    assert.match(r1.data.error, /your 10 new songs for today/);
+    assert.deepEqual(r1.data.songs, { perDay: 10, left: 0 });
     assert.equal(searches(), 1);
-    assert.equal(await env.TELEMETRY.get('ytlists-search:' + day + ':kj'), '40');
+    assert.equal(await env.TELEMETRY.get('ytlists-search:' + day + ':kj'), '10');
     // At the cap: nothing more is searched.
     const r2 = await call('/music/lists/find?user=kj', { method: 'POST', headers: kjH, body: { id: imp.data.list.id } });
     assert.deepEqual([r2.data.searched, r2.data.capped], [0, true]);
@@ -225,6 +236,13 @@ test('playlists: a regular signed-in user can use them, with a daily cap on new 
     const r3 = await call('/music/lists/find?user=kj', { method: 'POST', headers: kjH, body: { id: imp.data.list.id } });
     assert.equal(r3.data.list.pending, 0, JSON.stringify(r3.data.list).slice(0, 300));
     assert.equal(searches(), 3);
+    // The owner has no limit; the owner can change everyone's (0–500), nobody else can.
+    assert.equal((await call('/music/lists?user=boss', { headers: { Authorization: 'Bearer ' + ADMIN } })).data.songs, null);
+    assert.equal((await call('/admin/config', { method: 'POST', headers: { Authorization: 'Bearer ' + ADMIN }, body: { listsDailySongs: 501 } })).status, 400);
+    assert.equal((await call('/admin/config', { method: 'POST', headers: kjH, body: { listsDailySongs: 500 } })).status >= 401, true, 'not for users');
+    assert.equal((await call('/admin/config', { method: 'POST', headers: { Authorization: 'Bearer ' + ADMIN }, body: { listsDailySongs: 12 } })).status, 200);
+    assert.deepEqual((await call('/music/lists?user=kj', { headers: kjH })).data.songs, { perDay: 12, left: 2 });
+    assert.equal((await call('/admin/reports', { headers: { Authorization: 'Bearer ' + ADMIN } })).data.listsDailySongs, 12, 'the admin card reads it');
     // Regular users: 10 playlists a day.
     await env.TELEMETRY.put('ytlists-rate:' + day + ':kj', '10');
     const cap = await call('/music/lists/import?user=kj', { method: 'POST', headers: kjH, body: { url: SP } });
