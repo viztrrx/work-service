@@ -826,7 +826,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       admin: ['feature', 'Moderation → Playlists limit (owner): set how many new songs each person can look up a day'] } },
     { at: '2026-10-19T14:00:00-04:00', commit: '', title: 'Guessing a PIN locks the account', parts: {
       console: ['fix', '8 wrong PINs, reset codes or student numbers for one name, from any devices or networks, lock that account until the day session ends (before, changing device or network got around the limits)'],
-      admin: ['feature', 'Security → Sign-in help → Locked accounts: see who was being guessed and unlock it'] } }
+      admin: ['feature', 'Security → Sign-in help → Locked accounts: see who was being guessed and unlock it'] } },
+    { at: '2026-10-19T16:00:00-04:00', commit: '', title: 'Time left, Renew, texting; unlock with your school email', parts: {
+      console: ['feature', 'At the top for everyone: days and hours left (or “Renews in”, or “No expiry” for staff) and a Renew button: the subscribe link, “Text me the link”, and who to give cash to; a locked account can be unlocked with its school email (once a day)'],
+      admin: ['feature', 'Security → Cash & texting (owner): texting status, who takes cash (you and the admins automatically, or your own list), and who texted CASH'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -1944,6 +1947,25 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpa-usage.is-rate .gpa-usage-track { display: none; }
       .gpa-usage.is-rate .gpa-usage-left { margin-left: auto; }
       .gpa-panel.gpa-minimized .gpa-usage { display: none; }
+      .gpa-substrip .gpa-usage-row { gap: 8px; }
+      .gpa-substrip .gpa-usage-track { min-width: 24px; }
+      .gpa-substrip.is-staff .gpa-usage-track { display: none; }
+      .gpa-substrip.is-staff .gpa-usage-left { margin-left: auto; }
+      .gpa-substrip-renew { flex: none; font: inherit; font-size: 11.5px; font-weight: 600; padding: 3px 10px; border-radius: 999px; cursor: pointer;
+        border: 1px solid color-mix(in srgb, var(--gpa-accent) 45%, var(--gpa-border)); background: color-mix(in srgb, var(--gpa-accent) 14%, transparent); color: var(--gpa-text); }
+      .gpa-substrip-renew:hover { background: color-mix(in srgb, var(--gpa-accent) 24%, transparent); }
+      .gpa-substrip-renew[hidden] { display: none; }
+      .gpa-renew { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; padding: 10px 12px; border: 1px solid var(--gpa-border); border-radius: 10px; background: var(--gpa-card-bg, var(--gpa-panel)); }
+      .gpa-renew[hidden] { display: none; }
+      .gpa-renew-h { font-size: 12px; font-weight: 700; color: var(--gpa-text); margin-bottom: 5px; }
+      .gpa-renew-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+      .gpa-renew-row .gpa-input { flex: 1 1 140px; min-width: 0; }
+      .gpa-renew-row .gpa-btn { min-height: 30px; font-size: 12.5px; text-decoration: none; }
+      .gpa-renew-fine, .gpa-renew-cash { font-size: 11.5px; color: var(--gpa-sub); line-height: 1.4; }
+      .gpa-renew-cash b { color: var(--gpa-text); }
+      .gpa-renew-msg { font-size: 12px; color: var(--gpa-sub); }
+      .gpa-renew-msg.bad { color: var(--gpa-danger, #e5484d); }
+      .gpa-renew-msg:empty { display: none; }
       .gpa-app .gpa-usage { padding-left: calc(14px + env(safe-area-inset-left)); padding-right: calc(14px + env(safe-area-inset-right)); }
       @media (prefers-reduced-motion: reduce) { .gpa-usage-track > i { transition: none; } }
 
@@ -3173,8 +3195,25 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         <span class="gpa-usage-label" id="gpa-substrip-label">Subscription</span>
         <div class="gpa-usage-track" id="gpa-substrip-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-labelledby="gpa-substrip-label"><i></i></div>
         <span class="gpa-usage-left" id="gpa-substrip-left"></span>
+        <button type="button" class="gpa-substrip-renew" id="gpa-substrip-renew" aria-expanded="false" aria-controls="gpa-renew" hidden>Renew</button>
       </div>
       <div class="gpa-usage-note" id="gpa-substrip-note"></div>
+      <div class="gpa-renew" id="gpa-renew" hidden>
+        <div class="gpa-renew-sec">
+          <div class="gpa-renew-h">Subscribe or renew</div>
+          <div class="gpa-renew-row"><a class="gpa-btn primary" id="gpa-renew-open" target="_blank" rel="noopener">Open the subscribe page</a><button type="button" class="gpa-btn" id="gpa-renew-copy">Copy link</button></div>
+        </div>
+        <div class="gpa-renew-sec" id="gpa-renew-sms" hidden>
+          <div class="gpa-renew-h">Text me the link</div>
+          <div class="gpa-renew-row"><input class="gpa-input" id="gpa-renew-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(239) 555-0123" maxlength="20" aria-label="Your phone number"><button type="button" class="gpa-btn" id="gpa-renew-send">Send</button></div>
+          <div class="gpa-renew-fine">US numbers. One text with the link; reply STOP to opt out. Msg &amp; data rates may apply.</div>
+        </div>
+        <div class="gpa-renew-sec">
+          <div class="gpa-renew-h">Paying cash?</div>
+          <div class="gpa-renew-cash" id="gpa-renew-cash">Loading…</div>
+        </div>
+        <div class="gpa-renew-msg" id="gpa-renew-msg" role="status" aria-live="polite"></div>
+      </div>
     </div>
     <div class="gpa-toast-wrap" id="gpa-toast-wrap"></div>
     <div class="gpa-login" id="gpa-login">
@@ -3231,6 +3270,16 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           </div>
           <div id="gpa-forgot-wait" class="gpa-forgot-wait" hidden><span class="gpa-forgot-spin" aria-hidden="true"></span><span id="gpa-forgot-status" role="status" aria-live="polite">Waiting for the owner to approve…</span></div>
           <button id="gpa-forgot-back" class="gpa-login-link gpa-forgot-back" type="button">Back to sign in</button>
+        </div>
+        <div id="gpa-acctunlock" class="gpa-login-request" hidden>
+          <div class="gpa-login-request-head">${GPS_ICONS.key}<span>Account locked</span></div>
+          <p class="gpa-login-request-text" id="gpa-acctunlock-text">Too many wrong sign-ins locked this account. If it’s yours, type the 6 digits of your school email to unlock it. If it isn’t, ask the owner or an admin.</p>
+          <div id="gpa-acctunlock-form">
+            <label class="gpa-login-label" for="gpa-acctunlock-sid">Your school email (the 6 digits before @alseducation.onmicrosoft.com)</label>
+            <div class="gpa-forgot-email"><input id="gpa-acctunlock-sid" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="off" spellcheck="false" aria-describedby="gpa-acctunlock-dom" /><span id="gpa-acctunlock-dom">@alseducation.onmicrosoft.com</span></div>
+            <button id="gpa-acctunlock-go" class="gpa-login-primary gpa-req-send" type="button">Unlock my account</button>
+          </div>
+          <button id="gpa-acctunlock-back" class="gpa-login-link gpa-forgot-back" type="button">Back to sign in</button>
         </div>
         <button id="gpa-login-btn" class="gpa-login-primary">Sign in</button>
         <div class="gpa-login-actions">
@@ -16294,6 +16343,12 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const invite = inviteWrap && !inviteWrap.hidden ? panel.querySelector('#gpa-login-invite').value.trim() : '';
     const r = await linkServerAccount(user, pin, { register: creating || localOk, takeover: !!takeover, invite });
     if (!r.ok && r.deviceLocked) return;
+    if (!r.ok && r.accountLocked) {
+      if (r.selfUnlock) showAccountUnlock(user);
+      showLoginMsg(r.selfUnlock ? 'This account is locked after too many wrong sign-ins. If it’s yours, unlock it with your school email below.'
+        : (serverSessionError || 'This account is locked.') + ' It has no school email saved, so the owner or an admin has to unlock it.', true);
+      return;
+    }
     if (!r.ok && r.inviteRequired && inviteWrap) {
       // An invited name: show the code box (only now, so nobody else ever sees it).
       inviteWrap.hidden = false;
@@ -16455,6 +16510,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         showDeviceLock(r.data.until);
         serverSessionStatus = 'failed'; serverSessionError = r.data.error || 'This device is locked.'; emitSession();
         return { ok: false, deviceLocked: true };
+      }
+      if (r.status === 423 && r.data.accountLocked) {
+        serverSessionStatus = 'failed'; serverSessionError = r.data.error || 'This account is locked.'; emitSession();
+        return { ok: false, accountLocked: true, until: r.data.until, selfUnlock: !!r.data.selfUnlock };
       }
       if (r.status === 200 && r.data.token) {
         storeServerSession(user, r.data);
@@ -16715,6 +16774,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         const r = await fetch(AUTH_BASE() + '/auth/pin-request', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ user, verifier, studentId: sid, device: consoleDeviceId(), note: panel.querySelector('#gpa-forgot-note').value }) });
         const d = await r.json().catch(() => ({}));
         if (r.status === 423 && d.deviceLocked) { show(false); showDeviceLock(d.until); return; }
+        if (r.status === 423 && d.accountLocked && d.selfUnlock) { show(false); showAccountUnlock(user); say('This account is locked after too many wrong tries. If it’s yours, unlock it with your school email below.', true); return; }
         if (!r.ok || !d.ticket) { say(d.error || 'Couldn’t send it. Try again.', true); return; }
         panel.querySelector('#gpa-forgot-pin').value = ''; panel.querySelector('#gpa-forgot-pin2').value = ''; panel.querySelector('#gpa-forgot-sid').value = '';
         if (d.approved) {
@@ -16735,6 +16795,48 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       finally { btn.disabled = false; }
     });
   })();
+
+  // ---- Account locked (too many wrong sign-ins): unlock with the school email ----
+  // The real owner of the account proves it with the 6 digits of their school
+  // email. Bounded server-side (once a day, 3 wrong tries); otherwise the
+  // owner or an admin unlocks it in Sign-in help.
+  function showAccountUnlock(user) {
+    const box = panel.querySelector('#gpa-acctunlock');
+    const form = panel.querySelector('#gpa-acctunlock-form');
+    const sidI = panel.querySelector('#gpa-acctunlock-sid');
+    const go = panel.querySelector('#gpa-acctunlock-go');
+    if (!box) return;
+    const normal = [panel.querySelector('#gpa-login-user').closest('.gpa-login-field') || panel.querySelector('#gpa-login-user'),
+      panel.querySelector('#gpa-login-pin').closest('.gpa-login-field') || panel.querySelector('#gpa-login-pin'),
+      panel.querySelector('#gpa-login-btn'), panel.querySelector('.gpa-login-actions'), panel.querySelector('#gpa-login-invite-wrap'),
+      panel.querySelector('label[for="gpa-login-user"]'), panel.querySelector('label[for="gpa-login-pin"]')];
+    const open = (on) => { box.hidden = !on; normal.forEach((el) => { if (el && !(el.id === 'gpa-login-invite-wrap' && !on)) el.hidden = on; }); };
+    open(true);
+    form.hidden = false;
+    sidI.value = '';
+    try { sidI.focus(); } catch (e) { /* ignore */ }
+    try { sidI.oninput = () => { const v = sidI.value.replace(/\D/g, '').slice(0, 6); if (v !== sidI.value) sidI.value = v; }; } catch (e) { /* ignore */ }
+    panel.querySelector('#gpa-acctunlock-back').onclick = () => { open(false); showLoginMsg(''); };
+    go.onclick = async () => {
+      const sid = sidI.value.trim();
+      if (!/^\d{6}$/.test(sid)) { showLoginMsg('Type the 6 digits of your school email.', true); return; }
+      if (!AUTH_BASE()) { showLoginMsg('Can’t reach the server.', true); return; }
+      go.disabled = true; showLoginMsg('Checking…');
+      try {
+        const r = await fetch(AUTH_BASE() + '/auth/unlock-account', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ user, studentId: sid, device: consoleDeviceId() }) });
+        const d = await r.json().catch(() => ({}));
+        if (d.ok) {
+          open(false);
+          showLoginMsg('Unlocked. Type your PIN and sign in.');
+          try { panel.querySelector('#gpa-login-pin').focus(); } catch (e) { /* ignore */ }
+          return;
+        }
+        if (d.staffOnly) { form.hidden = true; }
+        showLoginMsg(d.error || 'Couldn’t unlock it. Ask the owner or an admin.', true);
+      } catch (e) { showLoginMsg('Couldn’t reach the server. Try again.', true); }
+      finally { go.disabled = false; }
+    };
+  }
 
   // ---- Device lock (unauthorized sign-in attempts) ----
   // Covers the whole console; nothing underneath can be used. Checks every 30 s
@@ -20834,10 +20936,33 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // passes; amber in the last 3 days. The Worker sends `subscription` on
   // each status poll, null for everyone else.
   const subStripEl = panel.querySelector('#gpa-substrip');
+  const subRenewBtn = panel.querySelector('#gpa-substrip-renew');
+  // "12d 4h left", "5h 20m left", "12m left": precise enough to plan around.
+  const fmtTimeLeft = (ms) => {
+    const m = Math.max(0, Math.floor(ms / 60000)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
+    return d ? d + 'd ' + h + 'h' : h ? h + 'h ' + mm + 'm' : Math.max(1, mm) + 'm';
+  };
+  let lastSub = null, subTick = 0;
   function renderSubStrip(sub) {
     if (!subStripEl) return;
+    lastSub = sub;
+    clearTimeout(subTick);
+    const role = typeof sessionRole === 'function' ? sessionRole() : null;
+    const staff = role === 'owner' || role === 'admin';
+    subStripEl.classList.remove('is-staff');
+    if (currentUser && staff && !(sub && sub.expiresAt > Date.now())) {
+      // The owner and admins: access doesn't run out.
+      subStripEl.classList.remove('is-low');
+      subStripEl.classList.add('is-staff');
+      subStripEl.querySelector('#gpa-substrip-left').textContent = 'No expiry';
+      subStripEl.querySelector('#gpa-substrip-note').textContent = role === 'owner' ? 'You’re the owner: your access doesn’t expire.' : 'Admin: your access doesn’t expire while you’re an admin.';
+      subRenewBtn.hidden = true; closeRenew();
+      subStripEl.hidden = false;
+      return;
+    }
     if (!sub || !currentUser || !(sub.expiresAt > Date.now())) {
       subStripEl.hidden = true;
+      closeRenew();
       // Signed out or no longer a subscriber: the reminder must not stay over the sign-in screen.
       const remind = panel.querySelector('.gpa-sub-remind');
       if (remind) remind.remove();
@@ -20851,35 +20976,76 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const endTime = end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     const sameDay = end.toDateString() === new Date().toDateString();
     const pct = Math.max(0, Math.min(100, Math.round(((now - sub.startedAt) / Math.max(1, sub.expiresAt - sub.startedAt)) * 100)));
+    // Keep the countdown current (every minute) while it's on screen.
+    subTick = setTimeout(() => { if (lastSub === sub) renderSubStrip(sub); }, 60000);
     // Paid monthly through the subscribe page (Stripe): it renews by itself.
     if (sub.autoRenew) {
       subStripEl.classList.remove('is-low');
-      subStripEl.querySelector('#gpa-substrip-left').textContent = 'Subscribed';
+      subStripEl.querySelector('#gpa-substrip-left').textContent = 'Renews in ' + fmtTimeLeft(left);
       const b = subStripEl.querySelector('#gpa-substrip-bar');
-      b.querySelector('i').style.width = Math.max(0, Math.min(100, Math.round(((now - sub.startedAt) / Math.max(1, sub.expiresAt - sub.startedAt)) * 100))) + '%';
+      b.querySelector('i').style.width = pct + '%';
       b.setAttribute('aria-valuetext', 'Renews ' + endDay);
-      subStripEl.querySelector('#gpa-substrip-note').textContent = 'Active since ' + new Date(sub.startedAt).toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · renews monthly (next by ' + endDay + ')';
+      subStripEl.querySelector('#gpa-substrip-note').textContent = 'Subscribed since ' + new Date(sub.startedAt).toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · renews automatically ' + endDay + ' at ' + endTime;
+      subRenewBtn.hidden = true; closeRenew();
       subStripEl.hidden = false;
       const remind = panel.querySelector('.gpa-sub-remind');
       if (remind) remind.remove();
       return;
     }
     subStripEl.classList.toggle('is-low', left <= 3 * 864e5);
-    subStripEl.querySelector('#gpa-substrip-left').textContent = sameDay ? 'Ends today' : days + (days === 1 ? ' day left' : ' days left');
+    subStripEl.querySelector('#gpa-substrip-left').textContent = fmtTimeLeft(left) + ' left';
     const bar = subStripEl.querySelector('#gpa-substrip-bar');
     bar.querySelector('i').style.width = pct + '%';
     bar.setAttribute('aria-valuenow', String(pct));
-    bar.setAttribute('aria-valuetext', (sameDay ? 'Ends today' : days + ' days left') + ', until ' + endDay);
-    subStripEl.querySelector('#gpa-substrip-note').textContent = sub.free
-      ? 'Free access, a gift: ends ' + (sameDay ? 'today at ' + endTime : endDay + ' at ' + endTime) + '.'
+    bar.setAttribute('aria-valuetext', fmtTimeLeft(left) + ' left, until ' + endDay + ' ' + endTime);
+    subStripEl.querySelector('#gpa-substrip-note').textContent = (sub.free
+      ? 'Free access, a gift: ends '
       : sub.auto
-      ? 'This month’s access (on the allowed list) ends ' + (sameDay ? 'today at ' + endTime : endDay + ' at ' + endTime) + '. Subscribe on the payment page, or ask the owner, to keep it.'
-      : left <= 3 * 864e5
-        ? 'Your subscription ends ' + (sameDay ? 'today at ' + endTime : endDay + ' at ' + endTime) + '. Ask the owner to renew to keep access.'
-        : 'Active since ' + new Date(sub.startedAt).toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · ends ' + endDay + ' at ' + endTime;
+        ? 'This month’s access (on the allowed list) ends '
+        : 'Your subscription ends ') + (sameDay ? 'today at ' + endTime : endDay + ' at ' + endTime) + '. Tap Renew to keep it.';
+    subRenewBtn.hidden = false;
     subStripEl.hidden = false;
     if (left <= 3 * 864e5) remindSubscriber(sub, sameDay ? 'today at ' + endTime : (days === 1 ? 'tomorrow' : 'in ' + days + ' days') + ' (' + endDay + ', ' + endTime + ')');
   }
+  // ---- Renew box (under the strip): link, "text me the link", paying cash ----
+  const renewEl = panel.querySelector('#gpa-renew');
+  const renewMsg = (t, bad) => { const m = panel.querySelector('#gpa-renew-msg'); m.textContent = t || ''; m.classList.toggle('bad', !!bad); };
+  // (looked up each time: the strip can render before this part of the script has run)
+  function closeRenew() { const el = panel.querySelector('#gpa-renew'); if (el && !el.hidden) { el.hidden = true; panel.querySelector('#gpa-substrip-renew').setAttribute('aria-expanded', 'false'); } }
+  async function openRenew() {
+    renewEl.hidden = false; subRenewBtn.setAttribute('aria-expanded', 'true'); renewMsg('');
+    const base = AUTH_BASE();
+    const link = (base || '') + '/subscribe/';
+    panel.querySelector('#gpa-renew-open').href = link;
+    panel.querySelector('#gpa-renew-copy').dataset.link = link;
+    const cashEl = panel.querySelector('#gpa-renew-cash');
+    try {
+      const d = await (await fetch(base + '/sms/info', { cache: 'no-store' })).json();
+      if (d.link) { panel.querySelector('#gpa-renew-open').href = d.link; panel.querySelector('#gpa-renew-copy').dataset.link = d.link; }
+      panel.querySelector('#gpa-renew-sms').hidden = !d.sms;
+      cashEl.innerHTML = '';
+      const a = document.createElement('span');
+      a.append('Give ', Object.assign(document.createElement('b'), { textContent: d.price || 'the monthly price' }), ' in person to ', Object.assign(document.createElement('b'), { textContent: (d.cash || []).join(', ') || 'the owner' }), '. They mark you as paid.');
+      cashEl.appendChild(a);
+      if (d.sms && d.number) cashEl.appendChild(Object.assign(document.createElement('div'), { textContent: 'Or text CASH to ' + d.number + ' and the reply tells you the same.' }));
+    } catch (e) { cashEl.textContent = 'Give the cash to the owner or an admin in person.'; }
+  }
+  subRenewBtn.addEventListener('click', () => { if (renewEl.hidden) openRenew(); else closeRenew(); });
+  panel.querySelector('#gpa-renew-copy').addEventListener('click', async (e) => {
+    try { await navigator.clipboard.writeText(e.currentTarget.dataset.link || ''); renewMsg('Link copied.'); } catch (err) { renewMsg(e.currentTarget.dataset.link || ''); }
+  });
+  panel.querySelector('#gpa-renew-send').addEventListener('click', async () => {
+    const btn = panel.querySelector('#gpa-renew-send'), phone = panel.querySelector('#gpa-renew-phone').value;
+    if (String(phone).replace(/\D/g, '').length < 10) { renewMsg('Type your phone number, like (239) 555-0123.', true); return; }
+    btn.disabled = true; renewMsg('Sending…');
+    try {
+      const r = await fetch(AUTH_BASE() + '/sms/subscribe-link', { method: 'POST', headers: { 'Content-Type': 'text/plain', 'X-GPA-Session': sessionToken() || '' }, body: JSON.stringify({ phone }) });
+      const d = await r.json().catch(() => ({}));
+      if (d.ok) { renewMsg('Sent to ' + d.to + '. Check your texts.'); panel.querySelector('#gpa-renew-phone').value = ''; }
+      else renewMsg(d.error || 'Couldn’t send it. Use the link instead.', true);
+    } catch (e) { renewMsg('Couldn’t reach the server. Try again.', true); }
+    finally { btn.disabled = false; }
+  });
   // In the last 3 days, a reminder the subscriber has to tap away, at most
   // once a day per device (the strip under the header stays up regardless).
   function remindSubscriber(sub, when) {
@@ -22087,6 +22253,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           + (can('users.manage') ? emailsCard() : '')
           + freeCard()
           + (isOwner() ? card('Subscribers', `<div id="gac-subs"><p class="gps-hint">Loading…</p></div>`, 'timer', 'gac-subs-card') : '')
+          + (isOwner() ? card('Cash & texting', `<div id="gac-sms"><p class="gps-hint">Loading…</p></div>`, 'send', 'gac-sms-card') : '')
           + (isOwner() ? card('Allowed users', `<p class="gps-hint">When on, only these usernames (and you) can create an account, sign in or use the console. Everyone else sees “Unable to create account”, and anyone already signed in who isn’t listed is signed out.</p>`
             + `<div class="gac-allow-row"><span>Only allow listed users</span><button class="gps-switch${d.config.allowlist && d.config.allowlist.on ? ' primary' : ''}" id="gac-allow-on" type="button" aria-pressed="${d.config.allowlist && d.config.allowlist.on ? 'true' : 'false'}" aria-label="Only allow listed users">Only allow listed users</button></div>`
             + `<label class="gac-allow-label">Usernames, one per line or separated by commas<textarea class="gpa-sync-box gac-allow-list" id="gac-allow-users" rows="6" spellcheck="false" autocapitalize="off" placeholder="kj&#10;dub&#10;sam">${esc(((d.config.allowlist && d.config.allowlist.users) || []).join('\n'))}</textarea></label>`
@@ -22109,6 +22276,30 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         wireFreeAccess(b, () => loadSubs());
         wireSubEmails(b);
         wireSigninHelp(b);
+        // ---- Cash & texting (owner): who takes cash, texting status, CASH texts ----
+        const smsBox = b.querySelector('#gac-sms');
+        const loadSms = async () => {
+          if (!smsBox) return;
+          try {
+            const d = await api('/admin/sms');
+            const at = (ts) => new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+            smsBox.innerHTML = `<p class="gps-hint">${d.sms ? `Texting is <b>on</b> from ${esc(d.number)}. People can text themselves the subscribe link from the <b>Renew</b> button, and text <b>CASH</b> to that number to be told who to pay.${d.inbound ? '' : ' Replies to texts are <b>off</b> until TELNYX_PUBLIC_KEY is set (README → Texting).'}` : 'Texting is <b>off</b> until the Telnyx keys are added on the Worker (README → Texting). The Renew button still shows the link and who to pay in cash.'}</p>`
+              + `<label class="gps-label" for="gac-cash-names">People who take cash (one per line)</label>`
+              + `<textarea id="gac-cash-names" class="gpa-input" rows="3" style="width:100%;box-sizing:border-box" placeholder="${esc(d.autoNames.join('\n'))}">${esc(d.cashNames.join('\n'))}</textarea>`
+              + `<p class="gps-hint">Leave it empty to use you and every admin automatically (now: ${esc(d.autoNames.join(', '))}).</p>`
+              + `<div class="gac-actions"><button class="gps-btn primary" id="gac-cash-save" type="button">Save</button></div>`
+              + (d.recent.length ? `<h4 class="gac-help-h">Texted CASH</h4><ul class="gac-help-log">` + d.recent.map((x) => `<li><time>${esc(at(x.at))}</time> <b>${esc(x.user || 'Unknown name')}</b> · ${esc(x.phone)}</li>`).join('') + `</ul>` : '');
+            smsBox.querySelector('#gac-cash-save').addEventListener('click', async () => {
+              try {
+                const names = smsBox.querySelector('#gac-cash-names').value;
+                await api('/admin/config', { method: 'POST', body: { cashNames: names } });
+                showToast(names.trim() ? 'Saved: people paying cash are told to give it to them.' : 'Saved: cash goes to you and the admins (automatic).');
+                loadSms();
+              } catch (e) { showToast(e.message, { type: 'danger' }); }
+            });
+          } catch (e) { smsBox.innerHTML = '<p class="gps-hint">Couldn’t load: ' + esc(e.message) + '</p>'; }
+        };
+        loadSms();
         // ---- Subscribers: paid access for a set time ----
         const subsEl = b.querySelector('#gac-subs');
         const fmtDay = (ts) => new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric', year: new Date(ts).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });

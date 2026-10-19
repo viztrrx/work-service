@@ -159,6 +159,35 @@ test('accounts: register, login, wrong PIN, lockout, sessions and revoke', async
   assert.ok(![429, 423, 401].includes(other.status), 'other networks unaffected (got ' + other.status + ')');
 });
 
+test('a locked account can unlock itself once a day with its school email', async () => {
+  const env = makeEnv(); const c = makeClient(env);
+  await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: ['alice', 'nokey'] } } });
+  const areg = await signUp(c, 'alice', '7731');
+  await c.call('/auth/logout', { method: 'POST', headers: sess(areg.data.token) });  // the real alice is offline
+  // Give alice a school student number (as the subscribe flow would).
+  const a = JSON.parse(env.TELEMETRY.store.get('acct:alice').v); a.studentId = '424242';
+  env.TELEMETRY.store.set('acct:alice', { v: JSON.stringify(a), exp: 0 });
+  await signUp(c, 'nokey', '1111');
+  const dev = (i) => String(i).padStart(32, 'a');
+  const lock = async (u, tag) => { for (let i = 0; i < 8; i++) await c.call('/auth/login', { method: 'POST', body: { user: u, verifier: verifierFor('x', tag + i), device: dev(i) }, ip: '9.9.' + tag.charCodeAt(0) % 9 + '.' + i }); };
+  await lock('alice', 'a');
+  assert.equal((await c.call('/auth/login', { method: 'POST', body: { user: 'alice', verifier: verifierFor('alice', '7731'), device: dev(90) } })).status, 423);
+  // Wrong school email: refused, counts down; the right one unlocks.
+  const w = await c.call('/auth/unlock-account', { method: 'POST', body: { user: 'alice', studentId: '000001' } });
+  assert.equal(w.status, 403); assert.match(w.data.error, /2 tries left/);
+  assert.equal((await c.call('/auth/unlock-account', { method: 'POST', body: { user: 'alice', studentId: '424242' } })).data.ok, true);
+  assert.equal((await c.call('/auth/login', { method: 'POST', body: { user: 'alice', verifier: verifierFor('alice', '7731'), device: dev(91) } })).status, 200);
+  // Locked again the same day: self-unlock is refused (staff only now).
+  await lock('alice', 'b');
+  const second = await c.call('/auth/unlock-account', { method: 'POST', body: { user: 'alice', studentId: '424242' } });
+  assert.equal(second.status, 403); assert.equal(second.data.staffOnly, true);
+  // An account with no school email on file can only be unlocked by staff.
+  await lock('nokey', 'c');
+  const nk = await c.call('/auth/unlock-account', { method: 'POST', body: { user: 'nokey', studentId: '123456' } });
+  assert.equal(nk.status, 403); assert.equal(nk.data.staffOnly, true);
+  assert.match(nk.data.error, /no school email saved/);
+});
+
 test('owner name can only be claimed with OWNER_CODE', async () => {
   const env = makeEnv(); const c = makeClient(env);
   assert.equal((await signUp(c, 'boss')).status, 403);

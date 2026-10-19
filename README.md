@@ -435,7 +435,7 @@ else got there first, use **Reset PIN**.
 
 **New subscribers' school email.** Right after paying, a new subscriber makes their own PIN. The page warns in red that they **must remember it** (nobody, not even you, can look it up or reset it), asks for something simple only they would know but not easy to guess, refuses obvious PINs (1234, 0000, 9876, a year, their username…), and won't continue until they tick **I'll remember this PIN**. Then they add their **school email**: they type only the 6 numbers, and `@alseducation.onmicrosoft.com` is fixed in the box (letters and a 7th digit can't be typed). You get a phone alert ("New subscriber email"), and so does each admin who turned on alerts in their app. **Admin → Security → New subscribers** (you and admins) lists each one with their email. Paste your instructions **Google Doc link** once and tap **Save link**. The subscriber is told: "Next time you're at school, sign in at docs.google.com with that school account: the instructions for loading Saints Service will be in your Google Docs (shared with you)." So **share your Doc with each one**: **Share the Doc** copies their school email and opens your Doc in a new tab; in Google Docs tap **Share**, paste the email, and tap **Send**. They'll see it under "Shared with me". The row is then marked **Shared** (with who shared it). **Copy email** and **Remove** are there too. The email also shows on their Subscribers row. A subscriber can fix a typo in their email up to twice.
 
-**Guessing a PIN locks the account.** 8 wrong PINs, reset codes or student numbers for one name, from any mix of devices and networks, lock that name until noon New York time (the end of the day session). Even the right PIN is refused while it's locked. You and your admins get an alert, and **Admin → Security → Sign-in help → Locked accounts → Unlock account** opens it early. A right PIN resets the count. The per-network limit is 30 wrong tries per 15 minutes, high enough that a whole school sharing one internet connection can't be locked out by a few typos.
+**Guessing a PIN locks the account.** 8 wrong PINs, reset codes or student numbers for one name, from any mix of devices and networks, lock that name until noon New York time (the end of the day session). Even the right PIN is refused while it's locked. You and your admins get an alert, and **Admin → Security → Sign-in help → Locked accounts → Unlock account** opens it early. **The real person can unlock it themselves** with the 6 digits of the school email saved on their account (the sign-in screen offers **Account locked → Unlock my account**). Because classmates can often see each other's school emails, that works **once a day** per account and allows **3 wrong numbers** per lock; after that, and for accounts with no school email saved, only you or an admin can unlock it. You get an alert when someone unlocks their own account. A right PIN resets the count. The per-network limit is 30 wrong tries per 15 minutes, high enough that a whole school sharing one internet connection can't be locked out by a few typos.
 
 **No way around the approved list.** The planet icon (create account) and Sign in go through the same server checks: the approved list, the PIN, the device lock and the attempt limits. If the console can't reach the server (offline, or someone blocks it on purpose), nobody can sign in or create an account ("Can't reach the Saints Service server…"); it never falls back to a local-only account. A saved sign-in comes back after a reload only once the server confirms the name is still allowed and its session is valid, so editing browser storage doesn't get anyone in.
 
@@ -468,6 +468,71 @@ Turning the switch off lets everyone in again and keeps the list for later.
 The sign-in screen asks the Worker; if the Worker can't be reached the
 console still opens offline, but every server feature stays refused for names
 that aren't listed.
+
+## Subscription countdown, Renew and texting (Telnyx) {#texting}
+
+**The countdown.** Under the header, on every panel size, each person sees how
+long their access has left, in days and hours ("12d 9h left"), updated every
+minute, plus the exact date and time it ends. People paying monthly see
+"Renews in 12d 9h". You and admins see "No expiry".
+
+**Renew.** Next to the countdown, a **Renew** button opens:
+- **Open the subscribe page** / **Copy link**;
+- **Text me the link**: they type their phone number and get one text with the
+  subscribe link (only when texting is set up, below);
+- **Paying cash?**: "Give $13.80 in person to viztrrx (owner) or …", and "or
+  text CASH to (239) 555-0100".
+
+**Texting CASH.** Anyone who texts **CASH** to your Telnyx number gets a reply
+saying who to give the cash to, and you and your admins get an alert ("Paying
+cash: kj (239) 555-0123"). When you get the cash, mark them paid in Admin →
+Security → Subscribers. **STOP**, **START** and **HELP** work as carriers
+require.
+
+**Who takes cash.** Automatically you and everyone with the admin role. To
+name specific people instead: Admin → Security → **Cash & texting** → one name
+per line → Save (empty = automatic again). The same card shows whether texting
+is on and who texted CASH recently.
+
+**Limits** (so nobody can use it to spam people or run up your bill): only a
+signed-in person can request a text; 3 a day per person, 2 a day per phone
+number, 100 a day in total; a number that texted STOP is never texted again
+unless it texts START.
+
+### Setting up Telnyx (about $20 once, then a few dollars a month)
+
+Telnyx is the cheapest good texting service: about $0.004 per text plus about
+$1 a month for the number. Every US texting service (Telnyx, Twilio, …) has to
+register your business with the phone carriers before your texts are
+delivered; that's the one-time cost and takes about 1–3 weeks.
+
+1. Sign up at **telnyx.com** (Portal) and add a little credit ($10–20).
+2. **Numbers → Search & Buy**: buy a local number (Florida area code if you
+   like).
+3. **Messaging → Messaging Profiles → Add**: name it "Saints Service". Under
+   **Inbound**, set the webhook URL to
+   `https://donnajbe.viztrrx.workers.dev/sms/inbound`. Assign your number to
+   this profile.
+4. **Messaging → 10DLC** (or **Toll-free verification** if you bought a
+   toll-free number): register your brand (Saints Service, sole proprietor) and
+   a campaign. Use case: "Account notifications". Sample messages: the two texts
+   above. Opt-in: "The person types their own number in the app and taps Send."
+   Wait for approval before expecting texts to arrive.
+5. **Auth → API Keys → Create**: copy the key. **Keys & Credentials → Public
+   Key**: copy it.
+6. Cloudflare dashboard → Workers & Pages → **donnajbe** → Settings →
+   Variables and Secrets → add:
+   - `TELNYX_API_KEY` (type **Secret**): the API key;
+   - `TELNYX_PUBLIC_KEY` (Secret): the public key;
+   - `TELNYX_FROM` (Text): your number like `+12395550100`.
+
+   Save and deploy. Don't paste the keys anywhere else (not in chat, not in
+   GitHub).
+7. Check: Admin → Security → Cash & texting says "Texting is **on** from …".
+   Tap Renew → Text me the link with your own number; text CASH back.
+
+Until those are set, texting is simply off: the Renew box still shows the link
+and who to pay in cash.
 
 ## Saints Service as an iPhone app {#iphone-app}
 

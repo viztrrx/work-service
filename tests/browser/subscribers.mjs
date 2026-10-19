@@ -139,7 +139,7 @@ try {
   const strip = () => R(renzo.page, (root) => { const el = root.querySelector('#gpa-substrip'); return { shown: !el.hidden && !!el.offsetParent, left: el.querySelector('#gpa-substrip-left').textContent, note: el.querySelector('#gpa-substrip-note').textContent, cls: el.className }; });
   const seen = await renzo.page.waitForFunction(() => { const el = document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-substrip'); return el && !el.hidden; }, null, { timeout: 25000 }).then(() => true, () => false);
   let st = await strip();
-  check('renzo sees his own countdown under the header: about 20 days left', seen && /^(20|21) days left$/.test(st.left) && /Active since .* ends /.test(st.note), JSON.stringify(st));
+  check('renzo sees his own countdown under the header: about 20 days left (days and hours), when it ends, and Renew', seen && /^(19|20|21)d \d+h left$/.test(st.left) && /Your subscription ends .* Tap Renew to keep it\./.test(st.note), JSON.stringify(st));
   await renzo.page.waitForTimeout(500);
   await shot(renzo.page, '03a-renzo-countdown.png');
 
@@ -152,9 +152,9 @@ try {
   await owner.page.waitForTimeout(1500);
   check('Owner: after changing the start, about 2 days left', /(1|2) days? left|Ends today/i.test(await subRow(owner.page, RENZO) || ''), await subRow(owner.page, RENZO));
   await renzo.page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  const amber = await renzo.page.waitForFunction(() => { const el = document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-substrip'); return el && el.classList.contains('is-low') && /Ask the owner to renew/.test(el.textContent); }, null, { timeout: 25000 }).then(() => true, () => false);
+  const amber = await renzo.page.waitForFunction(() => { const el = document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-substrip'); return el && el.classList.contains('is-low') && /Tap Renew to keep it/.test(el.textContent); }, null, { timeout: 25000 }).then(() => true, () => false);
   st = await strip();
-  check('renzo’s countdown turns amber: “ends … Ask the owner to renew”', amber, JSON.stringify(st));
+  check('renzo’s countdown turns amber: “ends … Tap Renew to keep it”', amber && /^\d+(d \d+h|h \d+m|m) left$/.test(st.left), JSON.stringify(st));
   await renzo.page.waitForTimeout(500);
   await shot(renzo.page, '03c-renzo-ending-soon.png');
 
@@ -259,7 +259,7 @@ try {
   await adm.page.waitForFunction(() => { const r2 = document.getElementById('gpa-root-host').shadowRoot; return !r2.querySelector('#gac-layout').hidden && /admin/.test(r2.querySelector('#gac-who').textContent); }, null, { timeout: 15000 }).catch(() => {});
   await R(adm.page, (root) => root.querySelector('.gps-tab[data-asec="security"]').click());
   await adm.page.waitForFunction(() => { const b2 = document.getElementById('gpa-root-host').shadowRoot.querySelector('#gac-free'); return b2 && !/Loading/.test(b2.textContent); }, null, { timeout: 15000 }).catch(() => {});
-  check('Made an admin, adm has no subscription countdown (staff are unlimited)', await R(adm.page, (root) => { const el = root.querySelector('#gpa-substrip'); return !el || el.hidden; }));
+  check('Made an admin, adm’s strip says “No expiry” (staff are unlimited; no Renew)', await R(adm.page, (root) => { const el = root.querySelector('#gpa-substrip'); return !!el && !el.hidden && root.querySelector('#gpa-substrip-left').textContent === 'No expiry' && root.querySelector('#gpa-substrip-renew').hidden; }));
   check('The admin sees Free access in Security (and not Subscribers, which stays the owner’s)', await R(adm.page, (root) => !!root.querySelector('#gac-free-form') && !root.querySelector('#gac-subs-card') && /The owner gets an alert/.test(root.querySelector('#gac-free').textContent)));
   await R(adm.page, (root) => root.querySelector('#gac-free-card').scrollIntoView({ block: 'start' }));
   await adm.page.fill(sr('#gac-free-name'), GIFT2);

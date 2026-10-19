@@ -14,6 +14,7 @@ new subscriber and then the owner would see things.
 | [3-playlists](#3-playlists-everyone-signed-in) | Spotify / Apple Music playlist → YouTube links, for everyone; **new:** 10 new songs a day each, your limit card |
 | [4-youtube-to-mp3](#4-youtube-to-mp3-owner) | The MP3 converter in Music → My music |
 | [5-subscribe-page](#5-subscribe-page) | The payment page, the $6 contribution box, and **new:** your $1 test (owner only) |
+| [11-countdown-renew-texting](#11-countdown-renew-and-texting) | **New:** time left at the top for everyone, the Renew box (link, text me the link, paying cash), your Cash & texting card |
 | [10-security-review](#10-security-review-brute-force-proof-and-fix) | **New:** proof that PINs and student numbers could be brute-forced, and the fix |
 | [9-fold-top-card](#9-fold-the-top-card) | **New:** the Ask AI card (and every tab's top card) folds to a thin bar |
 | [8-opens-centered](#8-opens-small-and-centered) | **New:** injected into a website: only the sign-in card shows; signed in, a centered window |
@@ -299,3 +300,38 @@ York time (this test computer shows UTC).
 <img src="10-security-review/3-locked-account-signin.png" width="640" alt="This account is locked after too many wrong sign-in attempts">
 
 <img src="10-security-review/4-owner-unlock.png" width="560" alt="Sign-in help: Locked accounts, Unlock account">
+
+**The real person can unlock it themselves** with the 6 digits of the school
+email saved on their account (once a day, 3 tries; accounts with no school
+email saved can only be unlocked by you or an admin).
+
+<img src="10-security-review/5-unlock-with-school-email.png" width="640" alt="Account locked: unlock with your school email">
+
+---
+
+## 11. Countdown, Renew and texting
+
+**Time left, at the top, for everyone**: days and hours ("12d 9h left"),
+updated every minute, with the exact end date and time, and a **Renew** button.
+
+<img src="11-countdown-renew-texting/1-countdown.png" width="640" alt="12d 9h left under the header, with Renew">
+
+At the smallest size (Compact) too:
+
+<img src="11-countdown-renew-texting/2-compact-size.png" width="300" alt="Countdown at Compact size">
+
+**Renew** opens: the subscribe page / copy link, **Text me the link** (their
+phone number; one text with the link), and **Paying cash?** (who to give it
+to, and "text CASH to" your number). This test shows "the monthly price"
+because Stripe isn't set up on the test computer; yours shows the real price.
+
+<img src="11-countdown-renew-texting/3-renew-box.png" width="640" alt="Renew box: link, text me the link, paying cash">
+
+Admins (and you) see **No expiry**:
+
+<img src="11-countdown-renew-texting/4-admin-no-expiry.png" width="640" alt="Admin: No expiry">
+
+**Your card** (Admin → Security → Cash & texting): whether texting is on, who
+takes cash (empty = you and the admins automatically), and who texted CASH.
+
+<img src="11-countdown-renew-texting/5-owner-cash-texting.png" width="640" alt="Cash & texting card">

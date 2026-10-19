@@ -1,8 +1,9 @@
 import { webApp } from './web/handler.js';
 import { consoleApp } from './web/console/handler.js';
 import { policyPage, POLICY_PAGES } from './web/policies.js';
-import { subscribePage, subscribeReady, priceCents, displayCents, stripe, checkoutParams, contributionParams, CHECKOUT_TTL_S, contribCents, isContribution, periodEndMs, invoiceSubscription, stripeSignatureOk, SUB_NAME_RE, SESSION_RE, ATTEMPT_RE, supportEmail, SCHOOL_DOMAIN, OWNER_CONTRIB_MIN_CENTS } from './web/subscribe.js';
+import { subscribePage, subscribeReady, priceCents, displayCents, stripe, checkoutParams, contributionParams, CHECKOUT_TTL_S, contribCents, isContribution, periodEndMs, invoiceSubscription, stripeSignatureOk, SUB_NAME_RE, SESSION_RE, ATTEMPT_RE, supportEmail, SCHOOL_DOMAIN, OWNER_CONTRIB_MIN_CENTS, money } from './web/subscribe.js';
 import { parseYouTubeLink, videoDetails, rightsNote } from './web/mp3.js';
+import { smsReady, normPhone, prettyPhone, sendSms, telnyxSignatureOk, smsKeyword, namesList } from './web/sms.js';
 import { readPlaylist, readLists, writeLists, newList, listSummary, publicList, searchYouTube, matchCacheKey, LISTS_MAX, MATCH_BATCH, MATCH_SCAN } from './web/playlists.js';
 import { audiusSearch, audiusStream, listLibrary, addToLibrary, removeFromLibrary, serveLibraryFile, audioKind, listMine, mineUsage, addToMine, removeFromMine, MINE_DAILY_UPLOADS } from './web/music.js';
 import { PUSH_CATEGORIES, vapidKeys, validSubscription, addSubscription, updateSubscription, removeSubscription, getSubscription, sendPush, notifyOwner, ownerTime, cleanCategories, anySubscriberWants,
@@ -1321,7 +1322,10 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       const l = await kv.get(acctLockKey(user), 'json');
       return l && l.until > Date.now() ? l : null;
     };
-    const accountLockedResponse = (l) => json({ ok: false, accountLocked: true, until: l.until,
+    // selfUnlock: the account has a school email on file and this lock still
+    // allows unlocking with it (the once-a-day limit is checked when they try).
+    const accountLockedResponse = (l, acct) => json({ ok: false, accountLocked: true, until: l.until, user: l.user,
+      selfUnlock: !!(acct && acct.studentId) && (l.selfWrong || 0) < 3,
       error: 'This account is locked after too many wrong sign-in attempts. The owner has been told; it unlocks itself later today, or the owner can unlock it.' }, 423);
     const clearAccountFailures = async (user) => {
       const kv = env && env.TELEMETRY;
@@ -1761,6 +1765,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       // Original routes (the 'coadmin' / 'owner' requirements map onto the
       // moderator / owner roles; their permission names are below).
       '/admin/mobile/pair': {method:'POST',perm:'owner'},
+      '/admin/sms': {method:'GET',perm:'system.manage'},
       '/admin/mobile/devices': {method:'GET',perm:'coadmin'},
       '/admin/mobile/revoke': {method:'POST',perm:'coadmin'},
       '/admin/mobile/preferences': {method:'POST',perm:'coadmin'},
@@ -2006,6 +2011,15 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     // devices locked for unauthorized sign-in attempts (Unlock or keep them
     // locked until the end of the day session), and the log of all of it.
     // POST { action: 'list' | 'unlock' | 'keep', id }.
+    // Texting status and the cash list for the owner's card (Admin → Security).
+    if (url.pathname === '/admin/sms') {
+      const kv = env.TELEMETRY;
+      const cfg = await getConfig(kv);
+      const auto = [OWNER + ' (owner)', ...(await adminNames(kv))];
+      return json({ ok: true, sms: smsReady(env), number: smsReady(env) ? prettyPhone(normPhone(env.TELNYX_FROM)) : '', inbound: !!(env && env.TELNYX_PUBLIC_KEY),
+        cashNames: Array.isArray(cfg.cashNames) ? cfg.cashNames : [], autoNames: auto, recent: ((await kv.get('smscash', 'json')) || []).slice(0, 20) });
+    }
+
     if (url.pathname === '/admin/signin-help') {
       const kv = env.TELEMETRY;
       let body = {};
@@ -2248,6 +2262,82 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     const USERNAME_RE = /^[^\x00-\x1f\x7f<>"'`\\]{1,40}$/;
 
     // ---- /auth/* : server accounts ----
+    // ---- Texting (Telnyx; see web/sms.js) ------------------------------------
+    // "Text me the subscribe link" from the subscription strip, and a reply bot:
+    // text CASH to the number and it says who to give the cash to (the owner
+    // and admins, or the names the owner set). Off until TELNYX_* are set.
+    if (url.pathname.startsWith('/sms/')) {
+      const kv = env && env.TELEMETRY;
+      if (!kv) return json({ ok: false, error: 'storage not configured' }, 503);
+      const link = url.origin + '/subscribe/';
+      const price = subscribeReady(env) ? money(await displayCents(env, kv)) : '';
+      const cashNames = async () => {
+        const cfg = await getConfig(kv);
+        if (Array.isArray(cfg.cashNames) && cfg.cashNames.length) return cfg.cashNames;
+        return [OWNER + ' (owner)', ...(await adminNames(kv))];
+      };
+      const cashText = async () => 'Saints Service: paying cash? Give ' + (price || 'the monthly price') + ' in person to ' + namesList(await cashNames()) + '. They mark you as paid. Or subscribe online: ' + link;
+      if (url.pathname === '/sms/info' && req.method === 'GET') {
+        return json({ ok: true, sms: smsReady(env), number: smsReady(env) ? prettyPhone(normPhone(env.TELNYX_FROM)) : '', link, price, cash: await cashNames() });
+      }
+      if (url.pathname === '/sms/subscribe-link' && req.method === 'POST') {
+        // Signed-in people only (a session), with tight limits so nobody can
+        // use it to text strangers or run up the bill.
+        const p = await resolvePrincipal();
+        if (!p || p.kind !== 'session') return json({ ok: false, error: 'Sign in first.' }, 401);
+        if (!smsReady(env)) return json({ ok: false, error: 'Texting isn’t set up yet. Use the link instead.' }, 503);
+        let body = {};
+        try { const raw = await req.text(); if (raw.length > 512) throw 0; body = JSON.parse(raw) || {}; } catch (e) { return json({ ok: false, error: 'invalid request' }, 400); }
+        const to = normPhone(body.phone);
+        if (!to) return json({ ok: false, error: 'Type a US phone number, like (239) 555-0123.' }, 400);
+        if (await kv.get('smsoptout:' + to)) return json({ ok: false, error: 'That number opted out of our texts (it replied STOP). Text START to ' + prettyPhone(normPhone(env.TELNYX_FROM)) + ' to get them again.' }, 409);
+        const day = dayKey(), me = String(p.user).toLowerCase();
+        const limits = [['smslim:u:' + me + ':' + day, 3, 'You can text yourself the link 3 times a day.'], ['smslim:p:' + to + ':' + day, 2, 'That number already got the link twice today.'], ['smslim:all:' + day, 100, 'Texting is busy today. Use the link instead.']];
+        const counts = await Promise.all(limits.map(([k]) => kv.get(k)));
+        for (let i = 0; i < limits.length; i++) if ((parseInt(counts[i], 10) || 0) >= limits[i][1]) return json({ ok: false, error: limits[i][2] }, 429);
+        try {
+          await sendSms(env, to, 'Saints Service: hi ' + p.user + '! Subscribe or renew here: ' + link + ' . Paying cash instead? Reply CASH. Msg & data rates may apply. Reply STOP to opt out, HELP for help.');
+        } catch (e) { return json({ ok: false, error: e.message }, 502); }
+        await Promise.all(limits.map(([k], i) => kv.put(k, String((parseInt(counts[i], 10) || 0) + 1), { expirationTtl: 2 * 24 * 3600 })));
+        await kv.put('smsphone:' + to, JSON.stringify({ user: p.user, at: Date.now() }), { expirationTtl: 90 * 24 * 3600 });
+        await logAudit(kv, { route: url.pathname, action: 'sms_link', target: me });
+        return json({ ok: true, to: prettyPhone(to) });
+      }
+      if (url.pathname === '/sms/inbound' && req.method === 'POST') {
+        // Telnyx's webhook: only trusted with a valid Ed25519 signature.
+        const raw = await req.text();
+        if (raw.length > 64 * 1024) return json({ ok: false }, 413);
+        if (!(await telnyxSignatureOk(env.TELNYX_PUBLIC_KEY, req.headers.get('telnyx-signature-ed25519'), req.headers.get('telnyx-timestamp'), raw))) {
+          await noteSec('sms_bad_signature', { note: 'inbound text webhook' });
+          return json({ ok: false, error: 'bad signature' }, 401);
+        }
+        let ev = {};
+        try { ev = JSON.parse(raw) || {}; } catch (e) { return json({ ok: true }); }
+        const data = ev.data || {}, pl = data.payload || {};
+        if (data.event_type !== 'message.received') return json({ ok: true, ignored: true });
+        if (data.id) { if (await kv.get('smsevt:' + data.id)) return json({ ok: true, duplicate: true }); await kv.put('smsevt:' + data.id, '1', { expirationTtl: 3 * 24 * 3600 }); }
+        const from = normPhone(pl.from && pl.from.phone_number);
+        if (!from || !smsReady(env)) return json({ ok: true });
+        const kw = smsKeyword(pl.text);
+        const reply = (t) => sendSms(env, from, t).catch(() => {});
+        const known = await kv.get('smsphone:' + from, 'json');
+        if (kw === 'stop') { await kv.put('smsoptout:' + from, '1'); await reply('Saints Service: you’re unsubscribed and won’t get more texts. Reply START to get them again.'); return json({ ok: true }); }
+        if (kw === 'start') { await kv.delete('smsoptout:' + from); await reply('Saints Service: you’ll get texts again. Reply CASH if you’re paying cash, HELP for help, STOP to opt out.'); return json({ ok: true }); }
+        if (await kv.get('smsoptout:' + from)) return json({ ok: true, optedOut: true });
+        if (kw === 'cash') {
+          await reply(await cashText());
+          const who = known && known.user ? known.user + ' (' + prettyPhone(from) + ')' : prettyPhone(from);
+          const log = (await kv.get('smscash', 'json')) || [];
+          await kv.put('smscash', JSON.stringify([{ at: Date.now(), user: (known && known.user) || '', phone: prettyPhone(from) }, ...log].slice(0, 50)));
+          notifyStaff({ cat: 'subs', title: 'Paying cash: ' + who, body: 'They texted CASH and were told to give ' + (price || 'the monthly price') + ' to you or an admin. Mark them paid in Admin → Security → Subscribers when you get it.', url: adminLink('security', { focus: 'subs', user: (known && known.user) || '' }) });
+          return json({ ok: true });
+        }
+        await reply('Saints Service: subscribe or renew at ' + link + ' . Paying cash? Reply CASH. Reply STOP to opt out. Help: ' + supportEmail(env));
+        return json({ ok: true });
+      }
+      return json({ ok: false, error: 'not found' }, 404);
+    }
+
     if (url.pathname.startsWith('/auth/')) {
       const kv = kvMain;
       if (!kv) return json({ ok: false, error: 'accounts need the TELEMETRY KV binding' }, 503);
@@ -2352,7 +2442,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         const acct = await getAcct(kv, user);
         if (!acct) return json({ ok: false, error: 'No account with that name yet. Use Create to make one.', missing: true }, 404);
         const alock = await accountLock(acct.user);
-        if (alock) return accountLockedResponse(alock);
+        if (alock) return accountLockedResponse(alock, acct);
         if (String(acct.user).toLowerCase() === OWNER) return json({ ok: false, error: 'The owner resets their PIN with the owner code.' }, 400);
         const rk = 'pinreq-rate:' + (await sha256hex('ip|' + ip)).slice(0, 24) + ':' + Math.floor(Date.now() / 3600e3);
         const n = parseInt(await kv.get(rk), 10) || 0;
@@ -2363,7 +2453,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           await noteSec('pinreq_wrong_student', { user: acct.user });
           await signinLog({ type: 'pinwrong', user: acct.user, detail: 'student number didn’t match' });
           const al = await accountFailure(acct.user, 'student numbers');
-          if (al) return accountLockedResponse(al);
+          if (al) return accountLockedResponse(al, acct);
           const l = await deviceFail(dev, 'wrong', acct.user);
           if (l) return lockedResponse(l);
           return json({ ok: false, error: 'That student number doesn’t match this account. Use the one you gave when you subscribed.', wrongStudent: true }, 403);
@@ -2393,6 +2483,43 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           body: matched ? 'Student number ' + email + ' matched, so the new PIN works now (from ' + where + ').' : 'No student number on file (gave ' + email + '). From ' + where + '. Approve or deny in Admin → Security → Sign-in help.',
           url: adminLink('security', { focus: 'signinhelp', user: acct.user }) });
         return json({ ok: true, ticket, approved: matched });
+      }
+      // A locked account (see accountFailure) can be unlocked by its real
+      // owner with the 6 digits of the school email saved on it. Bounded so a
+      // classmate who knows the number can't keep cycling lock → unlock to
+      // keep guessing the PIN: once a day per account, 3 wrong numbers per
+      // lock; after that only the owner or an admin can unlock it.
+      if (url.pathname === '/auth/unlock-account' && req.method === 'POST') {
+        if (await isLockedOut(kv, 'login', ip)) return json({ ok: false, error: 'too many attempts — try again later' }, 429);
+        const body = await readJson();
+        const user = String(body.user || '').trim();
+        const sid = String(body.studentId || '').trim();
+        if (!USERNAME_RE.test(user)) return json({ ok: false, error: 'invalid request' }, 400);
+        if (!SCHOOL_ID_RE.test(sid)) return json({ ok: false, error: 'Type the 6 digits of your school email (before @' + SCHOOL_DOMAIN + ').' }, 400);
+        const acct = await getAcct(kv, user);
+        const u = acct ? String(acct.user).toLowerCase() : '';
+        const lock = acct ? await kv.get(acctLockKey(u), 'json') : null;
+        if (!acct || !lock || !(lock.until > Date.now())) return json({ ok: false, error: 'That account isn’t locked.' }, 404);
+        if (!acct.studentId) return json({ ok: false, staffOnly: true, error: 'This account has no school email saved, so only the owner or an admin can unlock it. They’ve been told.' }, 403);
+        const usedKey = 'acctselfunlock:' + u + ':' + dayKey();
+        if (await kv.get(usedKey)) return json({ ok: false, staffOnly: true, error: 'This account was already unlocked with its school email today. Now only the owner or an admin can unlock it.' }, 403);
+        if ((lock.selfWrong || 0) >= 3) return json({ ok: false, staffOnly: true, error: 'Too many wrong school emails for this lock. Only the owner or an admin can unlock it now.' }, 403);
+        if (!(await timingSafeEqualStr(sid, acct.studentId))) {
+          lock.selfWrong = (lock.selfWrong || 0) + 1;
+          await kv.put(acctLockKey(u), JSON.stringify(lock), { expirationTtl: 3 * 24 * 3600 });
+          await noteFailure(kv, 'login', ip);
+          await noteSec('acct_unlock_wrong', { user: acct.user });
+          await signinLog({ type: 'acctunlockwrong', user: acct.user, detail: 'school email didn’t match (' + lock.selfWrong + ' of 3)' });
+          const left = 3 - lock.selfWrong;
+          return json({ ok: false, wrongStudent: true, staffOnly: left <= 0, error: left > 0 ? 'That school email doesn’t match this account. ' + left + (left === 1 ? ' try' : ' tries') + ' left.' : 'That school email doesn’t match. Only the owner or an admin can unlock it now.' }, 403);
+        }
+        await kv.delete(acctLockKey(u));
+        await kv.delete('acctfail:' + u);
+        await kv.put(usedKey, '1', { expirationTtl: 2 * 24 * 3600 });
+        await noteSec('acct_unlock_self', { user: acct.user });
+        await signinLog({ type: 'acctunlockself', user: acct.user, email: sid + '@' + SCHOOL_DOMAIN, detail: 'unlocked with their school email' });
+        notifyStaff({ cat: 'security', tag: 'acctlock-' + u, title: acct.user + ' unlocked their account', body: 'With their school email ' + sid + '@' + SCHOOL_DOMAIN + ' (once a day). If it locks again today, only you or an admin can unlock it.', url: adminLink('security', { focus: 'signinhelp', user: acct.user }) });
+        return json({ ok: true });
       }
       // Is this device locked (sign-in screen poll)?
       if (url.pathname === '/auth/device' && req.method === 'GET') {
@@ -2424,7 +2551,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         const acct = await getAcct(kv, user);
         if (!acct) return json({ ok: false, error: 'no account', missing: true }, 404);
         const alock = await accountLock(acct.user);
-        if (alock) { await noteSec('login_account_locked', { user: acct.user }); return accountLockedResponse(alock); }
+        if (alock) { await noteSec('login_account_locked', { user: acct.user }); return accountLockedResponse(alock, acct); }
         let ok = await timingSafeEqualStr(await sha256hex(acct.salt + '|' + verifier), acct.verifier);
         // The owner reset this PIN (Admin → Reset PIN): the one-time reset
         // code they gave the person sets the new PIN typed with it. The old
@@ -2436,7 +2563,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
             await noteFailure(kv, 'login', ip);
             await noteSec('pinreset_wrong', { user: acct.user });
             const al = await accountFailure(acct.user, 'reset codes');
-            if (al) return accountLockedResponse(al);
+            if (al) return accountLockedResponse(al, acct);
             const l = await deviceFail(dev, 'wrong', acct.user);
             if (l) return lockedResponse(l);
             return json({ ok: false, error: 'That reset code isn’t right.', inviteRequired: true, pinReset: true, wrongInvite: true }, 403);
@@ -2455,7 +2582,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           await noteFailure(kv, 'login', ip);
           await noteSec('login_failed', { user: acct.user });
           const al = await accountFailure(acct.user, 'PINs');
-          if (al) return accountLockedResponse(al);
+          if (al) return accountLockedResponse(al, acct);
           const l = await deviceFail(dev, 'wrong', acct.user);
           if (l) return lockedResponse(l);
           return json({ ok: false, error: 'wrong PIN for this account' }, 401);
@@ -3490,6 +3617,12 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         const back = users.filter((u) => !((cfgBefore.allowlist && cfgBefore.allowlist.users) || []).includes(u));
         for (const u of back) { const s = cfg.subscriptions && cfg.subscriptions[u]; if (s && s.auto && (s.ended || s.expiresAt <= Date.now())) delete cfg.subscriptions[u]; }
         await autoSubscribeListed(env, cfg);
+      }
+      // Who people paying cash give it to (texts and the Renew box). Empty =
+      // automatic: the owner and everyone with the admin role.
+      if ('cashNames' in body) {
+        const raw = Array.isArray(body.cashNames) ? body.cashNames : String(body.cashNames || '').split(/[\n,;]+/);
+        cfg.cashNames = [...new Set(raw.map((x) => String(x || '').replace(/\s+/g, ' ').trim().slice(0, 40)).filter(Boolean))].slice(0, 12);
       }
       // Playlists: new song lookups per person a day (YouTube key quota).
       if ('listsDailySongs' in body) {

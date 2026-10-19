@@ -254,6 +254,29 @@ try {
   check('Unlock account: it leaves the list', !(await R(owner.page, (r, u) => !!r.querySelector(`.gac-help-acctlock[data-user="${u}"]`), ZED)));
   const zback = await signIn(guesser.page, ZED, '8642');
   check('…and the real person signs in with the right PIN again', zback.inside, zback.msg);
+
+  // 4c: the real owner of a locked account unlocks it with their school email.
+  // Kim has a student number on file (SID_KIM); lock her, then self-unlock.
+  const kpost = (p, body) => fetch(env.workerUrl + p, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) }).then(async (r) => ({ status: r.status, data: await r.json().catch(() => ({})) }));
+  const kdev = () => crypto.randomBytes(16).toString('hex');
+  for (let i = 0; i < 8; i++) await kpost('/auth/login', { user: KIM, verifier: '0'.repeat(64), device: kdev() });
+  const unlocker = await computer();
+  const kl = await signIn(unlocker.page, KIM, '864213');   // her real PIN (set with Forgot PIN above)
+  check('Kim’s account is locked after 8 wrong PINs: even her real PIN is refused, and she’s offered “Unlock with your school email”', !kl.inside && await waitFor(unlocker.page, (r) => { const b = r.querySelector('#gpa-acctunlock'); return b && !b.hidden; }, null, 8000), kl.msg);
+  await unlocker.page.screenshot({ path: path.join(OUT, '12-account-locked-unlock-email.png') });
+  await unlocker.page.fill(sr('#gpa-acctunlock-sid'), '000000');
+  await unlocker.page.click(sr('#gpa-acctunlock-go'));
+  await unlocker.page.waitForTimeout(1200);
+  check('A wrong school email is refused (tries left)', /doesn’t match this account/.test(await R(unlocker.page, (r) => r.querySelector('#gpa-login-msg').textContent)));
+  await unlocker.page.fill(sr('#gpa-acctunlock-sid'), SID_KIM);
+  await unlocker.page.click(sr('#gpa-acctunlock-go'));
+  const kUnlocked = await waitFor(unlocker.page, (r) => { const b = r.querySelector('#gpa-acctunlock'); return !b || b.hidden; }, null, 8000);
+  check('The right school email unlocks it, back to the sign-in screen', kUnlocked && /Unlocked/.test(await R(unlocker.page, (r) => r.querySelector('#gpa-login-msg').textContent)));
+  // Her real PIN is accepted again (she's still signed in on her own computer,
+  // so the server answers "already signed in" only after the PIN matched).
+  const kin = await kpost('/auth/login', { user: KIM, verifier: crypto.pbkdf2Sync(`gpa-server|${KIM.toLowerCase()}|864213`, 'gpa-server-salt|' + KIM.toLowerCase(), 210000, 32, 'sha256').toString('hex'), device: kdev() });
+  check('…and her real PIN works again (not locked, not wrong)', ![401, 423].includes(kin.status), String(kin.status) + ' ' + (kin.data.error || ''));
+  check('No page errors (unlocker)', unlocker.page._errors.length === 0, unlocker.page._errors.slice(0, 2).join(' | '));
   check('No page errors (guesser)', guesser.page._errors.length === 0, guesser.page._errors.slice(0, 2).join(' | '));
   // 5: no way around the approved list through the planet icon (create account).
   const sneak = await computer();

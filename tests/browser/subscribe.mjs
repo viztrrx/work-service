@@ -164,8 +164,8 @@ try {
   await R(cp, (r) => { const b = r.querySelector('#gpa-langpick .gpa-langpick-opt[data-lang="en"]'); if (b && b.offsetParent) b.click(); });
   const inside = await R(cp, (r) => r.querySelector('#gpa-login').style.display === 'none');
   check('Sign in with that username and PIN: they’re in (on a device that never saw them before)', inside, await R(cp, (r) => r.querySelector('#gpa-login-msg').textContent));
-  const strip = await cp.waitForFunction(() => { const s = document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-substrip'); return s && !s.hidden && /renews monthly/.test(s.textContent); }, null, { timeout: 25000 }).then(() => true, () => false);
-  check('The console shows “Subscribed · renews monthly”', strip, await R(cp, (r) => r.querySelector('#gpa-substrip').textContent.replace(/\s+/g, ' ').trim()));
+  const strip = await cp.waitForFunction(() => { const s = document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-substrip'); return s && !s.hidden && /Renews in \d+d \d+h/.test(s.textContent) && /renews automatically/.test(s.textContent); }, null, { timeout: 25000 }).then(() => true, () => false);
+  check('The console shows “Renews in Xd Yh … renews automatically”', strip, await R(cp, (r) => r.querySelector('#gpa-substrip').textContent.replace(/\s+/g, ' ').trim()));
   await cp.screenshot({ path: path.join(OUT, '03-console-subscribed.png') });
 
   // 4: the owner's view.

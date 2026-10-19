@@ -13,6 +13,29 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **Countdown, Renew, Telnyx texting; self-unlock by school email**
+  (owner: "shows how much longer until their subscription expires… enter
+  their phone number… text message with the subscribe link… paying cash…
+  give the cash to the owner or the admins… find me a cheap one but good" →
+  chose Telnyx, cash = owner + admins auto; and "confirmed… with the users
+  school email… if they don't have a school email… only me and the admins can
+  approve the account unlock"). Strip (`renderSubStrip`): `fmtTimeLeft`
+  "12d 9h left", re-renders every 60 s; autoRenew "Renews in …"; owner/admin
+  (sessionRole) "No expiry" (`.is-staff`); `#gpa-substrip-renew` opens
+  `#gpa-renew` (link, `/sms/subscribe-link`, cash text from `/sms/info`).
+  web/sms.js: `normPhone` (US), `sendSms` (Telnyx v2 /messages, TELNYX_API
+  override for tests), `telnyxSignatureOk` (Ed25519 over `ts|body`, 5 min),
+  `smsKeyword`. Worker `/sms/info` (public), `/sms/subscribe-link` (session;
+  3/user, 2/phone, 100/all per day; `smsoptout:`; `smsphone:` → user, 90 d),
+  `/sms/inbound` (signed; dedupe `smsevt:`; STOP/START/HELP/CASH; CASH →
+  reply + notifyStaff + `smscash` log), `/admin/sms` (system.manage),
+  `config.cashNames` (empty = OWNER + adminNames). Self-unlock:
+  `/auth/unlock-account` {user, studentId}: needs `acct.studentId`, once per
+  day (`acctselfunlock:<u>:<day>`), 3 wrong per lock (`lock.selfWrong`), else
+  `staffOnly`; lock responses carry `selfUnlock`; console `showAccountUnlock`
+  (`#gpa-acctunlock`). Tests: sms.test.mjs, worker.test.mjs, browser
+  renew.mjs (new), signin-help.mjs 4c. Secrets to add: TELNYX_API_KEY,
+  TELNYX_PUBLIC_KEY, TELNYX_FROM (README → Texting). Before that:
   **Security review: per-account brute-force lock** (owner ran
   /security-review: "try to brute force your way past the signin page even
   with approved names"). Proven with a harness against worker.js (in-memory
@@ -308,7 +331,9 @@ KV `push:vapid`), `CONSOLE_SCRIPT_URL`, `AUDIUS_API`,
 `APNS_RELAY_URL`/`APNS_RELAY_SECRET`, optional `YOUTUBE_API_KEY`,
 `SPOTIFY_CLIENT_ID`/`SPOTIFY_CLIENT_SECRET` (Playlists), `STRIPE_SECRET_KEY`,
 `STRIPE_WEBHOOK_SECRET`, optional `STRIPE_PRICE_ID`, `STRIPE_PORTAL_URL`,
-`SUB_PRICE_CENTS`, `SUPPORT_EMAIL` (default `viztrrx@gmail.com`) (Subscribe page).
+`SUB_PRICE_CENTS`, `SUPPORT_EMAIL` (default `viztrrx@gmail.com`) (Subscribe page),
+`TELNYX_API_KEY`, `TELNYX_PUBLIC_KEY`, `TELNYX_FROM`, optional
+`TELNYX_PROFILE_ID` (texting; README → Texting).
 
 ### KV keys (TELEMETRY)
 `config` (allowlist, subscriptions, subLedger, chatQuiet, fun, flair,
@@ -786,7 +811,8 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 
 | Commit | What |
 |---|---|
-| (this) | Security: per-account brute-force lock (PIN, reset code, student number) |
+| (this) | Countdown + Renew + Telnyx texting; self-unlock with school email |
+| `0203341` | Security: per-account brute-force lock (PIN, reset code, student number) |
 | `697270e` | Playlists: 10 new songs a day per person (admins too), owner-set |
 | `f11590c` | Owner-only $1 test contribution on the subscribe page |
 | `ccd4577` | Fold the top card (Ask AI and every tab) |
@@ -856,8 +882,9 @@ node tests/browser/my-music.mjs            # 15
 node tests/browser/admin-app.mjs           # 20
 node tests/browser/playlists.mjs           # 23
 node tests/browser/mp3.mjs                 # 51 (+1 NOT RUN: real YouTube download; needs ffmpeg/ffprobe)
-node tests/browser/subscribe.mjs           # 61
-node tests/browser/signin-help.mjs         # 37
+node tests/browser/subscribe.mjs           # 65
+node tests/browser/signin-help.mjs         # 52
+node tests/browser/renew.mjs               # 22
 node tests/browser/usage-meter.mjs         # 16
 node tests/browser/usage-meter-sizes.mjs   # 25
 node tests/browser/ask-photo-size.mjs      # 6
