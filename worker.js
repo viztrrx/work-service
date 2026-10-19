@@ -1,7 +1,7 @@
 import { webApp } from './web/handler.js';
 import { consoleApp } from './web/console/handler.js';
 import { policyPage, POLICY_PAGES } from './web/policies.js';
-import { subscribePage, subscribeReady, priceCents, displayCents, stripe, checkoutParams, contributionParams, CHECKOUT_TTL_S, contribCents, isContribution, periodEndMs, invoiceSubscription, stripeSignatureOk, SUB_NAME_RE, SESSION_RE, ATTEMPT_RE, supportEmail, SCHOOL_DOMAIN } from './web/subscribe.js';
+import { subscribePage, subscribeReady, priceCents, displayCents, stripe, checkoutParams, contributionParams, CHECKOUT_TTL_S, contribCents, isContribution, periodEndMs, invoiceSubscription, stripeSignatureOk, SUB_NAME_RE, SESSION_RE, ATTEMPT_RE, supportEmail, SCHOOL_DOMAIN, OWNER_CONTRIB_MIN_CENTS } from './web/subscribe.js';
 import { parseYouTubeLink, videoDetails, rightsNote } from './web/mp3.js';
 import { readPlaylist, readLists, writeLists, newList, listSummary, publicList, searchYouTube, matchCacheKey, LISTS_MAX, MATCH_BATCH, MATCH_SCAN } from './web/playlists.js';
 import { audiusSearch, audiusStream, listLibrary, addToLibrary, removeFromLibrary, serveLibraryFile, audioKind, listMine, mineUsage, addToMine, removeFromMine, MINE_DAILY_UPLOADS } from './web/music.js';
@@ -3574,7 +3574,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         const name = String(raw || '').trim().replace(/^@/, '');
         if (!SUB_NAME_RE.test(name)) return { error: 'Use 1–40 letters, numbers, dot, dash or underscore.' };
         const key = name.toLowerCase();
-        if (key === OWNER) return { error: 'That name is taken. Pick another.' };
+        // The owner never subscribes, but can make a test contribution (with their PIN).
+        if (key === OWNER) return { error: 'That name is taken. Pick another.', ownerTest: true };
         const cfg = await getConfig(kv);
         const cur = cfg.subscriptions && cfg.subscriptions[key];
         // An automatic month on Allowed users isn't paid: they may subscribe (it replaces it).
@@ -3676,7 +3677,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           cfg.subLedger = [...ledger, { user: (cur && cur.user) || user, at: Date.now(), amount, action: 'contribution', via: 'stripe', ref: sess.id }].slice(-1000);
           await kv.put('config', JSON.stringify(cfg));
           await logAudit(kv, { route: url.pathname, action: 'subscription_contribution', target: user.toLowerCase(), meta: { amount } });
-          await notifyOwner(env, { cat: 'subs', title: user + ' contributed $' + amount.toFixed(2), body: 'A one-time contribution through Stripe, on top of their subscription.', url: adminLink('security', { focus: 'subs', user }) }, url.origin).catch(() => {});
+          const own = user.toLowerCase() === OWNER;
+          await notifyOwner(env, { cat: 'subs', title: own ? 'Your $' + amount.toFixed(2) + ' test contribution came through' : user + ' contributed $' + amount.toFixed(2), body: own ? 'Stripe took the payment; it will reach your bank with your next payout.' : 'A one-time contribution through Stripe, on top of their subscription.', url: adminLink('security', { focus: 'subs', user }) }, url.origin).catch(() => {});
         }
         const rec = { user, contribution: true, paid: true, amount };
         await kv.put('subpay:' + sess.id, JSON.stringify(rec), { expirationTtl: 30 * 24 * 3600 });
@@ -3715,7 +3717,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         if (url.pathname === '/subscribe/check' && req.method === 'GET') {
           const at = String(url.searchParams.get('attempt') || '');
           const st = await nameStatus(url.searchParams.get('user'), ATTEMPT_RE.test(at) ? at : '');
-          return json(st.ok ? { ok: true, note: st.note } : { ok: false, error: st.error, ...(st.canContribute ? { canContribute: true, hasAccount: !!st.hasAccount } : {}) });
+          return json(st.ok ? { ok: true, note: st.note } : { ok: false, error: st.error, ...(st.canContribute ? { canContribute: true, hasAccount: !!st.hasAccount } : {}), ...(st.ownerTest ? { ownerTest: true } : {}) });
         }
         if (url.pathname === '/subscribe/checkout' && req.method === 'POST') {
           let body = {};
@@ -3741,10 +3743,25 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         if (url.pathname === '/subscribe/contribute' && req.method === 'POST') {
           let body = {};
           try { const raw = await req.text(); if (raw.length > 1024) throw 0; body = JSON.parse(raw) || {}; } catch (e) { return json({ ok: false, error: 'invalid request' }, 400); }
-          const cents = contribCents(body.cents);
-          if (!cents) return json({ ok: false, error: 'Pick an amount from $6 to $500.' }, 400);
           const st = await nameStatus(body.user, '');
-          if (!st.canContribute) return json({ ok: false, error: 'Contributions are only for subscribers. Subscribe first, then you can contribute.' }, 409);
+          if (st.ownerTest) {
+            // The owner's test contribution, from $1: only with the owner's
+            // PIN (the same verifier as signing in), with the sign-in lockout.
+            const ip = clientIp(req);
+            if (await isLockedOut(kv, 'login', ip)) return json({ ok: false, error: 'Too many wrong PINs. Try again later.' }, 429);
+            const acct = await getAcct(kv, OWNER);
+            const verifier = String(body.verifier || '');
+            const ok = !!acct && acct.ownerVerified && /^[0-9a-f]{64}$/.test(verifier) && await timingSafeEqualStr(await sha256hex(acct.salt + '|' + verifier), acct.verifier);
+            if (!ok) {
+              await noteFailure(kv, 'login', ip);
+              await noteSec('login_failed', { user: OWNER, note: 'owner test contribution' });
+              return json({ ok: false, error: 'Wrong PIN.' }, 401);
+            }
+            await clearFailures(kv, 'login', ip);
+          }
+          const cents = contribCents(body.cents, st.ownerTest ? OWNER_CONTRIB_MIN_CENTS : undefined);
+          if (!cents) return json({ ok: false, error: st.ownerTest ? 'Pick an amount from $1 to $500.' : 'Pick an amount from $6 to $500.' }, 400);
+          if (!st.canContribute && !st.ownerTest) return json({ ok: false, error: 'Contributions are only for subscribers. Subscribe first, then you can contribute.' }, 409);
           if (await checkoutLimited()) return json({ ok: false, error: 'Too many tries. Wait a bit and try again.' }, 429);
           const user = String(body.user).trim().replace(/^@/, '');
           const attempt = ATTEMPT_RE.test(String(body.attempt || '')) ? String(body.attempt) : '';

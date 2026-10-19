@@ -351,6 +351,48 @@ test('subscribe: members who already pay can add a one-time contribution ($6–$
   } finally { st.restore(); }
 });
 
+test('subscribe: only the owner, with their PIN, can make a test contribution from $1', async () => {
+  const st = stubStripe();
+  try {
+    const t = setup({ OWNER_CODE: 'own-code' });
+    await t.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: [] } } });
+    const give = (body, ip = '1.2.3.4') => t.call('/subscribe/contribute', { method: 'POST', headers: { 'CF-Connecting-IP': ip }, body });
+    // The owner's name: never a subscription, but the page offers the test.
+    const chk = (await t.call('/subscribe/check?user=Boss')).data;
+    assert.deepEqual([chk.ok, chk.ownerTest, chk.canContribute], [false, true, undefined]);
+    const sub = await t.call('/subscribe/checkout', { method: 'POST', body: { user: 'boss' } });
+    assert.ok(sub.status >= 400 && !sub.data.url, 'can’t subscribe as the owner');
+    // No owner account yet: refused, whatever verifier is sent.
+    assert.equal((await give({ user: 'boss', cents: 100, verifier: 'b'.repeat(64) })).status, 401);
+    const V = 'c'.repeat(64);
+    assert.equal((await t.call('/auth/register', { method: 'POST', headers: { 'X-GPA-Owner': 'own-code' }, body: { user: 'boss', verifier: V } })).status, 200);
+    assert.equal((await give({ user: 'boss', cents: 100 })).status, 401, 'no PIN');
+    const wrong = await give({ user: 'boss', cents: 100, verifier: 'd'.repeat(64) });
+    assert.equal(wrong.status, 401);
+    assert.match(wrong.data.error, /Wrong PIN/);
+    assert.equal((await give({ user: 'boss', cents: 99, verifier: V })).status, 400, 'under $1');
+    assert.equal((await give({ user: 'boss', cents: 50001, verifier: V })).status, 400, 'over $500');
+    // The right PIN: a $1 checkout, tagged as a contribution from the owner.
+    const r = await give({ user: 'boss', cents: 100, verifier: V });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    const call = st.calls.filter((c) => new URL(c.url).pathname === '/v1/checkout/sessions' && c.method === 'POST').pop();
+    const sent = new URLSearchParams(call.body);
+    assert.deepEqual([sent.get('mode'), sent.get('metadata[kind]'), sent.get('metadata[user]'), sent.get('line_items[0][price_data][unit_amount]')], ['payment', 'contribution', 'boss', '100']);
+    const cid = [...st.sessions.keys()].pop();
+    st.pay(cid);
+    const thanks = (await t.call('/subscribe/status?session=' + cid)).data;
+    assert.deepEqual([thanks.contribution, thanks.paid, thanks.amount, thanks.approved], [true, true, 1, undefined]);
+    const c = await t.cfg();
+    assert.deepEqual(c.ledger.filter((x) => x.action === 'contribution').map((x) => [x.user, x.amount]), [['boss', 1]]);
+    assert.ok(!c.subscriptions.some((x) => x.user === 'boss'), 'no subscription for the owner');
+    // Everyone else still starts at $6, and $1 isn't open to members.
+    assert.equal((await give({ user: 'kj', cents: 100, verifier: V })).status, 400);
+    // Guessing the owner's PIN locks the network out like signing in does.
+    for (let i = 0; i < 10; i++) await give({ user: 'boss', cents: 100, verifier: 'e'.repeat(64) }, '9.9.9.9');
+    assert.equal((await give({ user: 'boss', cents: 100, verifier: V }, '9.9.9.9')).status, 429, 'locked out even with the right PIN');
+  } finally { st.restore(); }
+});
+
 test('subscribe: a paid-up name can’t be bought twice; a new subscriber makes their own PIN on the page', async () => {
   const st = stubStripe();
   try {

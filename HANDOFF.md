@@ -13,6 +13,17 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **Owner $1 test contribution** (owner: "only me the owner (viztrrx) can
+  contribute $1 so i can test out the subscribe page"): `nameStatus` returns
+  `ownerTest: true` for OWNER (still never a subscription); the page shows
+  "Test contribution", $1 minimum and a `#owner-pin` box, and sends the
+  PBKDF2 verifier (`verifierFor`, never the PIN). `/subscribe/contribute`
+  checks it against the ownerVerified owner account with the `login`
+  lockout (10 wrong / 15 min per IP) before `contribCents(c,
+  OWNER_CONTRIB_MIN_CENTS=100)`; members stay at $6. Owner alert: "Your $X
+  test contribution came through". Also fixed: a refused contribution's
+  error was overwritten by `syncAmt()` and never shown. Tests: unit
+  (subscribe.test.mjs) + browser subscribe.mjs 7b (65/65). Before that:
   **Fold the top card** (owner, with a screenshot of Ask AI: "make it so
   it is collapsible because on computer it covers the interface not letting
   me see a good view of the answers"): every tab's hero (`gpxHero()` and the
@@ -746,7 +757,8 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 
 | Commit | What |
 |---|---|
-| (this) | Fold the top card (Ask AI and every tab) |
+| (this) | Owner-only $1 test contribution on the subscribe page |
+| `ccd4577` | Fold the top card (Ask AI and every tab) |
 | (earlier) | YouTube to MP3 (owner): real FFmpeg in the browser, verified MP3, Save to My music |
 | `5098fca`, `f748097` | Subscribe page: own PIN after paying, no paying twice, contributions note |
 | `4944c8b` | Subscribe page: one-time contributions ($8+) from members |

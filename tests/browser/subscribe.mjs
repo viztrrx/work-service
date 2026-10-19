@@ -252,6 +252,22 @@ try {
   const subAfter = after.subscriptions.find((x) => x.user === NAME);
   check('Owner: the $20 contribution is in the ledger once; the subscription didn’t change', webhooksSent === hooksBefore + 1 && after.ledger.filter((x) => x.user === NAME && x.action === 'contribution').map((x) => x.amount).join() === '20' && subAfter.expiresAt === subBefore.expiresAt, JSON.stringify(after.ledger.filter((x) => x.user === NAME)));
 
+  // 7b: the owner's test contribution: from $1, only with the owner's PIN.
+  await page.goto(env.workerUrl + '/subscribe/');
+  await page.fill('#user', 'viztrrx');
+  const ownerShown = await page.waitForFunction(() => !document.getElementById('owner-box').hidden, null, { timeout: 8000 }).then(() => true, () => false);
+  check('The owner’s name: “Test contribution” from $1 with a PIN box (no Subscribe)', ownerShown && (await page.textContent('#form-title')) === 'Test contribution' && await page.isHidden('#subbox') && (await page.textContent('#contrib [data-amt="1"]')).trim() === '$1' && (await page.textContent('#give')).trim() === 'Contribute $1.00', await page.textContent('#hint'));
+  await page.screenshot({ path: path.join(OUT, '11-owner-test-contribution.png') });
+  await page.click('#give');
+  check('…the PIN is required before anything is sent', /Type your PIN first/.test(await page.textContent('#amt-hint')) && /\/subscribe\/$/.test(page.url()), await page.textContent('#amt-hint'));
+  await page.fill('#owner-pin', '135799');
+  await page.click('#give');
+  await page.waitForFunction(() => /Wrong PIN/.test(document.getElementById('amt-hint').textContent), null, { timeout: 15000 }).catch(() => {});
+  check('…a PIN that isn’t the owner’s is refused by the server (no checkout)', /Wrong PIN/.test(await page.textContent('#amt-hint')) && /\/subscribe\/$/.test(page.url()), await page.textContent('#amt-hint'));
+  await page.fill('#user', NAME);
+  await page.waitForFunction(() => /already subscribed/.test(document.getElementById('hint').textContent), null, { timeout: 8000 }).catch(() => {});
+  check('…and any other name is back to $6, with no PIN box', await page.isHidden('#owner-box') && (await page.textContent('#contrib [data-amt="6"]')).trim() === '$6' && (await page.textContent('#give')).trim() === 'Contribute $6.00' && !(await page.inputValue('#owner-pin')), await page.textContent('#give'));
+
   // …and on the owner's Subscribers card.
   const oc = await browser.newContext({ viewport: { width: 1200, height: 900 } });
   await oc.addInitScript((u) => { try { localStorage.setItem('gpa_admin_tele_endpoint', u); localStorage.setItem('gpa_openai_key_skip', '1'); } catch (e) { /* ignore */ } }, env.workerUrl);

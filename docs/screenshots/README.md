@@ -13,7 +13,7 @@ new subscriber and then the owner would see things.
 | [2-admin-security](#2-admin--security-owner-admins-moderators) | New subscribers card, automatic month, Recent events folding, Free access |
 | [3-playlists](#3-playlists-everyone-signed-in) | Spotify / Apple Music playlist → YouTube links, for everyone |
 | [4-youtube-to-mp3](#4-youtube-to-mp3-owner) | The MP3 converter in Music → My music |
-| [5-subscribe-page](#5-subscribe-page) | The payment page and the $6 contribution box |
+| [5-subscribe-page](#5-subscribe-page) | The payment page, the $6 contribution box, and **new:** your $1 test (owner only) |
 | [9-fold-top-card](#9-fold-the-top-card) | **New:** the Ask AI card (and every tab's top card) folds to a thin bar |
 | [8-opens-centered](#8-opens-small-and-centered) | **New:** injected into a website: only the sign-in card shows; signed in, a centered window |
 | [7-student-number-and-locks](#7-student-numbers-forgot-pin-and-locked-devices) | **New:** the required student-number screen, Forgot PIN by student number, locked devices, your Sign-in help card |
@@ -144,6 +144,12 @@ The payment page, and the contribution box for people who already
 subscribe (from $6).
 
 <img src="5-subscribe-page/1-subscribe.png" width="320" alt="Subscribe page"> <img src="5-subscribe-page/2-contribute-6-dollars.png" width="320" alt="Contribute box starting at $6">
+
+**Your $1 test (owner only):** type your own name and the box becomes
+**Test contribution** from $1 with a **Your PIN** box. Without your PIN it
+won't start; everyone else still starts at $6.
+
+<img src="5-subscribe-page/3-owner-test-contribution.png" width="320" alt="Test contribution from $1 with the owner PIN box">
 
 ---
 

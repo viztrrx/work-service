@@ -43,9 +43,11 @@ export const ATTEMPT_RE = /^[a-z0-9]{16,40}$/;
 // One-time contributions from members who already subscribe: $6 to $500.
 export const CONTRIB_MIN_CENTS = 600;
 export const CONTRIB_MAX_CENTS = 50000;
-export const contribCents = (v) => {
+// The owner can give from $1 (with their PIN) to test that payments arrive.
+export const OWNER_CONTRIB_MIN_CENTS = 100;
+export const contribCents = (v, min = CONTRIB_MIN_CENTS) => {
   const n = Number(v);
-  return Number.isInteger(n) && n >= CONTRIB_MIN_CENTS && n <= CONTRIB_MAX_CENTS ? n : 0;
+  return Number.isInteger(n) && n >= min && n <= CONTRIB_MAX_CENTS ? n : 0;
 };
 export const SUPPORT_EMAIL_DEFAULT = 'viztrrx@gmail.com';
 export const supportEmail = (env) => {
@@ -299,6 +301,11 @@ export function subscribePage(env, { ready, cents }) {
       <label for="amt">Amount (USD)</label>
       <div class="amt"><span>$</span><input id="amt" type="number" inputmode="decimal" min="${CONTRIB_MIN_CENTS / 100}" max="${CONTRIB_MAX_CENTS / 100}" step="0.01" value="${CONTRIB_MIN_CENTS / 100}"></div>
       <div id="amt-hint" class="hint">From ${esc(money(CONTRIB_MIN_CENTS))} to ${esc(money(CONTRIB_MAX_CENTS))}.</div>
+      <div id="owner-box" hidden>
+        <label for="owner-pin">Your PIN (owner)</label>
+        <input id="owner-pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="64">
+        <div class="hint">Only you can give less than ${esc(money(CONTRIB_MIN_CENTS))}: your PIN proves it’s you. It’s a real charge, so it shows up in Stripe like any payment.</div>
+      </div>
       <button id="give" type="button">Contribute ${esc(money(CONTRIB_MIN_CENTS))}</button>
       <p class="terms">A one-time payment that doesn’t change your subscription. Contributions are non-refundable (see the <a href="/subscribe/refunds">Refund &amp; Cancellation Policy</a>) and aren’t tax-deductible, since Saints Service isn’t a charity.</p>
     </div>
@@ -385,7 +392,17 @@ ${policyFooter(env)}
   var q = new URLSearchParams(location.search);
   var hint = $('hint'), input = $('user'), pay = $('pay'), timer = null, okName = '';
   var contrib = $('contrib'), subbox = $('subbox'), amt = $('amt'), give = $('give'), giveName = '';
-  var MIN = ${CONTRIB_MIN_CENTS}, MAX = ${CONTRIB_MAX_CENTS};
+  var MIN = ${CONTRIB_MIN_CENTS}, MAX = ${CONTRIB_MAX_CENTS}, ownerMode = false;
+  var firstChip = contrib ? contrib.querySelector('[data-amt]') : null;
+  // The owner's test contribution: from $1, with their PIN. Anyone else: from $${CONTRIB_MIN_CENTS / 100}.
+  function setOwnerMode(on) {
+    ownerMode = on; MIN = on ? ${OWNER_CONTRIB_MIN_CENTS} : ${CONTRIB_MIN_CENTS};
+    $('owner-box').hidden = !on; if (!on) $('owner-pin').value = '';
+    var d = String(MIN / 100);
+    firstChip.setAttribute('data-amt', d); firstChip.textContent = '$' + d;
+    amt.min = d; amt.value = d;
+    contrib.querySelector('.contrib-t').innerHTML = on ? '<b>Owner test.</b> Make a real contribution from $1 to check that payments reach your Stripe account.' : '<b>You’re already a member.</b> Want to support Saints Service? Add a one-time contribution of $' + d + ' or more.';
+  }
   // One id per visit: tapping twice, or coming back from checkout, reuses the
   // same checkout instead of locking the name.
   var attempt = '';
@@ -398,13 +415,18 @@ ${policyFooter(env)}
   function setHint(text, cls) { hint.textContent = text; hint.className = 'hint' + (cls ? ' ' + cls : ''); }
   function check() {
     var u = input.value.trim().replace(/^@/, '');
-    okName = ''; pay.disabled = true; giveName = ''; contrib.hidden = true; subbox.hidden = false; $('sub-info').hidden = false; $('form-title').textContent = 'Subscribe';
+    okName = ''; pay.disabled = true; giveName = ''; contrib.hidden = true; if (ownerMode) setOwnerMode(false); subbox.hidden = false; $('sub-info').hidden = false; $('form-title').textContent = 'Subscribe';
     if (!u) { setHint('Letters, numbers, dot, dash or underscore.'); return; }
     if (!/^[A-Za-z0-9_.-]{1,40}$/.test(u)) { setHint('Use only letters, numbers, dot, dash or underscore.', 'bad'); return; }
     setHint('Checking…');
     fetch('/subscribe/check?user=' + encodeURIComponent(u) + '&attempt=' + attempt, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
       if (input.value.trim().replace(/^@/, '') !== u) return;
       if (d.ok) { okName = u; pay.disabled = false; setHint(d.note || ('“' + u + '” is available.'), 'ok'); }
+      else if (d.ownerTest) {
+        giveName = u; setOwnerMode(true); contrib.hidden = false; subbox.hidden = true; $('sub-info').hidden = true; $('form-title').textContent = 'Test contribution';
+        setHint('That’s the owner’s name. You can make a test contribution from $1 with your PIN.', 'ok');
+        syncAmt();
+      }
       else if (d.canContribute) {
         // Already paid up: no second subscription, only a contribution.
         giveName = u; contrib.hidden = false; subbox.hidden = true; $('sub-info').hidden = true; $('form-title').textContent = 'Contribute';
@@ -443,11 +465,14 @@ ${policyFooter(env)}
     give.addEventListener('click', function () {
       var c = cents();
       if (!giveName || c < MIN || c > MAX) return;
+      var pin = ownerMode ? $('owner-pin').value : '';
+      if (ownerMode && !pin) { $('amt-hint').textContent = 'Type your PIN first.'; $('amt-hint').className = 'hint bad'; $('owner-pin').focus(); return; }
       give.disabled = true; give.textContent = 'Opening secure checkout…';
-      fetch('/subscribe/contribute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: giveName, cents: c, attempt: attempt }) })
+      (ownerMode ? verifierFor(giveName, pin) : Promise.resolve(''))
+        .then(function (v) { return fetch('/subscribe/contribute', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(v ? { user: giveName, cents: c, attempt: attempt, verifier: v } : { user: giveName, cents: c, attempt: attempt }) }); })
         .then(function (r) { return r.json(); }).then(function (d) {
           if (d.url) { location.href = d.url; return; }
-          $('amt-hint').textContent = d.error || 'Couldn’t start the payment. Try again.'; $('amt-hint').className = 'hint bad'; syncAmt();
+          syncAmt(); $('amt-hint').textContent = d.error || 'Couldn’t start the payment. Try again.'; $('amt-hint').className = 'hint bad';
         }).catch(function () { $('amt-hint').textContent = 'Couldn’t reach the server. Try again.'; $('amt-hint').className = 'hint bad'; give.disabled = false; give.textContent = 'Contribute $' + (c / 100).toFixed(2); });
     });
   }

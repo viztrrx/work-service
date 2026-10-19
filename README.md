@@ -326,6 +326,15 @@ only for subscribers. New here? Subscribe first." You get a "kj contributed $20"
 Security → Subscribers shows a contributions total and "contributed $X" on
 their row. Nothing to set up: it uses the same Stripe key and webhook.
 
+**Test it yourself with $1 (owner only).** Type your own name (viztrrx) on
+the subscribe page: it turns into **Test contribution**, from **$1**, with a
+**Your PIN (owner)** box. Type your Saints Service PIN, tap **Contribute
+$1.00**, and pay on Stripe's page. It's a real charge: it shows in Stripe →
+Payments, you get a "Your $1.00 test contribution came through" alert, and it
+reaches your bank with your next payout. Without your PIN nobody else can use
+it (a wrong PIN is refused and counts toward the same lockout as signing in),
+and everyone else still starts at $6.
+
 **Policies (what Stripe's review looks for):** every subscribe page has a
 footer with **Terms** (`/subscribe/terms`), **Refunds & cancellation**
 (`/subscribe/refunds`), **Privacy** (`/subscribe/privacy`) and the contact
