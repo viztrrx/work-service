@@ -14,6 +14,7 @@ new subscriber and then the owner would see things.
 | [3-playlists](#3-playlists-everyone-signed-in) | Spotify / Apple Music playlist → YouTube links, for everyone; **new:** 10 new songs a day each, your limit card |
 | [4-youtube-to-mp3](#4-youtube-to-mp3-owner) | The MP3 converter in Music → My music |
 | [5-subscribe-page](#5-subscribe-page) | The payment page, the $6 contribution box, and **new:** your $1 test (owner only) |
+| [10-security-review](#10-security-review-brute-force-proof-and-fix) | **New:** proof that PINs and student numbers could be brute-forced, and the fix |
 | [9-fold-top-card](#9-fold-the-top-card) | **New:** the Ask AI card (and every tab's top card) folds to a thin bar |
 | [8-opens-centered](#8-opens-small-and-centered) | **New:** injected into a website: only the sign-in card shows; signed in, a centered window |
 | [7-student-number-and-locks](#7-student-numbers-forgot-pin-and-locked-devices) | **New:** the required student-number screen, Forgot PIN by student number, locked devices, your Sign-in help card |
@@ -269,3 +270,32 @@ the answers get the rest of the window. Tap the arrow to open it again. Each
 tab remembers its choice after a reload.
 
 <img src="9-fold-top-card/2-ask-card-folded.png" width="640" alt="Ask AI card folded to a thin bar">
+
+---
+
+## 10. Security review: brute-force proof and fix
+
+Attacks run against the real Worker code with throwaway storage (no real
+accounts). The attacker changes their device id and network on every try,
+which got around the old device lock and per-network limit.
+
+**Attack 1: guessing an approved person's PIN.** Before: 300 wrong PINs, no
+lock, then the right one signed in as them. After: the account locks at 8
+wrong tries, and even the right PIN is refused until it's unlocked.
+
+<img src="10-security-review/1-pin-brute-force.png" width="760" alt="Before: 300 guesses then takeover. After: locked at 8">
+
+**Attack 2: taking an account over through Forgot PIN** by guessing the
+6-digit student number. Before: no limit, so a guesser eventually gets the new
+PIN. After: locked at 8 wrong numbers.
+
+<img src="10-security-review/2-student-number-brute-force.png" width="760" alt="Before: unlimited student-number guesses. After: locked at 8">
+
+**What the person sees** after too many wrong tries (any mix of devices and
+networks), and **your side**: Sign-in help lists the locked account with
+**Unlock account** (you also get an alert). It unlocks itself at noon New
+York time (this test computer shows UTC).
+
+<img src="10-security-review/3-locked-account-signin.png" width="640" alt="This account is locked after too many wrong sign-in attempts">
+
+<img src="10-security-review/4-owner-unlock.png" width="560" alt="Sign-in help: Locked accounts, Unlock account">

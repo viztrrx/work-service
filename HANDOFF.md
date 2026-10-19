@@ -13,6 +13,24 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **Security review: per-account brute-force lock** (owner ran
+  /security-review: "try to brute force your way past the signin page even
+  with approved names"). Proven with a harness against worker.js (in-memory
+  KV): every limit keyed on attacker-controlled ids (client `device`, IP), so
+  rotating them allowed 300+ wrong PINs then a takeover, and unlimited
+  student-number guesses on `/auth/pin-request` (match = instant new PIN).
+  Fix: `accountFailure()`/`accountLock()` (`acctfail:<u>` counter, 2 h
+  window; `acctlock:<u>` until `sessionEnd`) on wrong PIN, wrong reset code,
+  wrong student number and the owner's $1-test PIN; 8 → 423
+  `accountLocked`, staff alert; Sign-in help lists `accountLocks` with
+  `acctunlock`; owner Reset PIN clears it; a good login clears the count.
+  `FAIL_LIMITS.login` 10 → 30 (one school = one IP; per-account lock now
+  does the PIN protection). Checked and fine: no API answers an approved name
+  without a session (`effectiveUser`); unlock/invite/reset codes are 8 chars
+  of 31. OPEN (owner to decide): an approved name with no account yet can be
+  registered by whoever types it first; and student numbers are visible in
+  school emails, so Forgot PIN by student number lets a classmate who knows
+  it set a new PIN. Proof: docs/screenshots/10-security-review. Before that:
   **Playlists: 10 new songs a day** (owner: "admins also have access… everyone
   has access to it but set a limited quota by default of 10 songs per user so
   it doesn't run up my youtube api key"): admins already had access; now
@@ -768,7 +786,8 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 
 | Commit | What |
 |---|---|
-| (this) | Playlists: 10 new songs a day per person (admins too), owner-set |
+| (this) | Security: per-account brute-force lock (PIN, reset code, student number) |
+| `697270e` | Playlists: 10 new songs a day per person (admins too), owner-set |
 | `f11590c` | Owner-only $1 test contribution on the subscribe page |
 | `ccd4577` | Fold the top card (Ask AI and every tab) |
 | (earlier) | YouTube to MP3 (owner): real FFmpeg in the browser, verified MP3, Save to My music |

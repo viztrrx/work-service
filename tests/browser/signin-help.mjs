@@ -13,6 +13,7 @@
 //   node tests/browser/signin-help.mjs [outDir]
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { serve, launch, ROOT, HOST_PAGE } from './harness.mjs';
 import { startEnv } from './env.mjs';
 
@@ -224,6 +225,36 @@ try {
   await R(owner.page, (r) => { const d = r.querySelectorAll('.gac-help-fold'); d.forEach((x) => { x.open = true; }); });
   await owner.page.waitForTimeout(300);
   await owner.page.locator(sr('#gac-help-card')).screenshot({ path: path.join(OUT, '08-owner-people-and-log.png') });
+  // 4b: guessing one approved person's PIN from many devices/networks locks
+  // that ACCOUNT (the device lock alone was dodged by changing device id).
+  const ZED = 'zed' + run;
+  const cv = await admin('/admin/config/view');
+  await admin('/admin/config', { allowlist: { on: true, users: [...cv.config.allowlist.users, ZED.toLowerCase()] } });
+  const pb = (u, pin) => crypto.pbkdf2Sync(`gpa-server|${u.toLowerCase()}|${pin}`, 'gpa-server-salt|' + u.toLowerCase(), 210000, 32, 'sha256').toString('hex');
+  const rdev = () => crypto.randomBytes(16).toString('hex');
+  const post = (p, body) => fetch(env.workerUrl + p, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) }).then(async (r) => ({ status: r.status, data: await r.json().catch(() => ({})) }));
+  const zreg = await post('/auth/register', { user: ZED, verifier: pb(ZED, '8642'), device: rdev() });
+  await fetch(env.workerUrl + '/auth/logout', { method: 'POST', headers: { 'X-GPA-Session': zreg.data.token } });
+  const guesses = [];
+  for (let i = 0; i < 7; i++) guesses.push((await post('/auth/login', { user: ZED, verifier: pb(ZED, String(1000 + i)), device: rdev() })).status);
+  check('7 wrong PINs for an approved name, each from a new device id: all just “wrong PIN” (no device lock trips)', guesses.every((x) => x === 401), guesses.join(','));
+  const guesser = await computer();
+  await signIn(guesser.page, ZED, '1007');
+  const zmsg = await R(guesser.page, (r) => r.querySelector('#gpa-login-msg').textContent);
+  check('The 8th wrong PIN (typed on the sign-in screen) locks the account: “This account is locked…”', /This account is locked after too many wrong sign-in attempts/.test(zmsg), zmsg);
+  await guesser.page.screenshot({ path: path.join(OUT, '10-account-locked-signin.png') });
+  const zright = await signIn(guesser.page, ZED, '8642');
+  check('…and now even the RIGHT PIN is refused until it’s unlocked', !zright.inside && /locked/.test(zright.msg), zright.msg);
+  await openHelp();
+  const acctText = await R(owner.page, (r, u) => { const el = r.querySelector(`.gac-help-acctlock[data-user="${u}"]`); return el ? el.textContent.replace(/\s+/g, ' ') : ''; }, ZED);
+  check('Owner: Sign-in help lists the locked account (8 wrong PINs, mixed devices) with “Unlock account”', /Account locked/.test(acctText) && /8 wrong PINs/.test(acctText) && /Unlock account/.test(acctText), acctText.slice(0, 220));
+  await owner.page.locator(sr('#gac-help-card')).screenshot({ path: path.join(OUT, '11-owner-locked-account.png') });
+  await R(owner.page, (r, u) => { window.confirm = () => true; r.querySelector(`.gac-help-acctlock[data-user="${u}"] [data-help="acctunlock"]`).click(); }, ZED);
+  await owner.page.waitForTimeout(1500);
+  check('Unlock account: it leaves the list', !(await R(owner.page, (r, u) => !!r.querySelector(`.gac-help-acctlock[data-user="${u}"]`), ZED)));
+  const zback = await signIn(guesser.page, ZED, '8642');
+  check('…and the real person signs in with the right PIN again', zback.inside, zback.msg);
+  check('No page errors (guesser)', guesser.page._errors.length === 0, guesser.page._errors.slice(0, 2).join(' | '));
   // 5: no way around the approved list through the planet icon (create account).
   const sneak = await computer();
   await sneak.page.fill(sr('#gpa-login-user'), 'sneaky' + run);

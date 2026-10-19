@@ -823,7 +823,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       console: ['feature', 'Every tab’s top card (Ask AI, Music, Chat…) has an arrow to fold it into a thin bar with just its title and buttons, so answers get the room; each tab remembers it'] } },
     { at: '2026-10-19T10:00:00-04:00', commit: '', title: 'Playlists: 10 new songs a day per person', parts: {
       music: ['change', 'Playlists stay open to everyone (admins too); each person can look up 10 new songs a day (songs someone already found are free), with a “New songs left today” count'],
-      admin: ['feature', 'Moderation → Playlists limit (owner): set how many new songs each person can look up a day'] } }
+      admin: ['feature', 'Moderation → Playlists limit (owner): set how many new songs each person can look up a day'] } },
+    { at: '2026-10-19T14:00:00-04:00', commit: '', title: 'Guessing a PIN locks the account', parts: {
+      console: ['fix', '8 wrong PINs, reset codes or student numbers for one name, from any devices or networks, lock that account until the day session ends (before, changing device or network got around the limits)'],
+      admin: ['feature', 'Security → Sign-in help → Locked accounts: see who was being guessed and unlock it'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -21690,16 +21693,20 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         return [os, br].filter(Boolean).join(' · ') || 'Unknown device';
       };
       const at = (ts) => new Date(ts).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-      const LOGT = { lock: 'Device locked', unlock: 'Device unlocked', keep: 'Kept locked', pinreq: 'Forgot PIN (waiting)', pinauto: 'New PIN (student number matched)', pinwrong: 'Wrong student number', pinapprove: 'New PIN approved', pindeny: 'PIN request denied', sid: 'Student number saved', sidclear: 'Student number cleared' };
+      const LOGT = { lock: 'Device locked', unlock: 'Device unlocked', keep: 'Kept locked', pinreq: 'Forgot PIN (waiting)', pinauto: 'New PIN (student number matched)', pinwrong: 'Wrong student number', pinapprove: 'New PIN approved', pindeny: 'PIN request denied', sid: 'Student number saved', sidclear: 'Student number cleared', acctlock: 'Account locked (too many wrong tries)', acctunlock: 'Account unlocked' };
       const render = (d) => {
         const missing = d.people.filter((x) => x.account && !x.email).length;
-        el.innerHTML = (d.locks.length ? `<h4 class="gac-help-h">Locked devices</h4><ul class="gac-acct-list">` + d.locks.map((l) => `<li class="gac-acct gac-help-lock" data-id="${esc(l.id)}"><div class="gac-acct-top"><span class="gac-req-name">${esc(l.names.join(', ') || 'Unknown')}</span><span class="gac-req-badge pending">Locked</span></div>`
+        const acctLocks = d.accountLocks || [];
+        el.innerHTML = (acctLocks.length ? `<h4 class="gac-help-h">Locked accounts</h4><ul class="gac-acct-list">` + acctLocks.map((l) => `<li class="gac-acct gac-help-acctlock" data-user="${esc(l.user)}"><div class="gac-acct-top"><span class="gac-req-name">${esc(l.user)}</span><span class="gac-req-badge pending">Account locked</span></div>`
+            + `<div class="gac-req-meta">${esc(String(l.tries))} wrong ${esc((l.how || []).join(' / ') || 'tries')} from mixed devices or networks (someone may be guessing) · ${esc(at(l.at))}. Locked until ${esc(at(l.until))}. If it was really them, unlock it; otherwise leave it.</div>`
+            + `<div class="gac-req-actions"><button class="gps-btn primary" data-help="acctunlock" type="button">Unlock account</button></div></li>`).join('') + `</ul>` : '')
+          + (d.locks.length ? `<h4 class="gac-help-h">Locked devices</h4><ul class="gac-acct-list">` + d.locks.map((l) => `<li class="gac-acct gac-help-lock" data-id="${esc(l.id)}"><div class="gac-acct-top"><span class="gac-req-name">${esc(l.names.join(', ') || 'Unknown')}</span><span class="gac-req-badge pending">Locked</span></div>`
             + `<div class="gac-req-meta">${l.notAllowed >= 3 ? 'Tried names that aren’t allowed' : 'Wrong PINs or codes'} · ${esc(helpDevice(l.ua))}${l.country && l.country !== '??' ? ' · ' + esc(l.country) : ''} · ${esc(at(l.at))}. Locked until ${esc(at(l.until))}${l.kept ? ' (kept locked)' : ''}.</div>`
             + `<div class="gac-req-actions"><button class="gps-btn primary" data-help="unlock" type="button">Approve (unlock)</button>${l.kept ? '' : '<button class="gps-btn" data-help="keep" type="button">Keep locked until the session ends</button>'}</div></li>`).join('') + `</ul>` : '')
           + (d.requests.length ? `<h4 class="gac-help-h">Forgot PIN, waiting for you</h4><ul class="gac-acct-list">` + d.requests.map((r) => `<li class="gac-acct gac-help-req" data-user="${esc(r.user)}"><div class="gac-acct-top"><span class="gac-req-name">${esc(r.user)}</span><span class="gac-req-badge pending">Forgot PIN</span></div>`
             + `<div class="gac-req-meta">No student number on file; they gave <b>${esc(r.email)}</b>. From ${r.sameDevice ? 'their usual device' : r.sameBrowser ? 'the same kind of browser, another network' : 'a device they haven’t used before'} (${esc(helpDevice(r.ua))}) · ${esc(at(r.at))}${r.note ? ' · “' + esc(r.note) + '”' : ''}. Approving also saves that student number.</div>`
             + `<div class="gac-req-actions"><button class="gps-btn primary" data-help="pinapprove" type="button">Approve new PIN</button><button class="gps-btn" data-help="pindeny" type="button">Deny</button></div></li>`).join('') + `</ul>` : '')
-          + (!d.locks.length && !d.requests.length ? `<p class="gps-hint">Nothing waiting. Locked devices and Forgot-PIN requests show up here (and as alerts).</p>` : '')
+          + (!d.locks.length && !d.requests.length && !acctLocks.length ? `<p class="gps-hint">Nothing waiting. Locked accounts, locked devices and Forgot-PIN requests show up here (and as alerts).</p>` : '')
           + `<details class="gac-help-fold"${missing ? ' open' : ''}><summary>Approved people and their school emails (${d.people.length}${missing ? ', ' + missing + ' missing' : ''})</summary>`
           + (d.people.length ? `<ul class="gac-help-people">` + d.people.map((x) => `<li data-user="${esc(x.user)}"><span>${esc(x.user)}</span><span class="${x.email ? '' : 'gac-help-miss'}">${esc(x.email || (x.account ? 'Not added yet (asked at next sign-in)' : 'No account yet'))}</span>${x.email ? '<button class="gps-btn" data-help="clearsid" type="button">Clear</button>' : ''}</li>`).join('') + `</ul>` : '<p class="gps-hint">Nobody on Allowed users yet.</p>')
           + `</details>`
@@ -21712,7 +21719,12 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         const act = b.dataset.help;
         b.disabled = true;
         try {
-          if (act === 'unlock' || act === 'keep') {
+          if (act === 'acctunlock') {
+            const user = b.closest('[data-user]').dataset.user;
+            if (!confirm('Unlock “' + user + '”? Only if you’re sure the wrong tries were theirs.')) { b.disabled = false; return; }
+            render(await api('/admin/signin-help', { method: 'POST', body: { action: 'acctunlock', user } }));
+            showToast(user + ' is unlocked.');
+          } else if (act === 'unlock' || act === 'keep') {
             const id = b.closest('.gac-help-lock').dataset.id;
             if (act === 'unlock' && !confirm('Unlock this device? Whoever is using it can try to sign in again.')) { b.disabled = false; return; }
             render(await api('/admin/signin-help', { method: 'POST', body: { action: act, id } }));

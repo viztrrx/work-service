@@ -387,9 +387,12 @@ test('subscribe: only the owner, with their PIN, can make a test contribution fr
     assert.ok(!c.subscriptions.some((x) => x.user === 'boss'), 'no subscription for the owner');
     // Everyone else still starts at $6, and $1 isn't open to members.
     assert.equal((await give({ user: 'kj', cents: 100, verifier: V })).status, 400);
-    // Guessing the owner's PIN locks the network out like signing in does.
-    for (let i = 0; i < 10; i++) await give({ user: 'boss', cents: 100, verifier: 'e'.repeat(64) }, '9.9.9.9');
-    assert.equal((await give({ user: 'boss', cents: 100, verifier: V }, '9.9.9.9')).status, 429, 'locked out even with the right PIN');
+    // Guessing the owner's PIN counts against the owner's account like signing
+    // in does: 8 wrong (from any networks) lock it, even for the right PIN.
+    for (let i = 0; i < 8; i++) await give({ user: 'boss', cents: 100, verifier: 'e'.repeat(64) }, '9.9.9.' + i);
+    const lockedOut = await give({ user: 'boss', cents: 100, verifier: V }, '8.8.8.8');
+    assert.equal(lockedOut.status, 423, 'locked even with the right PIN');
+    assert.equal(lockedOut.data.accountLocked, true);
   } finally { st.restore(); }
 });
 

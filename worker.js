@@ -1178,7 +1178,10 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     // (up to ~60s), so this slows sustained brute force rather than being an
     // exact per-request counter.
     const clientIp = (req) => req.headers.get('CF-Connecting-IP') || req.headers.get('X-Real-IP') || '';
-    const FAIL_LIMITS = { admin: { max: 10, windowSec: 900 }, unlock: { max: 8, windowSec: 900 }, login: { max: 10, windowSec: 900 } };
+    // login is per network: a whole school shares one public IP, so it's set
+    // high enough that a few people's typos (or one troll) can't lock everyone
+    // out. Guessing one person's PIN is stopped per ACCOUNT (accountFailure).
+    const FAIL_LIMITS = { admin: { max: 10, windowSec: 900 }, unlock: { max: 8, windowSec: 900 }, login: { max: 30, windowSec: 900 } };
     const failKey = async (scope, ip) => `fail:${scope}:${(await sha256hex(String(ip || 'unknown'))).slice(0, 32)}`;
     const isLockedOut = async (kv, scope, ip) => {
       if (!kv) return false;
@@ -1301,6 +1304,55 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       notifyStaff({ cat: 'security', urgent: true, tag: 'devlock-' + id.slice(0, 8), title: 'Device locked: unauthorized sign-in', body: 'Tried ' + (f.names.join(', ') || 'names') + '. Locked until ' + when + '. Approve (unlock) or keep it locked in Admin → Security → Sign-in help.', url: adminLink('security', { focus: 'signinhelp' }) });
       return lock;
     };
+    // ---- Per-account brute-force lock -------------------------------------
+    // The device lock (above) and the per-IP login limit both key on something
+    // the attacker controls — the client-sent device id, or the IP — so
+    // rotating either slips past them. These count failures against the
+    // TARGET ACCOUNT instead, which the attacker can't rotate. A handful of
+    // wrong PINs, reset codes or student numbers for one name — from any mix of
+    // devices and networks — locks that name until the end of the day session,
+    // and tells the owner and admins (unlock in Sign-in help, same as a device).
+    const ACCT_FAIL_MAX = 8;            // wrong credentials for one name per window
+    const ACCT_FAIL_WINDOW_S = 2 * 3600;
+    const acctLockKey = (u) => 'acctlock:' + String(u || '').toLowerCase();
+    const accountLock = async (user) => {
+      const kv = env && env.TELEMETRY;
+      if (!kv || !user) return null;
+      const l = await kv.get(acctLockKey(user), 'json');
+      return l && l.until > Date.now() ? l : null;
+    };
+    const accountLockedResponse = (l) => json({ ok: false, accountLocked: true, until: l.until,
+      error: 'This account is locked after too many wrong sign-in attempts. The owner has been told; it unlocks itself later today, or the owner can unlock it.' }, 423);
+    const clearAccountFailures = async (user) => {
+      const kv = env && env.TELEMETRY;
+      if (kv && user) { try { await kv.delete('acctfail:' + String(user).toLowerCase()); } catch (e) { /* best-effort */ } }
+    };
+    // Counts one wrong credential for `user`; locks the name once over the
+    // threshold. Returns the lock when it trips, else null.
+    const accountFailure = async (user, how) => {
+      const kv = env && env.TELEMETRY;
+      if (!kv || !user) return null;
+      const u = String(user).toLowerCase();
+      const fk = 'acctfail:' + u;
+      const f = (await kv.get(fk, 'json')) || { n: 0, how: [] };
+      f.n++;
+      if (how && !f.how.includes(how)) f.how = [...f.how, how].slice(-4);
+      await kv.put(fk, JSON.stringify(f), { expirationTtl: ACCT_FAIL_WINDOW_S });
+      if (f.n < ACCT_FAIL_MAX) return null;
+      const now = Date.now(), tz = (env && env.OWNER_TZ) || 'America/New_York';
+      const lock = { user, status: 'locked', at: now, until: sessionEnd(now, tz), tries: f.n, how: f.how,
+        country: (req.cf && req.cf.country) || '??' };
+      await kv.put(acctLockKey(u), JSON.stringify(lock), { expirationTtl: 3 * 24 * 3600 });
+      await kv.delete(fk);
+      await noteSec('account_locked', { user, note: f.how.join(', ') });
+      await signinLog({ type: 'acctlock', user, detail: f.n + ' wrong ' + (f.how.join(', ') || 'attempts') + ' · ' + lock.country });
+      const when = new Date(lock.until).toLocaleString('en-US', { timeZone: tz, weekday: 'short', hour: 'numeric', minute: '2-digit' });
+      notifyStaff({ cat: 'security', urgent: true, tag: 'acctlock-' + u, title: 'Account locked: too many wrong sign-ins',
+        body: '“' + user + '” was hit with ' + f.n + ' wrong ' + (f.how.join(' / ') || 'attempts') + ' from mixed devices/networks. Locked until ' + when + '. Unlock in Admin → Security → Sign-in help.',
+        url: adminLink('security', { focus: 'signinhelp', user }) });
+      return lock;
+    };
+
     const noteUsage = (user, delta) => {
       const k = `usage:${dayKey()}:${String(user || 'anonymous').toLowerCase().slice(0, 80)}`;
       pendingUsage.set(k, addUsage(pendingUsage.get(k) || emptyUsage(), delta));
@@ -1983,7 +2035,17 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         await kv.delete('devfail:' + id + ':' + Math.floor(Date.now() / 3600e3));
         await signinLog({ type: action === 'unlock' ? 'unlock' : 'keep', user: (l.names || []).join(', '), by, detail: l.country || '' });
         await logAudit(kv, { route: url.pathname, action, target: id.slice(0, 8), admin: principal.role });
-      } else if (action !== 'list') return json({ error: 'action must be list, unlock or keep' }, 400);
+      } else if (action === 'acctunlock') {
+        // A name locked by the per-account brute-force guard (see accountFailure).
+        const u = String(body.user || '').trim().toLowerCase();
+        if (!/^[a-z0-9_.-]{1,40}$/.test(u)) return json({ error: 'invalid name' }, 400);
+        const l = await kv.get('acctlock:' + u, 'json');
+        if (!l) return json({ error: 'That account isn’t locked.' }, 404);
+        await kv.delete('acctlock:' + u);
+        await kv.delete('acctfail:' + u);
+        await signinLog({ type: 'acctunlock', user: l.user || u, by, detail: '' });
+        await logAudit(kv, { route: url.pathname, action, target: u, admin: principal.role });
+      } else if (action !== 'list') return json({ error: 'action must be list, unlock, keep or acctunlock' }, 400);
       const now = Date.now();
       const cfg = await getConfig(kv);
       const names = (cfg.allowlist && cfg.allowlist.users) || [];
@@ -1992,7 +2054,9 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         .map((r) => ({ user: r.user, at: r.at, sameDevice: !!r.sameDevice, sameBrowser: !!r.sameBrowser, ua: r.ua, country: r.country, note: r.note || '', email: r.studentId ? r.studentId + '@' + SCHOOL_DOMAIN : '' }));
       const locks = (await listPrefix('devlock:')).filter((l) => l.status === 'locked' && l.until > now)
         .map((l) => ({ id: l.id, at: l.at, until: l.until, names: l.names || [], ua: l.ua, country: l.country, notAllowed: l.notAllowed || 0, wrong: l.wrong || 0, kept: !!l.kept }));
-      return json({ ok: true, domain: SCHOOL_DOMAIN, people, requests, locks, log: ((await kv.get('signinlog', 'json')) || []).slice(0, 100) });
+      const accountLocks = (await listPrefix('acctlock:')).filter((l) => l.until > now)
+        .map((l) => ({ user: l.user, at: l.at, until: l.until, tries: l.tries || 0, how: l.how || [], country: l.country }));
+      return json({ ok: true, domain: SCHOOL_DOMAIN, people, requests, locks, accountLocks, log: ((await kv.get('signinlog', 'json')) || []).slice(0, 100) });
     }
 
     // Free access (Admin → Security → Free access; moderators: Moderation):
@@ -2287,6 +2351,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         }
         const acct = await getAcct(kv, user);
         if (!acct) return json({ ok: false, error: 'No account with that name yet. Use Create to make one.', missing: true }, 404);
+        const alock = await accountLock(acct.user);
+        if (alock) return accountLockedResponse(alock);
         if (String(acct.user).toLowerCase() === OWNER) return json({ ok: false, error: 'The owner resets their PIN with the owner code.' }, 400);
         const rk = 'pinreq-rate:' + (await sha256hex('ip|' + ip)).slice(0, 24) + ':' + Math.floor(Date.now() / 3600e3);
         const n = parseInt(await kv.get(rk), 10) || 0;
@@ -2296,6 +2362,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           await noteFailure(kv, 'login', ip);
           await noteSec('pinreq_wrong_student', { user: acct.user });
           await signinLog({ type: 'pinwrong', user: acct.user, detail: 'student number didn’t match' });
+          const al = await accountFailure(acct.user, 'student numbers');
+          if (al) return accountLockedResponse(al);
           const l = await deviceFail(dev, 'wrong', acct.user);
           if (l) return lockedResponse(l);
           return json({ ok: false, error: 'That student number doesn’t match this account. Use the one you gave when you subscribed.', wrongStudent: true }, 403);
@@ -2355,6 +2423,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         const verifier = String(body.verifier || '');
         const acct = await getAcct(kv, user);
         if (!acct) return json({ ok: false, error: 'no account', missing: true }, 404);
+        const alock = await accountLock(acct.user);
+        if (alock) { await noteSec('login_account_locked', { user: acct.user }); return accountLockedResponse(alock); }
         let ok = await timingSafeEqualStr(await sha256hex(acct.salt + '|' + verifier), acct.verifier);
         // The owner reset this PIN (Admin → Reset PIN): the one-time reset
         // code they gave the person sets the new PIN typed with it. The old
@@ -2365,6 +2435,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           if (!(await timingSafeEqualStr(normInvite(body.invite), normInvite(reset.code)))) {
             await noteFailure(kv, 'login', ip);
             await noteSec('pinreset_wrong', { user: acct.user });
+            const al = await accountFailure(acct.user, 'reset codes');
+            if (al) return accountLockedResponse(al);
             const l = await deviceFail(dev, 'wrong', acct.user);
             if (l) return lockedResponse(l);
             return json({ ok: false, error: 'That reset code isn’t right.', inviteRequired: true, pinReset: true, wrongInvite: true }, 403);
@@ -2382,12 +2454,15 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         if (!ok) {
           await noteFailure(kv, 'login', ip);
           await noteSec('login_failed', { user: acct.user });
+          const al = await accountFailure(acct.user, 'PINs');
+          if (al) return accountLockedResponse(al);
           const l = await deviceFail(dev, 'wrong', acct.user);
           if (l) return lockedResponse(l);
           return json({ ok: false, error: 'wrong PIN for this account' }, 401);
         }
         if (acct.disabled) { await noteSec('login_disabled', { user: acct.user }); return json({ ok: false, error: 'this account is disabled' }, 403); }
         await clearFailures(kv, 'login', ip);
+        await clearAccountFailures(acct.user);
         // Only checked after the PIN is right, so this never tells a stranger
         // whether the name is in use.
         // The phone app: owner and admins only.
@@ -3758,15 +3833,19 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
             // PIN (the same verifier as signing in), with the sign-in lockout.
             const ip = clientIp(req);
             if (await isLockedOut(kv, 'login', ip)) return json({ ok: false, error: 'Too many wrong PINs. Try again later.' }, 429);
+            const olock = await accountLock(OWNER);
+            if (olock) return accountLockedResponse(olock);
             const acct = await getAcct(kv, OWNER);
             const verifier = String(body.verifier || '');
             const ok = !!acct && acct.ownerVerified && /^[0-9a-f]{64}$/.test(verifier) && await timingSafeEqualStr(await sha256hex(acct.salt + '|' + verifier), acct.verifier);
             if (!ok) {
               await noteFailure(kv, 'login', ip);
               await noteSec('login_failed', { user: OWNER, note: 'owner test contribution' });
+              if (acct) { const al = await accountFailure(OWNER, 'PINs (subscribe page)'); if (al) return accountLockedResponse(al); }
               return json({ ok: false, error: 'Wrong PIN.' }, 401);
             }
             await clearFailures(kv, 'login', ip);
+            await clearAccountFailures(OWNER);
           }
           const cents = contribCents(body.cents, st.ownerTest ? OWNER_CONTRIB_MIN_CENTS : undefined);
           if (!cents) return json({ ok: false, error: st.ownerTest ? 'Pick an amount from $1 to $500.' : 'Pick an amount from $6 to $500.' }, 400);
@@ -4924,6 +5003,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           if (!a) return json({ error: 'no account' }, 404);
           const code = makeInviteCode(), until = Date.now() + 7 * 864e5;
           await kv.put(pinResetKey(u), JSON.stringify({ code, until, at: Date.now(), by: OWNER }), { expirationTtl: 7 * 24 * 3600 });
+          await kv.delete('acctlock:' + u.toLowerCase()); await kv.delete('acctfail:' + u.toLowerCase());
           a.epoch = (a.epoch || 0) + 1; a.sessions = [];
           await kv.put(acctKey(u), JSON.stringify(a));
           await logAudit(kv, { route: url.pathname, action, target: u });

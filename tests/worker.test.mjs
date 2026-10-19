@@ -125,10 +125,38 @@ test('accounts: register, login, wrong PIN, lockout, sessions and revoke', async
   assert.equal((await c.call('/auth/revoke', { method: 'POST', headers: sess(good.data.token) })).status, 200);
   assert.equal((await c.call('/auth/me', { headers: sess(good.data.token) })).status, 401);
   assert.equal((await c.call('/auth/me', { headers: sess(reg.data.token) })).status, 401);
-  // Brute force is throttled.
-  for (let i = 0; i < 10; i++) await c.call('/auth/login', { method: 'POST', body: { user: 'alice', verifier: verifierFor('x', String(i)) }, ip: '9.9.9.9' });
-  const locked = await c.call('/auth/login', { method: 'POST', body: { user: 'alice', verifier: verifierFor('Alice', '1234') }, ip: '9.9.9.9' });
-  assert.equal(locked.status, 429);
+  // Brute force is stopped per ACCOUNT, not just per network or device: 8
+  // wrong PINs from 8 different networks and devices lock the name.
+  const dev = (i) => String(i).padStart(32, 'a');
+  for (let i = 0; i < 7; i++) {
+    const r = await c.call('/auth/login', { method: 'POST', body: { user: 'alice', verifier: verifierFor('x', String(i)), device: dev(i) }, ip: '9.9.9.' + i });
+    assert.equal(r.status, 401, 'wrong PIN ' + (i + 1));
+  }
+  const eighth = await c.call('/auth/login', { method: 'POST', body: { user: 'alice', verifier: verifierFor('x', '7'), device: dev(7) }, ip: '9.9.9.7' });
+  assert.equal(eighth.status, 423);
+  assert.equal(eighth.data.accountLocked, true);
+  // Locked: even the right PIN, from a fresh network and device, is refused.
+  const locked = await c.call('/auth/login', { method: 'POST', body: { user: 'alice', verifier: verifierFor('Alice', '1234'), device: dev(99) }, ip: '8.8.8.8' });
+  assert.equal(locked.status, 423);
+  // The owner sees it in Sign-in help and unlocks it; then the right PIN works again.
+  const help = await c.call('/admin/signin-help', { method: 'POST', headers: owner, body: { action: 'list' } });
+  assert.deepEqual(help.data.accountLocks.map((l) => [l.user, l.tries]), [['Alice', 8]]);
+  assert.equal((await c.call('/admin/signin-help', { method: 'POST', headers: owner, body: { action: 'acctunlock', user: 'alice' } })).status, 200);
+  assert.equal((await c.call('/admin/signin-help', { method: 'POST', headers: owner, body: { action: 'list' } })).data.accountLocks.length, 0);
+  assert.equal((await c.call('/auth/login', { method: 'POST', body: { user: 'alice', verifier: verifierFor('Alice', '1234'), device: dev(98) }, ip: '8.8.8.8' })).status, 200);
+  // A right PIN resets the count: 7 more wrong ones don't lock it.
+  for (let i = 0; i < 7; i++) await c.call('/auth/login', { method: 'POST', body: { user: 'alice', verifier: verifierFor('x', 'b' + i), device: dev(50 + i) }, ip: '7.7.7.' + i });
+  assert.equal((await c.call('/auth/login', { method: 'POST', body: { user: 'alice', verifier: verifierFor('x', 'c'), device: dev(60) }, ip: '7.7.8.1' })).status, 423, 'the 8th since the last good sign-in locks it');
+  // The per-network limit still applies too (30 wrong tries from one network,
+  // spread over names so no single account locks first). It's high because a
+  // whole school shares one public IP.
+  const c2 = makeClient(makeEnv());
+  const five = ['bea', 'cy', 'di', 'ed', 'fay'];
+  for (const u of five) await signUp(c2, u);
+  for (const u of five) for (let i = 0; i < 6; i++) await c2.call('/auth/login', { method: 'POST', body: { user: u, verifier: verifierFor('x', u + i) }, ip: '6.6.6.6' });
+  assert.equal((await c2.call('/auth/login', { method: 'POST', body: { user: 'bea', verifier: verifierFor('bea', '1234') }, ip: '6.6.6.6' })).status, 429);
+  const other = await c2.call('/auth/login', { method: 'POST', body: { user: 'bea', verifier: verifierFor('bea', '1234') }, ip: '6.6.6.7' });
+  assert.ok(![429, 423, 401].includes(other.status), 'other networks unaffected (got ' + other.status + ')');
 });
 
 test('owner name can only be claimed with OWNER_CODE', async () => {
