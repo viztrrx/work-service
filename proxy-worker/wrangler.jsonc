@@ -13,6 +13,6 @@
     //   "https://example.com https://www.example.org"
     // Only list sites you own or are authorized to proxy. IP addresses,
     // localhost, private/internal names and non-HTTPS are always refused.
-    "TARGET_ORIGINS": "https://example.com"
+    "TARGET_ORIGINS": "https://example.com https://youtube.com"
   }
 }
