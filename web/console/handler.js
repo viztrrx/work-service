@@ -6,7 +6,7 @@
 // a copy for offline launches.
 import assets from './assets.generated.js';
 
-export const CONSOLE_SCRIPT_SRC = 'https://raw.githubusercontent.com/viztrrx/donnajbesaints/main/script.js';
+export const CONSOLE_SCRIPT_SRC = 'https://raw.githubusercontent.com/viztrrx/work-service/main/script.js';
 const MAX_SCRIPT_BYTES = 8 * 1024 * 1024;
 const baseHeaders = {
   'X-Content-Type-Options': 'nosniff',

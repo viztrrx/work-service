@@ -1,4 +1,4 @@
-# Handoff: Saints Service (donnajbesaints)
+# Handoff: Saints Service (work-service)
 
 Everything the next Claude session needs: who the owner is and how they
 work, what the project is, how it's built, every feature and where it lives,

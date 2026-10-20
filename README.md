@@ -37,7 +37,7 @@ Every screenshot below comes from the current build on a demo page, with demo ac
 3. Paste and run:
 
 ```js
-fetch('https://raw.githubusercontent.com/viztrrx/donnajbesaints/main/script.js')
+fetch('https://raw.githubusercontent.com/viztrrx/work-service/main/script.js')
   .then(r => r.text())
   .then(eval)
 ```
@@ -51,7 +51,7 @@ The first time you use an AI feature it asks for an API key. Keys live in that s
 Create a new bookmark and use this as the URL, so it's one click on any page:
 
 ```
-javascript:fetch('https://raw.githubusercontent.com/viztrrx/donnajbesaints/main/script.js').then(r=>r.text()).then(eval)
+javascript:fetch('https://raw.githubusercontent.com/viztrrx/work-service/main/script.js').then(r=>r.text()).then(eval)
 ```
 
 A DevTools **Snippet** (Sources → Snippets) works too, and survives navigation better than retyping the fetch.
@@ -61,7 +61,7 @@ A DevTools **Snippet** (Sources → Snippets) works too, and survives navigation
 iOS **Smart Punctuation** turns the `'` you type into a curly `‘`, which JavaScript can't read. The console then shows `SyntaxError: Invalid character '\u2018'` before `script.js` is even downloaded. Use this version, whose backticks iOS leaves alone:
 
 ```js
-fetch(`https://raw.githubusercontent.com/viztrrx/donnajbesaints/main/script.js`).then(r=>r.text()).then(eval)
+fetch(`https://raw.githubusercontent.com/viztrrx/work-service/main/script.js`).then(r=>r.text()).then(eval)
 ```
 
 Pasting the command also works; the problem only happens when it's typed. You can also turn off **Settings → General → Keyboard → Smart Punctuation**.

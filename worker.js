@@ -934,7 +934,7 @@ export default {
   // New York time across the DST boundary (early Nov/mid Mar) — set here to
   // land at local midnight during EST; during EDT it'll fire at 1am instead.
   // Add/adjust the actual schedule in the dashboard: Workers & Pages →
-  // donnajbesaints → Triggers → Cron Triggers → Add "0 5 * * *".
+  // donnajbe → Triggers → Cron Triggers → Add "0 5 * * *".
   async scheduled(event, env, ctx) {
     const kv = env && env.TELEMETRY;
     if (!kv) return;
@@ -6610,7 +6610,7 @@ async function clearAllChatMessages(kv, env) {
 // is proxied; the peer-to-peer traffic goes between the players' browsers, or
 // through a TURN server the relay names. A worker cannot carry WebRTC.
 // ============================================================================
-const EAGLER_DEFAULT_LOADER = 'https://raw.githubusercontent.com/viztrrx/donnajbesaints/main/eaglercraft/loader/';
+const EAGLER_DEFAULT_LOADER = 'https://raw.githubusercontent.com/viztrrx/work-service/main/eaglercraft/loader/';
 // The relays the official EaglercraftX 1.8 index.html ships with.
 const EAGLER_DEFAULT_RELAYS = ['wss://relay.deev.is/', 'wss://relay.lax1dude.net/', 'wss://relay.shhnowisnottheti.me/'];
 const EAGLER_TYPES = {

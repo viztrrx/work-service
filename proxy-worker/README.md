@@ -1,12 +1,12 @@
 # Saints Proxy Worker (`saints-proxy-test`)
 
-A **restricted multi-site proxy** on Cloudflare Workers for [Saints Service](https://github.com/viztrrx/donnajbesaints)'s Proxy tab. It opens **only the HTTPS sites you approve** in its configuration, for reading (GET/HEAD). It is **not** an unrestricted web proxy, and not a Scramjet/Ultraviolet-style browser: anything not on the approved list is refused.
+A **restricted multi-site proxy** on Cloudflare Workers for [Saints Service](https://github.com/viztrrx/work-service)'s Proxy tab. It opens **only the HTTPS sites you approve** in its configuration, for reading (GET/HEAD). It is **not** an unrestricted web proxy, and not a Scramjet/Ultraviolet-style browser: anything not on the approved list is refused.
 
 Only approve sites you **own or are authorized to proxy**.
 
 ## Deploy (Cloudflare Builds)
 
-1. Cloudflare → **Workers & Pages** → the Worker connected to `viztrrx/donnajbesaints`, branch `main` (do **not** reconnect the `donnajbe` Worker).
+1. Cloudflare → **Workers & Pages** → the Worker connected to `viztrrx/work-service`, branch `main` (do **not** reconnect the `donnajbe` Worker).
 2. Root `./`, deploy command:
    ```sh
    npx wrangler deploy --config proxy-worker/wrangler.jsonc
