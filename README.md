@@ -849,17 +849,16 @@ Memory needs a server account. Signing in or signing up links your local profile
 
 ![The Proxy tab](docs/screenshots/12-proxy-tab/1-connected.png)
 
-The **Proxy** tab browses through the **Saints proxy Worker**, a separate Cloudflare Worker in this repo (`proxy-worker/`, deployed as `saints-proxy-test` at `https://saints-proxy-test.viztrrx.workers.dev`). It replaced the old Scramjet-on-localhost setup.
+The **Proxy** tab browses through the **Saints proxy Worker**, a separate Cloudflare Worker in this repo (`proxy-worker/`, deployed as `saints-proxy-test` at `https://saints-proxy-test.viztrrx.workers.dev`). It opens **only the sites approved on that Worker**: sites you own or are allowed to proxy. Everything else is refused.
 
-- **First open:** the Worker's connection test page (`/preview`) appears in the tab: "Connected · connection test".
-- **The address bar** opens the one approved site, **example.com** (`example.com`, `https://example.com/page`, or `/page`). It goes through the Worker's `/site/…` route, and the bar shows the real address. **Home** goes back to the connection test, **Reload** loads the page again, and the arrow opens the current page in a new tab.
-- **Any other site** (google.com, www.example.com, look-alikes like example.com.evil.test, `javascript:` links) is refused with an explanation, and the page you were on stays. This is a restricted test proxy: one destination, GET/HEAD only, no forms or sign-ins, and no WebSockets. Links inside a page to *other* sites (like the "More information" link on example.com) leave the proxy and open directly.
-- **Clear states:** Connecting… (with the moving bar), Connected / Loaded, **Can't reach the proxy Worker** (down, wrong address, or the network blocks it), **The proxy Worker answered with an error (HTTP 500)**, **didn't respond in 15 seconds**, and **Blocked by this website** (the website the console is on forbids embedded pages through its security policy). Each comes with **Retry** and/or **Open in a new tab**.
-- **Switching tabs** keeps the same page; nothing reloads.
-- **Safety:** the frame is sandboxed. The page inside can't navigate or take over the website around it, and it gets no camera, microphone or location access. No referrer is sent, and only Worker addresses ever go in the frame (never your Saints session or tokens).
-- **Connection settings → Proxy Worker address:** empty means the Saints proxy. Only `https://` addresses are accepted (or `http://localhost` for testing). Anyone who had the old `https://localhost:4141` saved is moved to the Worker automatically.
-
-To change the approved destination, set `TARGET_ORIGIN` in `proxy-worker/wrangler.jsonc`. Only use a site you own or are allowed to proxy. The Worker tells the tab which site is allowed through `/health`. See `proxy-worker/README.md`.
+- **Approving sites:** list them in `TARGET_ORIGINS` in `proxy-worker/wrangler.jsonc` (e.g. `"https://example.com https://www.my-site.org"`), then push to `main`. Only plain `https://` sites are accepted; IP addresses, localhost and private or internal names are always refused. Full details are in `proxy-worker/README.md`.
+- **First open:** the Worker's connection test, listing the approved sites: "Connected · connection test".
+- **Address bar:** type an approved site (`www.my-site.org/page`, a full `https://` address, or `/page` for the site you're on). The approved sites are suggested as you type. Links, images, styles and scripts inside approved sites stay in the proxy, including links to another approved site. **Home**, **Reload**, **Go** and **open in a new tab** work as before.
+- **Clear errors:** not on the approved list (with one-tap buttons for the approved sites), **Website unavailable**, **HTTP 404 / 500…**, **Website timed out**, **Redirect not permitted**, **Can't reach the proxy Worker**, **The proxy Worker answered with an error**, **Blocked by this website** (the site the console is on forbids embedded pages), and **Access key needed**. Each comes with **Retry** and/or **Open in a new tab**; the page you were on stays.
+- **Switching tabs** keeps the page, and the last page comes back next time.
+- **Safety:** each proxied page runs isolated: approved sites can't read each other's storage, and nothing they store persists. Pages can't take over the website around the console, and they get no camera, microphone or location. No referrer, cookies or Saints session or tokens are ever sent.
+- **Doesn't work:** sign-ins and forms, sites that need cookies or storage, single-page apps and JavaScript `fetch`, WebSockets, and sites that forbid embedding (use **Open in a new tab**). See the compatibility table in `proxy-worker/README.md`.
+- **Connection settings:** the **Proxy Worker address** (empty means the Saints proxy; old `localhost:4141` settings move automatically) and an optional **Proxy access key**, if the Worker sets `PROXY_KEY`.
 
 **Research mode** lives here: the AI picks a few authoritative sources, the Worker fetches each one server\-side, and you get back a brief with citations.
 

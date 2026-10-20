@@ -8,7 +8,11 @@
   "compatibility_date": "2026-10-19",
   "workers_dev": true,
   "vars": {
-    // Only HTTPS requests to this single destination are allowed.
-    "TARGET_ORIGIN": "https://example.com"
+    // The approved HTTPS sites this proxy may open (and nothing else).
+    // Separate several with spaces or commas, e.g.
+    //   "https://example.com https://www.example.org"
+    // Only list sites you own or are authorized to proxy. IP addresses,
+    // localhost, private/internal names and non-HTTPS are always refused.
+    "TARGET_ORIGINS": "https://example.com"
   }
 }

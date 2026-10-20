@@ -829,7 +829,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       console: ['feature', 'At the top for everyone: days and hours left (or “Renews in”, or “No expiry” for staff) and a Renew button: the subscribe link, “Text me the link”, and who to give cash to; a locked account can be unlocked with its school email (once a day)'],
       admin: ['feature', 'Security → Cash & texting (owner): texting status, who takes cash (you and the admins automatically, or your own list), and who texted CASH'] } },
     { at: '2026-10-20T10:00:00-04:00', commit: '', title: 'Proxy uses the Saints proxy on Cloudflare', parts: {
-      browser: ['redesign', 'The Proxy tab now connects to the Saints proxy Worker (saints-proxy-test on Cloudflare) instead of a localhost Scramjet server: a connection test first, then the approved test site (example.com); other sites are explained, not silently broken; clear loading, timeout, blocked-by-this-website and retry states'] } }
+      browser: ['redesign', 'The Proxy tab now connects to the Saints proxy Worker (saints-proxy-test on Cloudflare) instead of a localhost Scramjet server: a connection test first, then the approved test site (example.com); other sites are explained, not silently broken; clear loading, timeout, blocked-by-this-website and retry states'] } },
+    { at: '2026-10-20T12:00:00-04:00', commit: '', title: 'Proxy: several approved sites', parts: {
+      browser: ['feature', 'The Proxy tab opens any site the owner approved on the proxy (not just example.com): suggestions in the address bar, links and images inside those sites stay in the proxy, and errors now say what went wrong (website down, HTTP 404, timed out, redirect not permitted, not on the approved list); each proxied page is isolated (no shared storage)'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -1368,6 +1370,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpx-proxy-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
       .gpx-proxy-actions .gpa-btn { min-height: 30px; font-size: 12.5px; }
       .gpx-field-hint { margin: 6px 0 0; font-size: 12px; }
+      .gpx-browser-view { -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+      /* iOS Safari zooms the page when a field under 16px is focused. */
+      @supports (-webkit-touch-callout: none) { #gpa-proxy-url, #gpa-proxy-server, #gpa-proxy-key { font-size: 16px; } }
       .gpx-browser-view { position: relative; flex: 1; min-height: 280px; display: flex; }
       .gpx-browser-view .gpa-iframe { flex: 1; border: none; border-radius: 0; min-height: 280px; height: auto; background: var(--gpa-bg); }
       .gpx-browser .gpx-details { border: none; border-top: 1px solid var(--gpa-border); border-radius: 0; background: transparent; }
@@ -3786,7 +3791,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       <div class="gpa-pane" data-pane="browser">
         <div class="gpx-room">
           ${gpxHero({ room: 'browser', title: 'Proxy', status: 'Not connected',
-            desc: 'Browse through the Saints proxy on Cloudflare. It’s a restricted test for now: it opens one approved site (example.com) and nothing else.' })}
+            desc: 'Browse through the Saints proxy on Cloudflare. It opens only the sites approved on the proxy (set by the owner) and nothing else.' })}
           <section class="gpx-browser">
             <div class="gpx-browser-bar">
               <div class="gpx-browser-nav">
@@ -3795,7 +3800,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
               </div>
               <div class="gpx-address">
                 ${GPS_ICONS.globe}
-                <input id="gpa-proxy-url" class="gpa-input" placeholder="Enter a website or URL…" autocomplete="off" aria-label="Address" />
+                <input id="gpa-proxy-url" class="gpa-input" placeholder="Enter a website or URL…" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url" enterkeyhint="go" list="gpa-proxy-sites" aria-label="Address" />
+                <datalist id="gpa-proxy-sites"></datalist>
               </div>
               <button id="gpa-proxy-go" class="gpa-btn primary">Go</button>
               <button id="gpa-proxy-popout" class="gpa-btn gpx-icon-btn" title="Open this page in a new tab" aria-label="Open in a new tab">${GPS_ICONS.external}</button>
@@ -3804,13 +3810,15 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             <div class="gpx-browser-status"><span class="gpx-dot"></span><span id="gpa-proxy-status" class="gpa-sub">Not connected</span></div>
             <div id="gpa-proxy-error" class="gpx-inline-error" style="display:none;"></div>
             <div class="gpx-browser-view">
-              <iframe id="gpa-proxy-frame" class="gpa-iframe" title="Saints proxy" allow="fullscreen; clipboard-write" referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"></iframe>
+              <iframe id="gpa-proxy-frame" class="gpa-iframe" title="Saints proxy" allow="fullscreen; clipboard-write" referrerpolicy="no-referrer" sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"></iframe>
             </div>
             <details class="gpx-details">
               <summary>${gpxLbl('settings', 'Connection settings')}</summary>
               <label class="gpx-field-label" for="gpa-proxy-server">Proxy Worker address</label>
               <input id="gpa-proxy-server" class="gpa-input" placeholder="https://saints-proxy-test.viztrrx.workers.dev" autocomplete="off" spellcheck="false" />
               <p id="gpa-proxy-server-hint" class="gpa-sub gpx-field-hint">Leave it empty for the Saints proxy (saints-proxy-test). Only change it to a Saints proxy Worker you run.</p>
+              <label class="gpx-field-label" for="gpa-proxy-key">Proxy access key (optional)</label>
+              <input id="gpa-proxy-key" class="gpa-input" type="password" placeholder="Only if the proxy asks for one" autocomplete="off" spellcheck="false" />
             </details>
           </section>
           <section class="gpa-card gpx-card">
@@ -11862,15 +11870,20 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // data-tab/data-pane key stays "browser" (other code keys off it).
   //
   // That Worker is a RESTRICTED proxy, not a general one: it serves
-  //   /health  JSON {status, target} (CORS-readable), the allowed origin
-  //   /preview its own connection-test page
-  //   /site/…  the one allowed HTTPS origin (TARGET_ORIGIN), GET/HEAD only
-  // So the address bar only maps URLs on that origin to /site/…; anything
-  // else gets an honest "not supported" instead of a silent failure. A
-  // destination is never written straight into the frame (that would skip
-  // the proxy), and the frame never gets the console's tokens or session:
-  // only Worker URLs go in its src, with no referrer, sandboxed without
-  // top-navigation so the page inside can't take over the host page.
+  //   /health          JSON {status, targets:[host…]} (CORS-readable)
+  //   /preview         its own connection-test page
+  //   /site/<host>/…   one of the approved HTTPS sites (TARGET_ORIGINS),
+  //                    GET/HEAD only
+  //   /status/<host>/… {outcome, status} for a page (no content), so this
+  //                    tab can tell "site down" / HTTP errors / timeouts apart
+  // The address bar maps only approved hosts to /site/<host>/…; anything
+  // else gets an honest "not supported". The Worker enforces all of this
+  // itself (this side is just for clear messages). A destination is never
+  // written straight into the frame, and the frame never gets the console's
+  // tokens or session: only Worker URLs go in its src, with no referrer,
+  // sandboxed WITHOUT allow-same-origin (each page gets its own opaque
+  // origin, so approved sites can't read each other's storage) and without
+  // top-navigation (the page inside can't take over the host page).
   const PROXY_SERVER_KEY = 'gpa_proxy_server_url';
   const PROXY_LAST_DEST_KEY = 'gpa_proxy_last_destination';
   const DEFAULT_PROXY_SERVER = 'https://saints-proxy-test.viztrrx.workers.dev';
@@ -11878,7 +11891,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   const LEGACY_PROXY_SERVERS = ['https://localhost:4141', 'http://localhost:4141'];
   // What the Worker allows until /health says otherwise (it can't be read
   // on pages whose CSP blocks connections to it).
-  const DEFAULT_PROXY_TARGET = 'https://example.com';
+  const DEFAULT_PROXY_TARGETS = ['example.com'];
+  // Optional access key (only if the Worker sets PROXY_KEY); kept in this
+  // browser only and sent as ?k= on /site/ and /status/ requests.
+  const PROXY_KEY_KEY = 'gpa_proxy_key';
   const PROXY_LOAD_TIMEOUT_MS = 15000;
 
   const proxyUrlInput = panel.querySelector('#gpa-proxy-url');
@@ -11890,6 +11906,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   const proxyStatusEl = panel.querySelector('#gpa-proxy-status');
   const proxyServerInput = panel.querySelector('#gpa-proxy-server');
   const proxyServerHint = panel.querySelector('#gpa-proxy-server-hint');
+  const proxyKeyInput = panel.querySelector('#gpa-proxy-key');
+  const proxySitesList = panel.querySelector('#gpa-proxy-sites');
   const proxyErrorEl = panel.querySelector('#gpa-proxy-error');
 
   // An https:// origin, or http:// on this computer (local testing only).
@@ -11907,7 +11925,15 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     return cleanProxyServer(v) || DEFAULT_PROXY_SERVER;
   }
   const proxyOrigin = () => proxyServerUrl();
-  const proxy = { target: DEFAULT_PROXY_TARGET, current: '', pending: null, timer: 0, cspTimer: 0, blocked: false };
+  const proxy = { targets: DEFAULT_PROXY_TARGETS.slice(), current: '', pending: null, timer: 0, cspTimer: 0, blocked: false };
+  const HOST_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+  function proxyKey() { try { return localStorage.getItem(PROXY_KEY_KEY) || ''; } catch (e) { return ''; } }
+  // Adds the access key to a Worker /site/ or /status/ URL (if one is set).
+  function withKey(u) {
+    const k = proxyKey();
+    if (!k || !/\/(site|status)\//.test(u)) return u;
+    try { const x = new URL(u); x.searchParams.set('k', k); return x.href; } catch (e) { return u; }
+  }
 
   function setProxyStatus(text, isError) {
     proxyStatusEl.textContent = text;
@@ -11949,7 +11975,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     try {
       const r = await fetch(proxyServerUrl() + '/health', { cache: 'no-store', credentials: 'omit', signal: ctl ? ctl.signal : undefined });
       const d = await r.json().catch(() => ({}));
-      if (d && typeof d.target === 'string' && /^https:\/\/[^/]+$/.test(d.target)) proxy.target = d.target;
+      const list = d && Array.isArray(d.targets) ? d.targets : (d && typeof d.target === 'string' ? [d.target.replace(/^https:\/\//, '')] : null);
+      if (list) { const ok = list.map((h) => String(h).toLowerCase()).filter((h) => HOST_RE.test(h)); if (ok.length) proxy.targets = ok; }
       return { reached: true, ok: r.ok && d.status === 'ok', status: r.status };
     } catch (e) {
       await new Promise((res) => setTimeout(res, 50));   // the CSP report can arrive just after the rejection
@@ -12027,7 +12054,32 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         showProxyError('Can’t reach the proxy Worker' + (h.timedOut ? ' (no answer in 8 seconds)' : '') + '. It may be down, the address in Connection settings may be wrong, or this network may block it.', [['Retry', retryProxy], ['Open in a new tab', openProxyTab]]);
       }
       updateProxyPlaceholder();
+      if (h.reached && h.ok && /\/site\//.test(frameUrl)) proxySiteStatus(frameUrl);
     });
+  }
+  // The frame can't tell us the page's HTTP status (it's another origin), so
+  // ask the Worker's /status/ for the same address: only the status code and
+  // a one-word outcome come back, never the page.
+  async function proxySiteStatus(frameUrl) {
+    let d = null;
+    try {
+      const u = new URL(frameUrl);
+      u.pathname = u.pathname.replace(/^\/site\//, '/status/');
+      const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+      const t = setTimeout(() => { if (ctl) ctl.abort(); }, 15000);
+      const r = await fetch(u.href, { cache: 'no-store', credentials: 'omit', signal: ctl ? ctl.signal : undefined }).finally(() => clearTimeout(t));
+      d = await r.json().catch(() => null);
+    } catch (e) { return; }   // couldn't ask (e.g. this page's CSP): say nothing more
+    if (!d || proxy.current !== frameUrl || proxy.blocked) return;
+    const where = proxyDisplay(frameUrl) || d.host || 'the site';
+    const say = (status, msg) => { finishProxyLoad(); setProxyStatus(status, true); showProxyError(msg, [['Retry', retryProxy], ['Open in a new tab', openProxyTab]]); };
+    if (d.outcome === 'unreachable') say('Website unavailable', (d.host || 'The site') + ' isn’t answering right now (the proxy Worker is fine). Try again later.');
+    else if (d.outcome === 'timeout') say('Website timed out', (d.host || 'The site') + ' took too long to answer. Try again in a moment.');
+    else if (d.outcome === 'http-error') say('HTTP ' + d.status, 'The site answered HTTP ' + d.status + (d.status === 404 ? ' (page not found)' : d.status >= 500 ? ' (a problem on the site’s side)' : '') + ' for ' + where + '.');
+    else if (d.outcome === 'redirect-blocked') say('Redirect not permitted', 'That page redirects to a site this proxy isn’t approved to open.');
+    else if (d.outcome === 'not-permitted') say('Not supported', 'The proxy Worker refused ' + where + ' (it isn’t on its approved list).');
+    else if (d.outcome === 'key-required') say('Access key needed', 'This proxy needs an access key. Add it under Connection settings → Proxy access key.');
+    else if (d.outcome === 'rate-limited') say('Too many requests', 'The proxy is busy. Wait a minute and try again.');
   }
   proxyFrame.addEventListener('load', () => {
     // Fires for about:blank too (Reload), and for the browser's own error
@@ -12045,12 +12097,19 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     showProxyError('Unable to load the proxy. Check the proxy Worker address in Connection settings, then try again.', [['Retry', retryProxy], ['Open in a new tab', openProxyTab]]);
   });
 
-  // Address bar ⇄ Worker URL. Only the allowed origin maps to /site/…
+  // Address bar ⇄ Worker URL. Only approved hosts map to /site/<host>/…
   const proxyPreviewUrl = () => proxyServerUrl() + '/preview';
+  const approvedList = () => proxy.targets.join(', ');
+  // The site the frame is on now (for "/path" typed in the bar).
+  function currentProxyHost() {
+    try { const m = /^\/site\/([^/]+)/.exec(new URL(proxy.current).pathname); if (m && proxy.targets.includes(m[1])) return m[1]; } catch (e) { /* none */ }
+    return proxy.targets[0] || '';
+  }
   function proxyDisplay(frameUrl) {
     try {
       const u = new URL(frameUrl);
-      if (u.pathname.startsWith('/site/')) return proxy.target + u.pathname.slice(5) + u.search + u.hash;
+      const m = /^\/site\/([^/]+)(\/.*)?$/.exec(u.pathname);
+      if (m) { u.searchParams.delete('k'); return 'https://' + m[1] + (m[2] || '/') + u.search + u.hash; }
     } catch (e) { /* not a URL */ }
     return '';
   }
@@ -12058,30 +12117,40 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     let input = String(raw || '').trim();
     if (!input) return { frameUrl: proxyPreviewUrl() };
     const base = proxyServerUrl();
-    let target;
-    try { target = new URL(proxy.target); } catch (e) { target = new URL(DEFAULT_PROXY_TARGET); }
-    if (input.startsWith('/')) input = target.origin + input;
+    if (input.startsWith('/')) input = 'https://' + currentProxyHost() + input;
     if (!/^[a-z][a-z0-9+.-]*:/i.test(input)) input = 'https://' + input;
     let u;
     try { u = new URL(input); } catch (e) { return { error: '“' + raw + '” isn’t a web address.' }; }
     if (u.protocol !== 'https:' && u.protocol !== 'http:') return { error: 'Only web addresses (https://…) can be opened here.' };
-    // A link to the Worker itself (its /preview or /site/ pages).
-    if (u.origin === base && (u.pathname === '/preview' || u.pathname === '/' || u.pathname.startsWith('/site/'))) return { frameUrl: base + u.pathname + u.search + u.hash };
-    // http://example.com → https (the Worker only fetches https).
-    if (u.protocol === 'http:' && u.hostname === target.hostname && !u.port) u = new URL('https://' + u.host + u.pathname + u.search + u.hash);
-    if (u.origin !== target.origin) {
-      return { error: 'This proxy only opens ' + target.host + ' for now (the approved test destination), so “' + u.host + '” isn’t supported. Other websites need a full proxy, which isn’t set up.' };
+    // A link to the Worker itself (its /preview or /site/<approved host>/ pages).
+    if (u.origin === base) {
+      const m = /^\/site\/([^/]+)/.exec(u.pathname);
+      if (u.pathname === '/preview' || u.pathname === '/') return { frameUrl: base + '/preview' };
+      if (m && proxy.targets.includes(m[1].toLowerCase())) return { frameUrl: withKey(base + u.pathname + u.search + u.hash), display: proxyDisplay(base + u.pathname + u.search + u.hash) };
+      return { error: 'That proxy address isn’t one of its approved sites (' + approvedList() + ').' };
     }
-    return { frameUrl: base + '/site' + (u.pathname || '/') + u.search + u.hash, display: u.href };
+    const host = u.hostname.toLowerCase();
+    // http://approved.site → https (the Worker only fetches https).
+    if (u.protocol === 'http:' && proxy.targets.includes(host) && !u.port) u = new URL('https://' + u.host + u.pathname + u.search + u.hash);
+    if (u.protocol !== 'https:' || u.port || u.username || u.password || !proxy.targets.includes(host)) {
+      return { error: 'This proxy only opens its approved sites (' + approvedList() + '), so “' + (u.host || raw) + '” isn’t supported. The owner can add sites they’re allowed to proxy on the Worker.' };
+    }
+    return { frameUrl: withKey(base + '/site/' + host + (u.pathname || '/') + u.search + u.hash), display: 'https://' + host + (u.pathname || '/') + u.search + u.hash };
   }
   function updateProxyPlaceholder() {
-    try { proxyUrlInput.placeholder = 'Try ' + new URL(proxy.target).host + ' (the approved test site)…'; } catch (e) { /* keep */ }
+    const first = proxy.targets[0];
+    proxyUrlInput.placeholder = first ? 'Try ' + first + (proxy.targets.length > 1 ? ' or another approved site' : ' (the approved site)') + '…' : 'No sites approved on the proxy yet';
+    // Suggestions in the address bar: the approved sites.
+    if (proxySitesList) {
+      proxySitesList.textContent = '';
+      proxy.targets.forEach((h) => { const o = document.createElement('option'); o.value = 'https://' + h + '/'; proxySitesList.appendChild(o); });
+    }
   }
   function loadProxyUrl() {
     const r = proxyRoute(proxyUrlInput.value);
     if (r.error) {
-      // The frame keeps what it was showing.
-      showProxyError(r.error, [['Open the approved site', () => { proxyUrlInput.value = proxy.target + '/'; loadProxyUrl(); }]]);
+      // The frame keeps what it was showing; offer the approved sites.
+      showProxyError(r.error, proxy.targets.slice(0, 4).map((h) => ['Open ' + h, () => { proxyUrlInput.value = 'https://' + h + '/'; loadProxyUrl(); }]));
       return;
     }
     proxyUrlInput.value = r.display || '';   // .value, never innerHTML
@@ -12110,13 +12179,21 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     if (proxyServerHint) { proxyServerHint.textContent = 'Saved. Default: ' + DEFAULT_PROXY_SERVER; proxyServerHint.style.color = ''; }
     try { localStorage.setItem(PROXY_SERVER_KEY, v === DEFAULT_PROXY_SERVER ? '' : v); } catch (e) { /* best-effort */ }
     proxyServerInput.value = v;
-    proxy.target = DEFAULT_PROXY_TARGET;
+    proxy.targets = DEFAULT_PROXY_TARGETS.slice();
     proxyUrlInput.value = '';
     proxyLoad(proxyPreviewUrl(), { force: true });
   });
 
+  if (proxyKeyInput) {
+    proxyKeyInput.value = proxyKey();
+    proxyKeyInput.addEventListener('change', () => {
+      try { const k = proxyKeyInput.value.trim(); if (k) localStorage.setItem(PROXY_KEY_KEY, k); else localStorage.removeItem(PROXY_KEY_KEY); } catch (e) { /* best-effort */ }
+      if (/\/site\//.test(proxy.current)) { const r = proxyRoute(proxyDisplay(proxy.current)); if (r.frameUrl) proxyLoad(r.frameUrl, { force: true }); }
+    });
+  }
+
   // First visit to the tab: the connection test (or the last page opened on
-  // the allowed site). Coming back later keeps whatever is showing.
+  // an approved site). Coming back later keeps whatever is showing.
   let proxyPaneInitialized = false;
   function activateProxyPane() {
     if (proxyPaneInitialized) return;
@@ -12124,9 +12201,14 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     updateProxyPlaceholder();
     let lastDest = '';
     try { lastDest = localStorage.getItem(PROXY_LAST_DEST_KEY) || ''; } catch (e) { /* ignore */ }
-    const r = lastDest ? proxyRoute(lastDest) : null;
-    if (r && r.frameUrl && !r.error) { proxyUrlInput.value = r.display || ''; proxyLoad(r.frameUrl); }
-    else proxyLoad(proxyPreviewUrl());
+    if (!lastDest) { proxyLoad(proxyPreviewUrl()); return; }
+    // Learn the approved list first, so a last page on any approved site comes back.
+    proxyHealth().then(() => {
+      updateProxyPlaceholder();
+      const r = proxyRoute(lastDest);
+      if (r && r.frameUrl && !r.error) { proxyUrlInput.value = r.display || ''; proxyLoad(r.frameUrl); }
+      else proxyLoad(proxyPreviewUrl());
+    });
   }
 
   // ---- Eaglercraft tab --------------------------------------------------------

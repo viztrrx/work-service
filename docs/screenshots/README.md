@@ -14,7 +14,7 @@ new subscriber and then the owner would see things.
 | [3-playlists](#3-playlists-everyone-signed-in) | Spotify / Apple Music playlist → YouTube links, for everyone; **new:** 10 new songs a day each, your limit card |
 | [4-youtube-to-mp3](#4-youtube-to-mp3-owner) | The MP3 converter in Music → My music |
 | [5-subscribe-page](#5-subscribe-page) | The payment page, the $6 contribution box, and **new:** your $1 test (owner only) |
-| [12-proxy-tab](#12-proxy-tab-saints-proxy-worker) | **New:** the Proxy tab on the Saints proxy Worker: connected, the approved site, other sites explained, Worker down, blocked by a website, light theme |
+| [12-proxy-tab](#12-proxy-tab-saints-proxy-worker) | **New:** the Proxy tab with several approved sites: a site loading through the proxy, HTTP 404, website down, other sites explained, blocked by a website, light theme |
 | [11-countdown-renew-texting](#11-countdown-renew-and-texting) | **New:** time left at the top for everyone, the Renew box (link, text me the link, paying cash), your Cash & texting card |
 | [10-security-review](#10-security-review-brute-force-proof-and-fix) | **New:** proof that PINs and student numbers could be brute-forced, and the fix |
 | [9-fold-top-card](#9-fold-the-top-card) | **New:** the Ask AI card (and every tab's top card) folds to a thin bar |
@@ -341,31 +341,37 @@ takes cash (empty = you and the admins automatically), and who texted CASH.
 
 ## 12. Proxy tab (Saints proxy Worker)
 
-Taken in the automated test with the **real** proxy Worker code running on
-the test computer. That computer has no internet, so where the approved site
-would show, you see the Worker's own "Couldn't reach the destination" page. On
-your real deployment it shows example.com.
+Taken in the automated test with the **real** proxy Worker code running
+locally. The approved sites here are two **test sites** made for the test
+(`fixture.saints-test.dev`, `docs.saints-test.dev`) plus one that's
+deliberately down. On your deployment, the tab shows the sites in your
+`TARGET_ORIGINS`.
 
-**Connected:** the Worker's connection test inside the tab.
+**Connected:** the Worker's connection test, listing the approved sites.
 
 <img src="12-proxy-tab/1-connected.png" width="640" alt="Proxy tab: Connected, connection test">
 
-**The approved site** (example.com) through the Worker's `/site/`:
+**An approved site, through the proxy:** its own styles (black background),
+image (red square) and script ("JS ran") all load through the Worker, and its
+links stay in the proxy. "storage: blocked" shows each proxied page is
+isolated.
 
-<img src="12-proxy-tab/2-approved-site.png" width="640" alt="example.com address loaded through /site/">
+<img src="12-proxy-tab/2-approved-site.png" width="640" alt="An approved site loaded through /site/">
 
-**Any other site is explained**, and the page stays:
+**Errors say what went wrong:** a page that doesn't exist (HTTP 404), and an
+approved site that's down.
 
-<img src="12-proxy-tab/3-other-site-explained.png" width="640" alt="google.com isn't supported">
+<img src="12-proxy-tab/3-http-404.png" width="640" alt="HTTP 404 named"> <img src="12-proxy-tab/4-website-down.png" width="640" alt="Website unavailable">
 
-**The Worker can't be reached:** Retry / Open in a new tab.
+**Any other site is explained**, with buttons for the approved ones, and the
+page stays:
 
-<img src="12-proxy-tab/4-worker-down.png" width="420" alt="Can't reach the proxy Worker">
+<img src="12-proxy-tab/5-other-site-explained.png" width="640" alt="google.com isn't supported; approved sites offered">
 
 **A website that forbids embedded pages:** Open in a new tab.
 
-<img src="12-proxy-tab/5-blocked-by-website.png" width="640" alt="Blocked by this website">
+<img src="12-proxy-tab/6-blocked-by-website.png" width="640" alt="Blocked by this website">
 
 **Light theme:**
 
-<img src="12-proxy-tab/6-light-theme.png" width="640" alt="Proxy tab in the white theme">
+<img src="12-proxy-tab/7-light-theme.png" width="640" alt="Proxy tab in the white theme">

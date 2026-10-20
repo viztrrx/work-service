@@ -13,6 +13,32 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **Proxy: several approved sites** (owner: "configure multiple websites
+  that I own or am authorized to proxy… not an unrestricted public relay").
+  proxy-worker/index.js rewritten: `TARGET_ORIGINS` (space/comma list;
+  `TARGET_ORIGIN` still merged), validated by `allowedOrigins()` (https,
+  no port/path/creds, `hostnameBlocked()`: IP literals incl. decimal/hex,
+  localhost, .local/.internal/.lan/.home.arpa/.intranet, metadata names,
+  dot-less). Routes: `/site/<host>/…` and `/status/<host>/…` share
+  `resolveSite()` (exact host match, target rebuilt on the origin, origin
+  re-checked); `/status/` = HEAD → `{outcome, status}` (ok/http-error/
+  redirect/redirect-blocked/unreachable/timeout/not-permitted/key-required/
+  rate-limited), CORS *, no content. Redirects only to approved origins
+  (`proxify()`); 12 s timeout (504), 12 MB cap (413 / stream error),
+  Cache-API soft rate limit (`RATE_PER_MIN`, default 240), optional
+  `PROXY_KEY` (?k=, soft gate). Rewriter covers a/area/img(+srcset)/source/
+  script/link/form/iframe/video/audio/poster; CSS url() and JS are NOT
+  rewritten. script.js: `proxy.targets` (from /health), `proxyRoute()`
+  multi-host, "/path" → current host (`currentProxyHost`), datalist
+  `#gpa-proxy-sites`, `proxySiteStatus()` after each /site/ load → named
+  errors, optional key (`gpa_proxy_key`, `withKey()`), frame sandbox WITHOUT
+  allow-same-origin (opaque origin per page: isolation; proxied sites get no
+  storage), iOS: 16px fields (no focus zoom), URL keyboard, overscroll
+  contain; last page restored after /health. Tests: proxy-worker.test.mjs
+  (6) and browser/proxy.mjs (50) with real HTTPS fixture sites
+  (fixtures/proxy-sites/setup.sh: throwaway CA + /etc/hosts, test containers
+  only). WebKit isn't installed here: Chromium + iPhone emulation only.
+  Before that:
   **Proxy tab → the Saints proxy Worker** (owner: integrate
   `https://saints-proxy-test.viztrrx.workers.dev` into the Proxy tab; keep the
   UI; restricted to its one origin; don't touch the root Worker). Two Workers
@@ -836,7 +862,8 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 
 | Commit | What |
 |---|---|
-| (this) | Proxy tab on the Saints proxy Worker (proxy-worker/) |
+| (this) | Proxy: several approved sites (allowlist, /status/, isolation) |
+| `31214c0` | Proxy tab on the Saints proxy Worker (proxy-worker/) |
 | `28202ba` | Countdown + Renew + Telnyx texting; self-unlock with school email |
 | `0203341` | Security: per-account brute-force lock (PIN, reset code, student number) |
 | `697270e` | Playlists: 10 new songs a day per person (admins too), owner-set |
@@ -911,7 +938,7 @@ node tests/browser/mp3.mjs                 # 51 (+1 NOT RUN: real YouTube downlo
 node tests/browser/subscribe.mjs           # 65
 node tests/browser/signin-help.mjs         # 52
 node tests/browser/renew.mjs               # 22
-node tests/browser/proxy.mjs               # 35 (real proxy Worker, run locally)
+node tests/browser/proxy.mjs               # 50 (real proxy Worker + HTTPS fixture sites; root, test containers)
 node tests/browser/usage-meter.mjs         # 16
 node tests/browser/usage-meter-sizes.mjs   # 25
 node tests/browser/ask-photo-size.mjs      # 6

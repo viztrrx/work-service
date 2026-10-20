@@ -1,14 +1,14 @@
 // The separate saints-proxy-test Worker (proxy-worker/index.js), run in Node
-// with a stubbed upstream. Workers' HTMLRewriter isn't in Node, so the link
+// with a stubbed upstream. Workers' HTMLRewriter isn't in Node, so link
 // rewriting is exercised through a minimal stand-in that calls the Worker's
-// own element handlers on each matching tag (the real one runs in
+// own element handlers on each matching tag (the real rewriter runs in
 // tests/browser/proxy.mjs, in workerd).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import worker from '../proxy-worker/index.js';
 
 const W = 'https://saints-proxy-test.viztrrx.workers.dev';
-const env = { TARGET_ORIGIN: 'https://example.com' };
+const env = { TARGET_ORIGINS: 'https://example.com, https://docs.example.org' };
 const call = (p, init = {}, e = env) => worker.fetch(new Request(W + p, init), e);
 
 function stubUpstream(handler) {
@@ -42,99 +42,180 @@ class FakeRewriter {
   }
 }
 
-test('proxy worker: health (CORS, which destination), preview, unknown paths', async () => {
+test('proxy: health lists every approved site (CORS); preview links them; config is validated', async () => {
   const h = await call('/health');
   assert.equal(h.status, 200);
-  assert.equal(h.headers.get('access-control-allow-origin'), '*', 'readable from Saints Service on any site');
-  assert.deepEqual(await h.json(), { status: 'ok', service: 'saints-proxy-test', target: 'https://example.com' });
-  const bad = await call('/health', {}, { TARGET_ORIGIN: 'http://example.com' });
-  assert.equal(bad.status, 500);
-  assert.equal((await bad.json()).status, 'misconfigured');
-  for (const p of ['/preview', '/']) {
-    const r = await call(p);
-    assert.equal(r.status, 200);
-    assert.match(r.headers.get('content-type'), /text\/html/);
-    assert.match(r.headers.get('content-security-policy'), /default-src 'none'/, 'no scripts on its own pages');
-    assert.equal(r.headers.get('x-frame-options'), null, 'the Proxy tab may frame it');
-    assert.match(await r.text(), /Cloudflare Worker connected/);
-  }
-  const nf = await call('/anything');
-  assert.equal(nf.status, 404);
-  assert.match(await nf.text(), /only has a connection test/);
-  const site = await call('/site?x=1');
+  assert.equal(h.headers.get('access-control-allow-origin'), '*');
+  assert.deepEqual(await h.json(), { status: 'ok', service: 'saints-proxy-test', targets: ['example.com', 'docs.example.org'], invalid: 0 });
+  // Back-compat: the old single TARGET_ORIGIN still works.
+  assert.deepEqual((await (await call('/health', {}, { TARGET_ORIGIN: 'https://example.com' })).json()).targets, ['example.com']);
+  // Unsafe entries are dropped (and counted): http, IP literals, localhost,
+  // private/internal names, metadata, ports, paths, credentials.
+  const bad = { TARGET_ORIGINS: [
+    'http://plain.example.com', 'https://127.0.0.1', 'https://10.0.0.5', 'https://[::1]', 'https://2130706433',
+    'https://localhost', 'https://printer.local', 'https://db.internal', 'https://metadata.google.internal',
+    'https://example.com:8443', 'https://example.com/path', 'https://user:pw@example.com', 'https://intranet',
+    'https://good.example.net'].join(' ') };
+  const hb = await (await call('/health', {}, bad)).json();
+  assert.deepEqual(hb.targets, ['good.example.net'], 'only the safe public https origin survives');
+  assert.equal(hb.invalid, 13);
+  const none = await call('/health', {}, { TARGET_ORIGINS: 'https://localhost' });
+  assert.equal(none.status, 500);
+  // The preview lists the approved sites as /site/<host>/ links, no scripts.
+  const pv = await call('/preview');
+  assert.match(pv.headers.get('content-security-policy'), /default-src 'none'/);
+  const pvHtml = await pv.text();
+  assert.match(pvHtml, /href="\/site\/example\.com\/"/);
+  assert.match(pvHtml, /href="\/site\/docs\.example\.org\/"/);
+  // /site/ alone goes to the first approved site.
+  const site = await call('/site/');
   assert.equal(site.status, 302);
-  assert.equal(site.headers.get('location'), W + '/site/?x=1');
+  assert.equal(site.headers.get('location'), W + '/site/example.com/');
 });
 
-test('proxy worker: only the configured origin, GET/HEAD only, safe headers', async () => {
-  const up = stubUpstream(async () => new Response('plain', { headers: { 'content-type': 'text/plain', 'set-cookie': 'a=1', 'content-security-policy': "frame-ancestors 'self'" } }));
+test('proxy: each approved site by host; anything else refused before any request', async () => {
+  const up = stubUpstream(async () => new Response('plain', { headers: { 'content-type': 'text/plain', 'set-cookie': 'a=1', 'content-security-policy': "frame-ancestors 'self'", 'strict-transport-security': 'max-age=1' } }));
   try {
-    const ok = await call('/site/path?q=1', { headers: { cookie: 'saints=secret', authorization: 'Bearer x', 'accept-language': 'en' } });
-    assert.equal(ok.status, 200);
-    assert.equal(up.seen[0].url, 'https://example.com/path?q=1');
-    assert.equal(up.seen[0].init.redirect, 'manual');
-    const sent = up.seen[0].init.headers;
+    let r = await call('/site/example.com/path?q=1', { headers: { cookie: 'saints=secret', authorization: 'Bearer x', 'accept-language': 'en' } });
+    assert.equal(r.status, 200);
+    assert.equal(up.seen.at(-1).url, 'https://example.com/path?q=1');
+    const sent = up.seen.at(-1).init.headers;
     assert.equal(sent.get('cookie'), null, 'cookies never forwarded');
     assert.equal(sent.get('authorization'), null, 'credentials never forwarded');
     assert.equal(sent.get('accept-language'), 'en');
-    assert.equal(ok.headers.get('set-cookie'), null, 'upstream cookies dropped');
-    assert.equal(ok.headers.get('content-security-policy'), "frame-ancestors 'self'", 'upstream framing rules are kept, not bypassed');
-    // Attempts to reach another host are refused before any request.
+    assert.equal(r.headers.get('set-cookie'), null, 'upstream cookies dropped');
+    assert.equal(r.headers.get('content-security-policy'), "frame-ancestors 'self'", 'upstream framing rules kept, not bypassed');
+    r = await call('/site/docs.example.org/guide');
+    assert.equal(r.status, 200);
+    assert.equal(up.seen.at(-1).url, 'https://docs.example.org/guide', 'the second approved site');
+    r = await call('/site/EXAMPLE.com/');
+    assert.equal(up.seen.at(-1).url, 'https://example.com/', 'host match is case-insensitive');
+    // Hosts and tricks that must never reach the network.
     const before = up.seen.length;
-    for (const p of ['/site//evil.example/x', '/site/%2F%2Fevil.example', '/site/..//evil.example', '/site/\\\\evil.example/']) {
-      const r = await call(p);
-      // 403 refused, 404 (URL normalising took it outside /site/), or 200 still on example.com.
-      assert.ok([403, 404, 200].includes(r.status), p + ' → ' + r.status);
-      if (r.status === 200) assert.ok(up.seen.slice(before).every((s) => s.url.startsWith('https://example.com/')), 'stayed on example.com: ' + p);
+    const tricks = ['/site/evil.example/', '/site/example.com.evil.example/', '/site/example.com@evil.example/',
+      '/site/127.0.0.1/', '/site/localhost/', '/site/169.254.169.254/latest/meta-data/', '/site/metadata.google.internal/',
+      '/site/example.com//evil.example/x', '/site/example%2Ecom/', '/site/example.com/..//evil.example/',
+      '/site/www.example.com/'];
+    for (const p of tricks) {
+      const t = await call(p);
+      assert.ok([403, 404].includes(t.status), p + ' → ' + t.status);
     }
-    assert.ok(up.seen.slice(before).every((s) => s.url.startsWith('https://example.com/')), 'never fetched another host');
-    const forbidden = await call('/site//evil.example/x');
-    assert.equal(forbidden.status, 403);
-    assert.match(await forbidden.text(), /only opens https:\/\/example\.com/);
-    // Writes are refused.
-    const post = await call('/site/', { method: 'POST', body: 'x' });
-    assert.equal(post.status, 405);
-    const head = await call('/site/', { method: 'HEAD' });
-    assert.equal(head.status, 200);
+    assert.equal(up.seen.length, before, 'none of those made an upstream request');
+    const f = await call('/site/evil.example/');
+    assert.match(await f.text(), /opens only: example\.com, docs\.example\.org/);
+    // Only GET/HEAD.
+    assert.equal((await call('/site/example.com/', { method: 'POST', body: 'x' })).status, 405);
+    assert.equal((await call('/site/example.com/', { method: 'HEAD' })).status, 200);
   } finally { up.restore(); }
 });
 
-test('proxy worker: redirects stay on the origin; odd 3xx pass through; upstream down is a readable page', async () => {
+test('proxy: redirects only to approved sites; odd 3xx pass; size, timeout and errors are handled', async () => {
   let next = null;
-  const up = stubUpstream(async () => next());
+  const up = stubUpstream(async (u, init) => next(u, init));
   try {
     next = () => new Response(null, { status: 301, headers: { location: '/moved?a=1' } });
-    let r = await call('/site/old');
-    assert.equal(r.status, 301);
-    assert.equal(r.headers.get('location'), W + '/site/moved?a=1');
-    next = () => new Response(null, { status: 302, headers: { location: 'https://evil.example/' } });
-    r = await call('/site/old');
-    assert.equal(r.status, 403);
-    assert.match(await r.text(), /redirects to a different website/);
+    let r = await call('/site/example.com/old');
+    assert.deepEqual([r.status, r.headers.get('location')], [301, W + '/site/example.com/moved?a=1']);
+    next = () => new Response(null, { status: 302, headers: { location: 'https://docs.example.org/x' } });
+    r = await call('/site/example.com/old');
+    assert.deepEqual([r.status, r.headers.get('location')], [302, W + '/site/docs.example.org/x'], 'to another approved site: allowed, rewritten');
+    for (const loc of ['https://evil.example/', 'http://example.com/', 'https://127.0.0.1/', 'https://localhost/', 'javascript:alert(1)']) {
+      next = () => new Response(null, { status: 302, headers: { location: loc } });
+      r = await call('/site/example.com/old');
+      assert.equal(r.status, 403, 'redirect to ' + loc);
+    }
     next = () => new Response(null, { status: 304 });
-    r = await call('/site/', { headers: { 'if-none-match': '"x"' } });
-    assert.equal(r.status, 304, '304 passes through (used to throw → 502)');
+    assert.equal((await call('/site/example.com/', { headers: { 'if-none-match': '"x"' } })).status, 304);
     next = () => new Response('choose', { status: 300 });
-    r = await call('/site/');
-    assert.equal(r.status, 300);
+    assert.equal((await call('/site/example.com/')).status, 300);
+    // A declared-too-large body is refused up front.
+    next = () => new Response('x', { headers: { 'content-type': 'application/octet-stream', 'content-length': String(50 * 1024 * 1024) } });
+    r = await call('/site/example.com/big.bin');
+    assert.equal(r.status, 413);
+    // Timeout → 504 with a readable page; other failures → 502.
+    next = () => { const e = new Error('t'); e.name = 'TimeoutError'; throw e; };
+    r = await call('/site/example.com/');
+    assert.equal(r.status, 504);
+    assert.match(await r.text(), /didn&#39;t answer within 12 seconds/);
     next = () => { throw new Error('down'); };
-    r = await call('/site/');
+    r = await call('/site/example.com/');
     assert.equal(r.status, 502);
     assert.match(r.headers.get('content-type'), /text\/html/);
-    assert.match(await r.text(), /didn&#39;t answer/, 'text is HTML-escaped');
+    // The upstream fetch always gets a timeout signal and manual redirects.
+    next = () => new Response('ok');
+    await call('/site/example.com/');
+    assert.equal(up.seen.at(-1).init.redirect, 'manual');
+    assert.ok(up.seen.at(-1).init.signal, 'a timeout signal is attached');
   } finally { up.restore(); }
 });
 
-test('proxy worker: same-origin links and assets are rewritten through /site/, others left alone', async () => {
+test('proxy: links, images, srcset and scripts on approved sites go through /site/<host>/; others stay', async () => {
   globalThis.HTMLRewriter = FakeRewriter;
-  const up = stubUpstream(async () => new Response('<a href="https://example.com/more?x=1#top">more</a><a href="/rel">rel</a><a href="https://www.iana.org/x">iana</a><img src="/logo.png"><a href="#frag">f</a>', { headers: { 'content-type': 'text/html; charset=utf-8' } }));
+  const html = [
+    '<a href="https://example.com/more?x=1#top">more</a>', '<a href="/rel">rel</a>', '<a href="sub/page">relative</a>',
+    '<a href="https://docs.example.org/g">docs</a>', '<a href="https://www.iana.org/x">iana</a>',
+    '<img src="/logo.png">', '<img srcset="/a.png 1x, https://example.com/b.png 2x">',
+    '<script src="/app.js"></script>', '<link href="/style.css">', '<a href="#frag">f</a>', '<a href="javascript:alert(1)">j</a>',
+    '<a href="mailto:a@b.c">m</a>'].join('');
+  const up = stubUpstream(async () => new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' } }));
   try {
-    const r = await call('/site/');
-    const html = await r.text();
-    assert.match(html, new RegExp('href="' + W + '/site/more\\?x=1#top"'));
-    assert.match(html, new RegExp('href="' + W + '/site/rel"'));
-    assert.match(html, new RegExp('src="' + W + '/site/logo.png"'));
-    assert.match(html, /href="https:\/\/www\.iana\.org\/x"/, 'other sites are not proxied');
-    assert.match(html, /href="#frag"/);
+    const out = await (await call('/site/example.com/dir/index.html')).text();
+    const has = (s) => assert.ok(out.includes(s), 'expected ' + s);
+    has(`href="${W}/site/example.com/more?x=1#top"`);
+    has(`href="${W}/site/example.com/rel"`);
+    has(`href="${W}/site/example.com/dir/sub/page"`);
+    has(`href="${W}/site/docs.example.org/g"`);
+    has('href="https://www.iana.org/x"');
+    has(`src="${W}/site/example.com/logo.png"`);
+    has(`srcset="${W}/site/example.com/a.png 1x, ${W}/site/example.com/b.png 2x"`);
+    has(`src="${W}/site/example.com/app.js"`);
+    has(`href="${W}/site/example.com/style.css"`);
+    has('href="#frag"');
+    has('href="javascript:alert(1)"');
+    has('href="mailto:a@b.c"');
   } finally { up.restore(); delete globalThis.HTMLRewriter; }
+});
+
+test('proxy: optional access key gates /site/ (and rides along in rewritten links)', async () => {
+  const keyed = { ...env, PROXY_KEY: 'sesame' };
+  const up = stubUpstream(async () => new Response('ok', { headers: { 'content-type': 'text/plain' } }));
+  try {
+    assert.equal((await call('/site/example.com/', {}, keyed)).status, 401);
+    assert.equal((await call('/site/example.com/?k=wrong', {}, keyed)).status, 401);
+    const ok = await call('/site/example.com/p?a=1&k=sesame', {}, keyed);
+    assert.equal(ok.status, 200);
+    assert.equal(up.seen.at(-1).url, 'https://example.com/p?a=1', 'the key is not sent to the site');
+    assert.equal((await call('/preview', {}, keyed)).status, 200, 'the connection test stays open');
+    assert.equal((await call('/health', {}, keyed)).status, 200);
+  } finally { up.restore(); }
+});
+
+test('proxy: /status/ reports only status + outcome (never page content), with the same refusals', async () => {
+  let next = null;
+  const up = stubUpstream(async (u, init) => next(u, init));
+  try {
+    const st = async (p, e = env) => { const r = await call('/status/' + p, {}, e); return { code: r.status, cors: r.headers.get('access-control-allow-origin'), ...(await r.json()) }; };
+    next = (u, init) => { assert.equal(init.method, 'HEAD', 'status checks use HEAD'); return new Response('SECRET PAGE BODY', { status: 200 }); };
+    let s = await st('example.com/page');
+    assert.deepEqual([s.outcome, s.status, s.host, s.cors], ['ok', 200, 'example.com', '*']);
+    assert.ok(!JSON.stringify(s).includes('SECRET'), 'no page content');
+    next = () => new Response(null, { status: 404 });
+    s = await st('docs.example.org/missing');
+    assert.deepEqual([s.outcome, s.status], ['http-error', 404]);
+    next = () => new Response(null, { status: 302, headers: { location: 'https://evil.example/' } });
+    assert.equal((await st('example.com/r')).outcome, 'redirect-blocked');
+    next = () => new Response(null, { status: 302, headers: { location: '/fine' } });
+    assert.equal((await st('example.com/r')).outcome, 'redirect');
+    next = () => { const e = new Error('t'); e.name = 'TimeoutError'; throw e; };
+    assert.equal((await st('example.com/')).outcome, 'timeout');
+    next = () => { throw new Error('down'); };
+    assert.equal((await st('example.com/')).outcome, 'unreachable');
+    const before = up.seen.length;
+    for (const p of ['evil.example/', '127.0.0.1/', 'example.com//evil.example/x', 'localhost/']) {
+      const r = await st(p);
+      assert.deepEqual([r.code, r.outcome], [403, 'not-permitted'], p);
+    }
+    assert.equal(up.seen.length, before, 'refused checks never reach the network');
+    assert.equal((await st('example.com/', { ...env, PROXY_KEY: 'k1' })).outcome, 'key-required');
+  } finally { up.restore(); }
 });
