@@ -13,6 +13,44 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **Messages (DMs + group chats), @everyone, Welcome stats** (owner: "add a
+  direct message between people feature tab like the chat tab in the same
+  area make it labeled NEW… allow me and the admins to view the chats
+  between others to prevent any safety risks… group chats… @everyone… public
+  stats"). A conversation is an ordinary ChatRoom DO whose id is
+  `dm-<sha256(pair) 24 hex>` or `g-<24 random hex>` (`CONV_RE`), so every
+  chat feature works in it. KV `conv:<id>` = { id, kind dm|group, name,
+  members[lower], names{lower: shown}, by, at } (memo 30 s per instance:
+  `convMemo`). `checkRoomAccess` branch: member with a verified SESSION, or
+  `canMonitorChats()` (role admin/owner or owner code) → `access.monitor`
+  (read-only: send/react/unsend/edit/vote/pin/media upload refuse it; poll
+  records no read cursor or presence for it). Inbox per person = ChatRoom DO
+  named `inbox-<name>` (hash if > 34 chars), actions `inbox_put/bump/read/
+  remove/list` (chat/room.js `inbox()`), plus `inbox-@all` (every conv +
+  private messages per UTC day for stats). `/chat/send` in a conv bumps all
+  members' inboxes + @all (waitUntil), alerts members with Mention alerts
+  (`push:mrl` 60 s); owner gets alerts only for convs they're in. Room `read`
+  returns `advanced` when a cursor moved → poll calls `inbox_read` (clears
+  unread). Routes `/dm/list|people` (GET), `/dm/start|group|manage` (POST:
+  rename/add/remove(creator or owner)/leave/hide), `/dm/review` (GET) and
+  `/dm/review-open` (POST, logAudit) for owner/admins; all need a session.
+  Limits: `MSG_GROUP_MAX` 20, `MSG_NEW_PER_DAY` 20 (`msgnew:<day>:<u>`).
+  **@everyone** in any room: `m.ev` + phone alerts (`EVERYONE_MAX_ALERTS`
+  60) once per `EVERYONE_COOLDOWN_SEC` 600 per person (KV `everyone:<u>`;
+  staff/owner exempt); over it the message sends without ev and the reply
+  says `everyone: 'cooldown'`. Recipients: conv members / `push:user:*`
+  list (#public, staff filtered to staff) / private room's DO people.
+  Private rooms can't be named `dm-`/`g-`/`inbox-`. **/stats/public**
+  (allowedUser, Cache API 60 s): people, online (#public DO people),
+  public/private messages today+week, groups/dms counts, top chatters,
+  trivia, streaks, record holders. Client: sidebar `data-tab="dms"
+  data-pane="chat"` (NEW pill `gpa_dm_new_seen`, badge `#gpa-dm-badge`);
+  Messages state (`dmMode`, `dmConv`, `isConvId`) declared next to
+  `renderRoomOptions`, module after it; pane classes `is-dm`, `dm-listing`,
+  `dm-monitor`; `/dm/list` every 20 s (5 s while the list is on screen);
+  Welcome card `#gpa-pubstats` (`fetchPublicStats`). Tests:
+  messages.test.mjs (7) and browser/messages.mjs (35).
+  Before that:
   **Proxy: several approved sites** (owner: "configure multiple websites
   that I own or am authorized to proxy… not an unrestricted public relay").
   proxy-worker/index.js rewritten: `TARGET_ORIGINS` (space/comma list;
@@ -337,7 +375,7 @@ Cloudflare Worker (`worker.js`, ~5k lines).
   (`wrangler.jsonc`, `keep_vars: true`).
 
 **Tabs** (sidebar, grouped): Welcome · *Assistant:* Page Insights, Ask AI,
-Chat (+ Staff chat for staff) · *Play:* Music, Proxy, Eaglercraft, Games ·
+Chat (+ Staff chat for staff, + Messages) · *Play:* Music, Proxy, Eaglercraft, Games ·
 *Study & write:* Study, Notes, Humanize, Grammar · *Library:* Saved,
 Settings (+ hidden Admin "Command Center"). Eaglercraft must stay right
 after Proxy, before Games.
@@ -401,7 +439,7 @@ firstSeen, lastSeen, streak) · `mod:<name>` · `usage:<day>:<name>`,
 (lockouts) · `chat-photo-rate:*`, `chat-voice-rate:*` · `mylib:<name>`
 (a person's My music list), `mylib:total` (bytes of everyone's uploads),
 `mylib-rate:<day>:<name>` · `ytlists:<name>` (Playlists → YouTube links),
-`ytlists-rate:<day>:<name>`, `ytm:<hash>` (one song's YouTube answer, shared) · `ytmeta:<video id>`, `mp3chk:<hour>` (YouTube to MP3 link details, owner only) · `subhold:<name>`, `subpay:<session>`, `substripe:<sub id>`, `stripe:evt:<id>`, `subco:*` (Subscribe page).
+`ytlists-rate:<day>:<name>`, `conv:<id>` (a DM or group: members), `msgnew:<day>:<name>`, `everyone:<name>` (10-min @everyone cooldown), `ytm:<hash>` (one song's YouTube answer, shared) · `ytmeta:<video id>`, `mp3chk:<hour>` (YouTube to MP3 link details, owner only) · `subhold:<name>`, `subpay:<session>`, `substripe:<sub id>`, `stripe:evt:<id>`, `subco:*` (Subscribe page).
 
 ### Inside the ChatRoom Durable Object (per room)
 Storage: `log` (newest 120 messages, a week), `reads` (read cursors),
@@ -409,6 +447,9 @@ Storage: `log` (newest 120 messages, a week), `reads` (read cursors),
 day, 14 days; not system notices), `trivia` (#public only). Memory only:
 `live` (who's here / typing). Actions: `read`, `append`, `react`, `edit`,
 `pin`, `vote`, `unsend`, `delete`, `clear`, `stats`, `trivia_open`.
+Inbox objects (`inbox-<name>`, `inbox-@all`; Messages) use the same class
+but only `inbox` (conversations: meta, last message, unread n) and `days`
+(private messages per UTC day, @all only), via `inbox_*` actions.
 
 ---
 
@@ -862,7 +903,8 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 
 | Commit | What |
 |---|---|
-| (this) | Proxy: several approved sites (allowlist, /status/, isolation) |
+| (this) | Messages (DMs + group chats, safety review), @everyone, Welcome stats |
+| `bfd4068` | Proxy: several approved sites (allowlist, /status/, isolation) |
 | `31214c0` | Proxy tab on the Saints proxy Worker (proxy-worker/) |
 | `28202ba` | Countdown + Renew + Telnyx texting; self-unlock with school email |
 | `0203341` | Security: per-account brute-force lock (PIN, reset code, student number) |
@@ -909,7 +951,7 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 ## 6. Testing
 
 ```bash
-npm test                                   # node --test tests/*.test.mjs (124 tests)
+npm test                                   # node --test tests/*.test.mjs (142 tests)
 npx wrangler deploy --dry-run --outdir /tmp/x   # bundle/config check, deploys nothing
 # Browser suites (Playwright vs local workerd), each takes an output dir for screenshots:
 node tests/browser/eaglercraft.e2e.mjs     # 83
@@ -929,6 +971,7 @@ node tests/browser/read-receipts.mjs       # 13
 node tests/browser/chat-live.mjs           # 23
 node tests/browser/chat-replies.mjs        # 20
 node tests/browser/chat-round2.mjs         # 26 (fake microphone)
+node tests/browser/messages.mjs            # 35 (DMs, groups, safety review, @everyone, Welcome stats)
 node tests/browser/fun.mjs                 # 18
 node tests/browser/music.mjs               # 15
 node tests/browser/my-music.mjs            # 15
@@ -956,7 +999,7 @@ files/suites you think would be affected". So:
    shared helpers you changed (e.g. Admin → Security cards → `subscribers`,
    `admin-app`, `notification-links`, `owner-tools`, `one-session`;
    subscribe page → `subscribe`; Music → `music`, `my-music`, `playlists`,
-   `mp3`; chat → the `chat-*`, `staff-chat`, `read-receipts`; sign-in /
+   `mp3`; chat → the `chat-*`, `staff-chat`, `read-receipts`, `messages`; sign-in /
    sessions → `one-session`, `same-computer`, `allowlist`,
    `access-requests`, `console-app`). When unsure whether something shared
    (e.g. a selector class, the login flow, `allowedUser`) reaches a suite,

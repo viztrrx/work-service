@@ -766,6 +766,25 @@ Each room's messages live in their own Durable Object (`CHAT_ROOMS`, see `chat/r
 
 **Grouping.** Several messages in a row from the same person (within 5 minutes) show their picture and name once, with the rest as plain lines underneath, like iMessage. Someone else's message, a reply or a 5-minute gap starts a new group. On a computer, hovering a grouped line shows its time and the ↩ / ☺ buttons.
 
+### Messages: direct messages and group chats {#messages}
+
+![Messages](docs/screenshots/13-messages/5-list-unread.png)
+
+**Messages** sits right under **Chat** in the sidebar, with an orange **NEW** label until you've opened it on that device. It needs a signed-in account.
+
+- **New message** opens a direct message with one person (type their name; names you can pick are suggested). Starting a second one with the same person opens the same conversation.
+- **New group** makes a group chat: give it a name, add 2 to 19 other people. Anyone in it can **Add people** and **Rename** it; the person who started it can **Remove someone**; anyone can **Leave**. The group shows a notice for each change.
+- A conversation works like a chat room: replies, reactions, photos, voice messages, polls, edit and unsend, typing, "who's here" and read receipts.
+- Your list shows each conversation's latest message and how many you haven't read; the Messages item in the sidebar has a red badge with the total. Phone alerts (Settings → Account → Mention alerts) also cover new messages, at most one a minute from the same person.
+- **Hide** takes a direct message off your list until they message you again.
+- Up to 20 new conversations a day per person (the owner isn't limited).
+
+**Safety review (owner and admins).** Every signed-in person sees "To keep everyone safe, the owner and admins can read messages." under their list. You and admins get a **Safety review** button there: it lists every conversation, and opening one shows it **read-only** (no message box; the Worker also refuses posts). Your viewing leaves no "Read by" and doesn't show you as "here". Each conversation opened this way is written to Admin → Audit (`/dm/review-open`). Moderators don't have it. You only get push alerts for conversations you're in.
+
+**@everyone, in every chat.** Type `@everyone` (it's in the `@` list) in #public, a private room, staff chat, a group or a direct message. The message is highlighted for everyone in that chat, like a mention, with a pop-up for people who have the console open, and a phone alert for people with Mention alerts on: in #public everyone with alerts, in staff chat the staff, in a group its members, in a private room the people who've been in it. To stop spam it alerts **once every 10 minutes per person**. A second one within 10 minutes still sends, as plain text, and the sender is told it didn't alert anyone. You, admins and moderators aren't limited. At most 60 phone alerts per @everyone.
+
+**Stats on Welcome.** A **Saints Service stats** card on Welcome, the same for everyone: members, online now, messages today and this week (#public and private messages counted together; only counts, never who wrote to whom or what), group chats, and the top three chatters in #public this week, trivia points, weekday streaks and game records. The Worker works it out at most once a minute (`/stats/public`).
+
 ### AI usage meter {#usage-meter}
 
 Anyone you give a limit to (Admin → Users → a person → **Quota overrides**, or a quota for everyone in AI & Usage) sees a slim meter under the console's header on every tab: **AI requests today** (or **this month**), a progress bar, how many are left, and when it resets. It turns amber at 80% and red at the limit ("Daily limit reached. AI requests are paused until …"). A per\-minute rate shows as a short note instead of a bar. People without a limit, and you, never see it. The numbers come from the same counters the Worker enforces, refreshed on every status check and right after each AI request. Daily quotas reset at midnight UTC (8 PM New York time in summer, 7 PM in winter); monthly ones on the 1st.

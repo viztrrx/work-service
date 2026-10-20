@@ -68,6 +68,7 @@ export function triviaMatches(text, answers) {
   return (answers || []).some((a) => { const n = normAnswer(a); return n && t.includes(' ' + n + ' '); });
 }
 const PINS_MAX = 3;
+const INBOX_MAX = 200;                 // conversations kept per inbox (newest)
 
 const TTL_MS = 7 * 24 * 3600 * 1000;   // same week-long lifetime as before
 const MAX = 120;                       // newest messages kept per room
@@ -133,11 +134,70 @@ export class ChatRoom {
     await this.storage.put({ log, updatedAt: Date.now() });
   }
 
+  // Messages (direct messages and group chats): each person has an inbox
+  // object (named "inbox-<name>") listing their conversations with the
+  // latest message and how many arrived since they last read it, so the
+  // Messages list and its badge cost one call instead of one per
+  // conversation. "inbox-@all" lists every conversation for the owner and
+  // admins (safety review) and counts private messages per day for the
+  // public stats. The messages themselves live in each conversation's own
+  // room object, like any chat room.
+  async inbox(action, body) {
+    let box = (await this.storage.get('inbox')) || {};
+    const cid = String(body.conv && body.conv.id || body.convId || '').toLowerCase().slice(0, 40);
+    const meta = (c) => ({ id: cid, kind: c.kind === 'group' ? 'group' : 'dm', name: String(c.name || '').slice(0, 40), members: (Array.isArray(c.members) ? c.members : []).map(String).slice(0, 25) });
+    const save = async () => {
+      const keep = Object.values(box).sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, INBOX_MAX);
+      box = Object.fromEntries(keep.map((e) => [e.id, e]));
+      await this.storage.put('inbox', box);
+    };
+    if (action === 'inbox_list') {
+      const list = Object.values(box).sort((a, b) => (b.at || 0) - (a.at || 0));
+      const days = (await this.storage.get('days')) || {};
+      return reply({ ok: true, convs: list, days });
+    }
+    if (!cid) return reply({ ok: false, error: 'no conversation' }, 400);
+    if (action === 'inbox_put') {
+      box[cid] = { ...(box[cid] || { n: 0, last: null, at: Date.now() }), ...meta(body.conv) };
+      await save();
+      return reply({ ok: true });
+    }
+    if (action === 'inbox_bump') {
+      const m = body.msg || {};
+      const e = { ...(box[cid] || { n: 0 }), ...meta(body.conv) };
+      e.last = { u: String(m.u || '').slice(0, 40), t: String(m.t || '').slice(0, 120), ts: Number(m.ts) || Date.now() };
+      e.at = e.last.ts;
+      e.n = body.self ? 0 : Math.min(999, (e.n || 0) + 1);
+      box[cid] = e;
+      await save();
+      if (body.count) {
+        // Private messages per UTC day (14 days), for the public stats.
+        const days = (await this.storage.get('days')) || {};
+        const d = new Date(e.at).toISOString().slice(0, 10);
+        days[d] = (days[d] || 0) + 1;
+        for (const k of Object.keys(days).sort().slice(0, -COUNT_DAYS)) delete days[k];
+        await this.storage.put('days', days);
+      }
+      return reply({ ok: true });
+    }
+    if (action === 'inbox_read') {
+      const e = box[cid];
+      if (e && e.n && (!e.last || Number(body.ts) >= e.last.ts)) { e.n = 0; await this.storage.put('inbox', box); }
+      return reply({ ok: true });
+    }
+    if (action === 'inbox_remove') {
+      if (box[cid]) { delete box[cid]; await this.storage.put('inbox', box); }
+      return reply({ ok: true });
+    }
+    return reply({ ok: false, error: 'unknown action' }, 404);
+  }
+
   async fetch(req) {
     const action = new URL(req.url).pathname.slice(1);
     let body = {};
     try { body = await req.json(); } catch (e) { body = {}; }
     const id = String(body.id || '').toLowerCase().slice(0, 40);
+    if (action.startsWith('inbox_')) return this.ctx.blockConcurrencyWhile(() => this.inbox(action, body));
     // One request at a time per room: the read, append and write below can't
     // interleave with another send.
     return this.ctx.blockConcurrencyWhile(async () => {
@@ -150,11 +210,13 @@ export class ChatRoom {
         const reader = String(body.reader || '').trim().slice(0, 40);
         const seen = Number(body.seen) || 0;
         const lastTs = log.length ? log[log.length - 1].ts : 0;
+        let advanced = 0;
         if (reader && seen > 0) {
           const key = reader.toLowerCase();
           const upTo = Math.min(seen, lastTs);
           if (upTo > ((reads[key] && reads[key].ts) || 0)) {
             reads[key] = { u: reader, ts: upTo, at: Date.now() };
+            advanced = upTo;
             const keep = Object.entries(reads).sort((a, b) => b[1].at - a[1].at).slice(0, READS_MAX);
             reads = Object.fromEntries(keep);
             await this.storage.put('reads', reads);
@@ -178,7 +240,7 @@ export class ChatRoom {
         }
         const pins = ((await this.storage.get('pins')) || []).filter((p) => log.some((m) => m && m.ts === p.ts && !m.unsent));
         const { typing, people } = await this.presence(reader, now);
-        return reply({ ok: true, messages: log.filter((m) => m && m.ts > since), reads: fresh, reactions, unsent, edits, votes, pins, typing, people });
+        return reply({ ok: true, messages: log.filter((m) => m && m.ts > since), reads: fresh, reactions, unsent, edits, votes, pins, typing, people, ...(advanced ? { advanced } : {}) });
       }
       if (action === 'append') {
         const m = body.msg && typeof body.msg === 'object' ? body.msg : null;

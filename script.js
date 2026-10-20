@@ -831,7 +831,11 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     { at: '2026-10-20T10:00:00-04:00', commit: '', title: 'Proxy uses the Saints proxy on Cloudflare', parts: {
       browser: ['redesign', 'The Proxy tab now connects to the Saints proxy Worker (saints-proxy-test on Cloudflare) instead of a localhost Scramjet server: a connection test first, then the approved test site (example.com); other sites are explained, not silently broken; clear loading, timeout, blocked-by-this-website and retry states'] } },
     { at: '2026-10-20T12:00:00-04:00', commit: '', title: 'Proxy: several approved sites', parts: {
-      browser: ['feature', 'The Proxy tab opens any site the owner approved on the proxy (not just example.com): suggestions in the address bar, links and images inside those sites stay in the proxy, and errors now say what went wrong (website down, HTTP 404, timed out, redirect not permitted, not on the approved list); each proxied page is isolated (no shared storage)'] } }
+      browser: ['feature', 'The Proxy tab opens any site the owner approved on the proxy (not just example.com): suggestions in the address bar, links and images inside those sites stay in the proxy, and errors now say what went wrong (website down, HTTP 404, timed out, redirect not permitted, not on the approved list); each proxied page is isolated (no shared storage)'] } },
+    { at: '2026-10-20T15:00:00-04:00', commit: '', title: 'Messages, @everyone and stats', parts: {
+      chat: ['feature', 'New “Messages” under Chat: direct messages and group chats (add people, rename, leave) with unread badges; @everyone in any chat highlights and alerts everyone in it (once every 10 minutes per person)'],
+      admin: ['feature', 'Owner and admins: Safety review in Messages lists every conversation and opens it read-only (logged in Audit)'],
+      welcome: ['feature', 'A Saints Service stats card: members, online now, messages today and this week, group chats, top chatters, trivia, streaks and game records'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -3329,6 +3333,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           <button class="gpa-dropdown-item" data-tab="ask"><span class="gpa-nav-ic">${GPS_ICONS.ai}</span><span class="gpa-nav-label">Ask AI</span></button>
           <button class="gpa-dropdown-item" data-tab="chat"><span class="gpa-nav-ic">${GPS_ICONS.users}</span><span class="gpa-nav-label">Chat</span><span id="gpa-chat-badge" class="gpa-chat-badge" style="display:none;">0</span></button>
           <button class="gpa-dropdown-item" data-tab="staffchat" data-pane="chat" style="display:none;"><span class="gpa-nav-ic">${GPS_ICONS.advanced}</span><span class="gpa-nav-label">Staff chat</span><span id="gpa-staff-badge" class="gpa-chat-badge" style="display:none;">0</span></button>
+          <button class="gpa-dropdown-item" data-tab="dms" data-pane="chat"><span class="gpa-nav-ic">${GPS_ICONS.chat}</span><span class="gpa-nav-label">Messages</span><span id="gpa-dm-newpill" class="gpa-new-pill" title="New: direct messages and group chats">NEW</span><span id="gpa-dm-badge" class="gpa-chat-badge" style="display:none;">0</span></button>
           <div class="gpa-nav-group" role="presentation" data-group="Play">Play</div>
           <button class="gpa-dropdown-item" data-tab="music"><span class="gpa-nav-ic">${GPS_ICONS.music}</span><span class="gpa-nav-label">Music</span></button>
           <button class="gpa-dropdown-item" data-tab="browser"><span class="gpa-nav-ic">${GPS_ICONS.globe}</span><span class="gpa-nav-label">Proxy</span></button>
@@ -3408,6 +3413,19 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
                   <div class="gpa-snapshot-label" title="Days in a row, Monday to Friday. Weekends don't count and don't break it.">Weekday streak</div>
                 </div>
               </div>
+            </div>
+
+            <div class="gpa-card gpx-card gpx-span-2" id="gpa-pubstats">
+              <div class="gpx-card-head">${GPS_ICONS.star}<div class="gpa-card-title">Saints Service stats</div><span id="gpa-pubstats-at" class="gpa-sub gpa-pubstats-at"></span></div>
+              <div class="gpa-snapshot-grid">
+                <div class="gpa-snapshot-stat"><div id="gpa-ps-people" class="gpa-snapshot-num">--</div><div class="gpa-snapshot-label">Members</div></div>
+                <div class="gpa-snapshot-stat"><div id="gpa-ps-online" class="gpa-snapshot-num">--</div><div class="gpa-snapshot-label">Online now</div></div>
+                <div class="gpa-snapshot-stat"><div id="gpa-ps-today" class="gpa-snapshot-num">--</div><div class="gpa-snapshot-label">Messages today</div></div>
+                <div class="gpa-snapshot-stat"><div id="gpa-ps-week" class="gpa-snapshot-num">--</div><div class="gpa-snapshot-label">Messages this week</div></div>
+                <div class="gpa-snapshot-stat"><div id="gpa-ps-groups" class="gpa-snapshot-num">--</div><div class="gpa-snapshot-label">Group chats</div></div>
+              </div>
+              <div class="gpa-pubstats-lists" id="gpa-ps-lists"></div>
+              <div id="gpa-pubstats-note" class="gpa-sub"></div>
             </div>
 
             <div class="gpa-card gpx-card gpx-span-2">
@@ -3599,6 +3617,34 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             desc: 'Talk with everyone using this console, or join a private room with a code.',
             actions: `<select id="gpa-chat-room" class="gpa-input" aria-label="Chat room"></select>
               <button id="gpa-chat-join" class="gpa-btn" title="Join a private room with a code">${gpxLbl('key', 'Join room')}</button>` })}
+          <div id="gpa-dm" class="gpa-dm" hidden>
+            <div class="gpa-dm-top">
+              <button id="gpa-dm-back" class="gpa-btn gpx-btn-ghost" type="button" hidden>← All messages</button>
+              <div id="gpa-dm-head" class="gpa-dm-head"></div>
+              <div class="gpa-dm-actions">
+                <button id="gpa-dm-new" class="gpa-btn primary" type="button">${gpxLbl('plus', 'New message')}</button>
+                <button id="gpa-dm-newgroup" class="gpa-btn" type="button">${gpxLbl('users', 'New group')}</button>
+                <button id="gpa-dm-review" class="gpa-btn" type="button" aria-pressed="false" hidden>${gpxLbl('advanced', 'Safety review')}</button>
+              </div>
+            </div>
+            <form id="gpa-dm-form" class="gpa-dm-form" hidden novalidate>
+              <div id="gpa-dm-form-title" class="gpa-dm-form-title"></div>
+              <input id="gpa-dm-name" class="gpa-input" placeholder="Group name" maxlength="40" autocomplete="off" aria-label="Group name" hidden />
+              <div class="gpa-row gpa-dm-torow">
+                <input id="gpa-dm-to" class="gpa-input" placeholder="Their name" maxlength="40" list="gpa-dm-people" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="Name of the person" />
+                <button id="gpa-dm-add" class="gpa-btn" type="button" hidden>Add</button>
+              </div>
+              <datalist id="gpa-dm-people"></datalist>
+              <div id="gpa-dm-chips" class="gpa-dm-chips" aria-live="polite"></div>
+              <div class="gpa-row">
+                <button id="gpa-dm-go" class="gpa-btn primary" type="submit">Start</button>
+                <button id="gpa-dm-cancel" class="gpa-btn" type="button">Cancel</button>
+              </div>
+              <div id="gpa-dm-err" class="gpa-sub gpa-dm-err" role="status" aria-live="polite"></div>
+            </form>
+            <ul id="gpa-dm-list" class="gpa-dm-list" aria-label="Conversations"></ul>
+            <p class="gpa-sub gpa-dm-safety">🛡 To keep everyone safe, the owner and admins can read messages.</p>
+          </div>
           <div id="gpa-chat-note" class="gpa-sub gpx-note"></div>
           <div id="gpa-chat-people" class="gpa-chat-people" hidden></div>
           <div id="gpa-chat-quiet" class="gpa-chat-quiet" role="status" hidden></div>
@@ -3619,7 +3665,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             <button id="gpa-chat-send" class="gpa-btn primary">Send</button>
           </div>
           <input id="gpa-chat-file" type="file" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none" aria-label="Choose a photo from your gallery" />
-          <div class="gpa-row" style="align-items:center;flex-wrap:wrap;">
+          <div class="gpa-row gpa-chat-filerow" style="align-items:center;flex-wrap:wrap;">
             <span id="gpa-chat-file-label" class="gpa-sub" role="status" aria-live="polite"></span>
             <button id="gpa-chat-remove-photo" type="button" style="display:none">Remove photo</button>
           </div>
@@ -5548,6 +5594,13 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
          just stacking to one column, exactly the "content wider than
          viewport" anti-pattern. Capping the floor at 100% lets it shrink to
          fit when the container itself is the constraint. */
+      .gpa-pubstats-at { margin-left: auto; font-size: 11px; }
+      .gpa-pubstats-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 10px; margin-top: 10px; }
+      .gpa-pubstats-lists:empty { display: none; }
+      .gpa-pubstats-list .h { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+      .gpa-pubstats-list ol { margin: 0; padding-left: 18px; font-size: 13px; }
+      .gpa-pubstats-list li { padding: 1px 0; }
+      .gpa-pubstats-list li b { float: right; font-weight: 600; color: var(--gpa-sub); font-size: 12px; }
       .gpa-snapshot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(110px, 100%), 1fr)); gap: 8px; }
       .gpa-snapshot-stat {
         background: var(--gpa-field); border: 1px solid var(--gpa-border); border-radius: calc(10px * var(--gpa-rs));
@@ -5888,6 +5941,52 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpa-chat-pins button.p-btn:hover { background: color-mix(in srgb, var(--gpa-text) 10%, transparent); color: var(--gpa-text); }
       .gpa-chat-quiet { padding: 7px 10px; font-size: 12px; border-radius: 10px; border: 1px solid var(--gpa-border); background: var(--gpa-panel); color: var(--gpa-text); }
       .gpa-chat-quiet[hidden] { display: none; }
+      /* Messages (direct messages and group chats) share the Chat pane. */
+      .gpa-new-pill { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 9px; font-weight: 800; letter-spacing: .06em; color: #fff; background: linear-gradient(135deg, #e5453a, #f59e0b); line-height: 14px; pointer-events: none; }
+      .gpa-new-pill[hidden] { display: none; }
+      .gpa-dm[hidden], .gpa-dm [hidden] { display: none !important; }
+      .gpa-dm { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+      .gpa-dm-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .gpa-dm-head { flex: 1 1 160px; min-width: 0; }
+      .gpa-dm-head .t { font-weight: 700; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .gpa-dm-head .m { font-size: 12px; color: var(--gpa-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .gpa-dm-head .tools { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+      .gpa-dm-head .tools button { font-size: 12px; padding: 3px 8px; }
+      .gpa-dm-head .review-tag { display: inline-block; margin-left: 6px; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 6px; color: var(--gpa-warning, #f59e0b); border: 1px solid currentColor; }
+      .gpa-dm-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+      .gpa-dm-form { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--gpa-border); border-radius: 12px; background: var(--gpa-card-bg, var(--gpa-panel)); }
+      .gpa-dm-form[hidden] { display: none; }
+      .gpa-dm-form-title { font-weight: 700; }
+      .gpa-dm-torow { gap: 6px; }
+      .gpa-dm-torow .gpa-input { flex: 1; min-width: 0; }
+      .gpa-dm-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .gpa-dm-chips:empty { display: none; }
+      .gpa-dm-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 999px; font-size: 12.5px; background: color-mix(in srgb, var(--gpa-accent) 16%, transparent); }
+      .gpa-dm-chip button { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 13px; width: 22px; height: 22px; border-radius: 50%; }
+      .gpa-dm-err:empty { display: none; }
+      .gpa-dm-err { color: var(--gpa-danger, #e5453a); }
+      .gpa-dm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; flex: 1; -webkit-overflow-scrolling: touch; }
+      .gpa-dm-list li > button { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--gpa-text); text-align: left; cursor: pointer; font: inherit; }
+      .gpa-dm-list li > button:hover, .gpa-dm-list li > button:focus-visible { background: color-mix(in srgb, var(--gpa-accent) 12%, transparent); }
+      .gpa-dm-list .avatar { flex: none; width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 14px; }
+      .gpa-dm-list .avatar.group { border-radius: 11px; }
+      .gpa-dm-list .info { flex: 1; min-width: 0; }
+      .gpa-dm-list .title, .gpa-dm-list .last { display: block; }
+      .gpa-dm-list .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .gpa-dm-list .last { font-size: 12.5px; color: var(--gpa-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .gpa-dm-list .unread .title, .gpa-dm-list .unread .last { color: var(--gpa-text); font-weight: 700; }
+      .gpa-dm-list .side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 11px; color: var(--gpa-sub); }
+      .gpa-dm-list .side .gpa-chat-badge { margin: 0; }
+      .gpa-dm-list .empty { padding: 18px 8px; color: var(--gpa-sub); text-align: center; font-size: 13px; }
+      .gpa-dm-safety { margin: 0; font-size: 11.5px; }
+      .gpa-pane.is-dm .gpx-actions #gpa-chat-room, .gpa-pane.is-dm .gpx-actions #gpa-chat-join { display: none; }
+      .gpa-pane.dm-listing #gpa-chat-log, .gpa-pane.dm-listing .gpx-composer-dock, .gpa-pane.dm-listing #gpa-chat-people,
+      .gpa-pane.dm-listing #gpa-chat-pins, .gpa-pane.dm-listing #gpa-chat-typing, .gpa-pane.dm-listing #gpa-chat-quiet, .gpa-pane.dm-listing .gpx-empty-chat,
+      .gpa-pane.dm-listing #gpa-chat-replying, .gpa-pane.dm-listing #gpa-chat-editing, .gpa-pane.dm-listing #gpa-chat-rec, .gpa-pane.dm-listing .gpa-chat-filerow { display: none !important; }
+      .gpa-pane.dm-listing .gpa-dm { flex: 1; }
+      .gpa-pane.is-dm:not(.dm-listing) .gpa-dm-list, .gpa-pane.is-dm:not(.dm-listing) .gpa-dm-actions, .gpa-pane.is-dm:not(.dm-listing) .gpa-dm-safety { display: none; }
+      .gpa-pane.dm-monitor .gpx-composer-dock, .gpa-pane.dm-monitor .gpa-chat-filerow { display: none !important; }
+      .gpa-chat-body .at-all, .gpa-chat-msg .at-all { font-weight: 700; }
       .gpa-chat-suggest { list-style: none; margin: 0; padding: 4px; max-height: 180px; overflow-y: auto; background: var(--gpa-panel); border: 1px solid var(--gpa-border); border-radius: 10px; }
       .gpa-chat-suggest[hidden] { display: none; }
       .gpa-chat-suggest li { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; cursor: pointer; font-size: 13px; }
@@ -7124,8 +7223,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       // look at another tab.
       if (item.dataset.tab !== 'eaglercraft') { try { eagLeaveTab('tab'); } catch (e) { /* module not ready */ } }
       else { try { eagSync(); } catch (e) { /* module not ready */ } }
-      if (item.dataset.tab === 'chat' || item.dataset.tab === 'staffchat') {
-        // Chat and Staff chat share the Chat pane; each picks its room.
+      if (item.dataset.tab === 'chat' || item.dataset.tab === 'staffchat' || item.dataset.tab === 'dms') {
+        // Chat, Staff chat and Messages share the Chat pane; each picks its room.
         if (typeof chatNavPicked === 'function') chatNavPicked(item.dataset.tab);
         if (typeof startChatPolling === 'function') startChatPolling();
         if (typeof clearChatUnread === 'function') clearChatUnread();
@@ -7459,7 +7558,58 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     }
   }
 
+  // Saints Service stats (Welcome): the same numbers for everyone, from
+  // /stats/public (worked out at most once a minute by the Worker).
+  let pubStatsAt = 0;
+  async function fetchPublicStats(force) {
+    const note = panel.querySelector('#gpa-pubstats-note');
+    if (!note) return;
+    if (!telemetryOn()) { note.textContent = 'Stats need the worker to be set up.'; return; }
+    // At start-up the signed-in user isn't set up yet: try again shortly.
+    try { void currentUser; sessionToken(); } catch (e) { setTimeout(() => fetchPublicStats(force), 500); return; }
+    if (!force && Date.now() - pubStatsAt < 60000) return;
+    pubStatsAt = Date.now();
+    try {
+      const q = new URLSearchParams();
+      if (currentUser) q.set('user', currentUser);
+      if (sessionToken()) q.set('s', sessionToken());
+      const r = await fetch(telemetryEndpoint() + '/stats/public?' + q.toString(), { cache: 'no-store' });
+      const d = await r.json().catch(() => ({}));
+      if (!d.ok) { note.textContent = d.error || 'Stats are unavailable right now.'; return; }
+      note.textContent = '';
+      const set = (id, v) => { const el = panel.querySelector(id); if (el) el.textContent = v == null ? '--' : Number(v).toLocaleString(); };
+      set('#gpa-ps-people', d.people);
+      set('#gpa-ps-online', d.online);
+      set('#gpa-ps-today', d.publicToday == null ? null : (d.publicToday || 0) + (d.privateToday || 0));
+      set('#gpa-ps-week', d.publicWeek == null ? null : (d.publicWeek || 0) + (d.privateWeek || 0));
+      set('#gpa-ps-groups', d.groups);
+      const at = panel.querySelector('#gpa-pubstats-at');
+      if (at) at.textContent = 'Updated ' + new Date(d.at || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const lists = panel.querySelector('#gpa-ps-lists');
+      lists.innerHTML = '';
+      const list = (title, rows, unit) => {
+        if (!Array.isArray(rows) || !rows.length) return;
+        const box = document.createElement('div');
+        box.className = 'gpa-pubstats-list';
+        const h = document.createElement('div');
+        h.className = 'h';
+        h.textContent = title;
+        box.appendChild(h);
+        const ol = document.createElement('ol');
+        rows.forEach((x) => { const li = document.createElement('li'); const n = document.createElement('span'); n.textContent = x.u; const c = document.createElement('b'); c.textContent = x.n + ' ' + unit(x.n); li.appendChild(n); li.appendChild(c); ol.appendChild(li); });
+        box.appendChild(ol);
+        lists.appendChild(box);
+      };
+      list('💬 Top chatters this week', d.topChatters, (n) => (n === 1 ? 'msg' : 'msgs'));
+      list('🧠 Trivia points', d.trivia, (n) => (n === 1 ? 'pt' : 'pts'));
+      list('🔥 Weekday streaks', d.streaks, (n) => (n === 1 ? 'day' : 'days'));
+      list('🏆 Game records', d.records, (n) => (n === 1 ? 'record' : 'records'));
+    } catch (e) {
+      note.textContent = 'Offline — stats will load when you reconnect.';
+    }
+  }
   function refreshWelcomeData() {
+    fetchPublicStats();
     fetchLehighWeather();
     fetchLehighNews(true); // auto: never prompts for an API key on its own
     fetchActiveUsers();
@@ -13140,6 +13290,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // means by "I have chat open".
   function chatIsOpenAndVisible() {
     if (isMin) return false;
+    if (dmMode && !dmConv) return false;   // the Messages list, not a room
     const pane = panel.querySelector('.gpa-pane[data-pane="chat"]');
     if (!pane || !pane.classList.contains('active')) return false;
     if (typeof document !== 'undefined' && document.hidden) return false;
@@ -13174,8 +13325,17 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       + (isStaffClient() ? '<option value="staff"># staff (staff only)</option>' : '')
       + Object.keys(rooms).map((id) => `<option value="${escapeHtml(id)}">🔒 ${escapeHtml(rooms[id].name || id)}</option>`).join('');
     chatRoomSel.value = chatRoom;
-    if (chatRoomSel.value !== chatRoom) { chatRoom = 'public'; chatRoomSel.value = 'public'; }
+    if (chatRoomSel.value !== chatRoom && !isConvId(chatRoom)) { chatRoom = 'public'; chatRoomSel.value = 'public'; }
   }
+  // A direct message or group chat (Messages) rather than a chat room.
+  function isConvId(id) { return /^(dm|g)-[a-f0-9]{16,32}$/.test(String(id || '')); }
+  // Messages state (the rest is under "Messages" further down).
+  let dmMode = false;     // the Chat pane is showing Messages
+  let dmConv = null;      // the open conversation: { id, kind, title, members, by, monitor }
+  let dmList = [];        // your conversations, or every one in safety review
+  let dmReview = false;   // owner/admin: listing every conversation
+  let dmCanReview = false;
+  let dmNavItem = null;
 
   // A deterministic color per username (same idea as Discord/Slack's
   // per-user avatar tint) so people are visually distinguishable at a
@@ -13293,7 +13453,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       div.classList.add('has-poll');
       div.dataset.poll = '1';
     }
-    if (currentUser && m.u !== currentUser && mentionsUser(m.t, currentUser)) div.classList.add('mentions-me');
+    if (currentUser && m.u !== currentUser && (mentionsUser(m.t, currentUser) || m.ev)) div.classList.add('mentions-me');
     if (m.track && m.track.title) body.appendChild(chatTrackEl(m.track));
     col.appendChild(head);
     if (m.re && Number(m.re.ts)) col.appendChild(chatQuoteEl(m.re));
@@ -13342,12 +13502,15 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       if (!data.ok) {
         // No longer staff (role changed): leave the staff room quietly.
         if (chatRoom === 'staff') { staffAllowed = false; refreshStaffNav(); switchChatRoom(lastPublicRoom); chatNavPicked('chat'); return; }
+        // Left or removed from a conversation: back to the Messages list.
+        if (isConvId(chatRoom) && data.error === 'no such room') { dmGone(); return; }
         chatPollFailures++;
         chatNote.textContent = data.error || 'Could not load messages.';
         return;
       }
       chatPollFailures = 0;
       chatNote.textContent = '';
+      if (data.conv && data.room === chatRoom) dmConvInfo(data.conv, !!data.monitor);
       const visible = chatIsOpenAndVisible();
       let added = 0;
       (data.messages || []).forEach((m) => {
@@ -13361,8 +13524,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         added++;
         const isMine = currentUser && m.u === currentUser;
         if (!wasBootstrap && !isMine && !visible) {
-          chatUnread++;
-          if (currentUser && mentionsUser(m.t, currentUser)) notifyMention(m);
+          // A conversation's unread count is on the Messages badge instead.
+          if (!isConvId(chatRoom)) chatUnread++;
+          if (currentUser && (mentionsUser(m.t, currentUser) || m.ev)) notifyMention(m);
         }
       });
       const empty = chatLog.querySelector('.gpa-chat-empty');
@@ -13694,7 +13858,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     body.textContent = '';
     const me = currentUser ? String(currentUser) : '';
     if (!me || !text || text.indexOf('@') < 0) { body.textContent = text; return; }
-    const re = new RegExp('(^|\\s)(@' + me.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')(?![\\w-])', 'gi');
+    const re = new RegExp('(^|\\s)(@' + me.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '|@everyone)(?![\\w-])', 'gi');
     let last = 0, m;
     while ((m = re.exec(text))) {
       const at = m.index + m[1].length;
@@ -13978,8 +14142,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const names = new Map();
     chatPeople.forEach((p) => { if (p && p.u) names.set(p.u.toLowerCase(), p.u); });
     chatLog.querySelectorAll('.gpa-chat-msg').forEach((el) => { const u = el.dataset.u; if (u && !names.has(u.toLowerCase())) names.set(u.toLowerCase(), u); });
+    if (dmMode && dmConv && Array.isArray(dmConv.members)) dmConv.members.forEach((u) => { if (!names.has(String(u).toLowerCase())) names.set(String(u).toLowerCase(), String(u)); });
     if (currentUser) names.delete(currentUser.toLowerCase());
-    return [...names.values()];
+    names.delete('everyone');
+    return [...names.values(), 'everyone'];
   }
   function hideSuggest() { suggestEl.hidden = true; suggestEl.innerHTML = ''; suggestItems = []; chatInput.removeAttribute('aria-activedescendant'); }
   function renderSuggest() {
@@ -14411,21 +14577,25 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   }
   // Highlights Chat or Staff chat to match the room on screen, and retitles the pane.
   function syncChatNav() {
-    const staff = chatRoom === 'staff';
+    const dm = dmMode;
+    const staff = !dm && chatRoom === 'staff';
     const chatPaneOn = panel.querySelector('.gpa-pane[data-pane="chat"]').classList.contains('active');
     if (chatPaneOn && staffNavItem && chatNavItem) {
       staffNavItem.classList.toggle('active', staff);
-      chatNavItem.classList.toggle('active', !staff);
+      chatNavItem.classList.toggle('active', !staff && !dm);
+      if (dmNavItem) dmNavItem.classList.toggle('active', dm);
     }
     const pane = panel.querySelector('.gpa-pane[data-pane="chat"]');
     const title = pane.querySelector('.gpx-title');
     const desc = pane.querySelector('.gpx-desc');
-    if (title) title.textContent = staff ? 'Staff chat' : 'Chat';
-    if (desc) desc.textContent = staff ? 'Only staff and admins can see this room.' : 'Talk with everyone using this console, or join a private room with a code.';
+    if (title) title.textContent = dm ? 'Messages' : staff ? 'Staff chat' : 'Chat';
+    if (desc) desc.textContent = dm ? 'Message one person, or start a group chat. @everyone alerts the whole group.' : staff ? 'Only staff and admins can see this room.' : 'Talk with everyone using this console, or join a private room with a code. @everyone alerts the whole room.';
     pane.classList.toggle('is-staff-chat', staff);
   }
   // A sidebar pick of Chat or Staff chat.
   function chatNavPicked(tab) {
+    if (tab === 'dms') { enterDms(); syncChatNav(); return; }
+    if (dmMode) exitDms();
     if (tab === 'staffchat') {
       if (!isStaffClient()) return;
       if (chatRoom !== 'staff') { lastPublicRoom = chatRoom; switchChatRoom('staff'); }
@@ -14439,7 +14609,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
 
   function switchChatRoom(id) {
     if (id === 'staff' && !isStaffClient()) id = 'public';
-    if (id !== 'staff') lastPublicRoom = id;
+    if (id !== 'staff' && !isConvId(id)) lastPublicRoom = id;
     chatRoom = id;
     if (chatRoomSel.value !== id) chatRoomSel.value = id;
     chatSince = 0;
@@ -14560,6 +14730,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       });
       const result = await res.json().catch(() => ({}));
       if (!res.ok || !result.ok) throw Error(result.error || 'Message not sent.');
+      if (result.everyone === 'cooldown') showToast('Sent. @everyone alerts go out once every 10 minutes, so this one didn’t alert anyone.');
+      if (isConvId(chatRoom)) setTimeout(loadDmList, 400);
       chatInput.value = '';
       chatFileInput.value = '';
       updateChatFileLabel();
@@ -14610,6 +14782,358 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     }
   });
   renderRoomOptions();
+
+  // ---- Messages: direct messages and group chats ----------------------------
+  // A sidebar item under Chat (with a NEW label until you've opened it). It
+  // shares the Chat pane: the list of your conversations, "New message" /
+  // "New group", and opening one makes it the chat room on screen, so
+  // replies, reactions, photos, voice, polls and read receipts all work.
+  // Signed-in people only (the Worker checks the session on every call).
+  // The owner and admins also get "Safety review": every conversation,
+  // read-only, each opening written to the audit log.
+  dmNavItem = panel.querySelector('.gpa-dropdown-item[data-tab="dms"]');
+  const dmBox = panel.querySelector('#gpa-dm');
+  const dmListEl = panel.querySelector('#gpa-dm-list');
+  const dmHead = panel.querySelector('#gpa-dm-head');
+  const dmBack = panel.querySelector('#gpa-dm-back');
+  const dmForm = panel.querySelector('#gpa-dm-form');
+  const dmTo = panel.querySelector('#gpa-dm-to');
+  const dmName = panel.querySelector('#gpa-dm-name');
+  const dmChipsEl = panel.querySelector('#gpa-dm-chips');
+  const dmErr = panel.querySelector('#gpa-dm-err');
+  const dmReviewBtn = panel.querySelector('#gpa-dm-review');
+  const dmBadge = panel.querySelector('#gpa-dm-badge');
+  const dmNewPill = panel.querySelector('#gpa-dm-newpill');
+  const DM_NEW_SEEN_KEY = 'gpa_dm_new_seen';
+  let dmFormMode = '';    // 'dm' | 'group' | 'add'
+  let dmChips = [];
+  let dmTimer = 0;
+  let dmPeopleAt = 0;
+  try { if (localStorage.getItem(DM_NEW_SEEN_KEY)) dmNewPill.hidden = true; } catch (e) { /* storage blocked */ }
+
+  async function dmFetch(path, body) {
+    const h = { ...ownerProofHeader() };
+    let url = telemetryEndpoint() + path;
+    if (sessionToken()) {
+      if (body) h['X-GPA-Session'] = sessionToken();
+      else url += (url.includes('?') ? '&' : '?') + 's=' + encodeURIComponent(sessionToken());
+    }
+    const res = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'text/plain', ...h }, body: JSON.stringify(body) } : { cache: 'no-store', headers: h });
+    const data = await res.json().catch(() => ({}));
+    if (!data.ok && !data.error) data.error = 'HTTP ' + res.status;
+    return data;
+  }
+  const dmSignedIn = () => { try { return !!(currentUser && sessionToken()); } catch (e) { return false; } };
+  function dmPane() { return panel.querySelector('.gpa-pane[data-pane="chat"]'); }
+  function dmSetPaneMode() {
+    const pane = dmPane();
+    pane.classList.toggle('is-dm', dmMode);
+    pane.classList.toggle('dm-listing', dmMode && !dmConv);
+    pane.classList.toggle('dm-monitor', dmMode && !!(dmConv && dmConv.monitor));
+    dmBox.hidden = !dmMode;
+    dmBack.hidden = !(dmMode && dmConv);
+  }
+  function updateDmBadge() {
+    const open = dmMode && dmConv && chatIsOpenAndVisible() ? dmConv.id : '';
+    const n = dmReview ? 0 : dmList.reduce((a, c) => a + (c.id === open ? 0 : Number(c.n) || 0), 0);
+    dmBadge.textContent = n > 99 ? '99+' : String(n);
+    dmBadge.style.display = n > 0 ? 'inline-flex' : 'none';
+  }
+  function dmWhen(ts) {
+    if (!ts) return '';
+    const d = new Date(ts), now = new Date();
+    if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  }
+  function renderDmList() {
+    if (!dmSignedIn()) {
+      dmListEl.innerHTML = '<li class="empty">Sign in to send and get messages.</li>';
+      return;
+    }
+    if (!dmList.length) {
+      dmListEl.innerHTML = `<li class="empty">${dmReview ? 'No conversations yet.' : 'No messages yet. Tap “New message” to start one, or “New group” for a group chat.'}</li>`;
+      return;
+    }
+    dmListEl.innerHTML = '';
+    for (const c of dmList) {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.id = c.id;
+      if (!dmReview && c.n > 0) b.classList.add('unread');
+      const av = document.createElement('span');
+      av.className = 'avatar' + (c.kind === 'group' ? ' group' : '');
+      av.textContent = c.kind === 'group' ? '👥' : String(c.title || '?').charAt(0).toUpperCase();
+      av.style.background = c.kind === 'group' ? 'var(--gpa-accent)' : avatarColor(c.title);
+      const info = document.createElement('span');
+      info.className = 'info';
+      const t = document.createElement('span');
+      t.className = 'title';
+      t.textContent = c.title + (c.kind === 'group' ? ' · ' + (c.members || []).length : '');
+      const last = document.createElement('span');
+      last.className = 'last';
+      last.textContent = c.last ? (c.last.u && currentUser && c.last.u.toLowerCase() === currentUser.toLowerCase() ? 'You: ' : c.kind === 'group' || dmReview ? c.last.u + ': ' : '') + (c.last.t || '') : (c.kind === 'group' ? (c.members || []).join(', ') : 'No messages yet');
+      info.appendChild(t); info.appendChild(last);
+      const side = document.createElement('span');
+      side.className = 'side';
+      side.textContent = c.last ? dmWhen(c.last.ts) : '';
+      if (!dmReview && c.n > 0) { const n = document.createElement('span'); n.className = 'gpa-chat-badge'; n.textContent = c.n > 99 ? '99+' : String(c.n); side.appendChild(n); }
+      b.appendChild(av); b.appendChild(info); b.appendChild(side);
+      b.setAttribute('aria-label', (c.kind === 'group' ? 'Group ' : 'Conversation with ') + c.title + (c.n > 0 && !dmReview ? ', ' + c.n + ' unread' : ''));
+      b.addEventListener('click', () => openConv(c));
+      li.appendChild(b);
+      dmListEl.appendChild(li);
+    }
+  }
+  async function loadDmList() {
+    if (!telemetryOn() || !dmSignedIn()) { dmList = []; updateDmBadge(); if (dmMode) renderDmList(); return; }
+    try {
+      if (dmReview) {
+        const r = await dmFetch('/dm/review');
+        if (r.ok) dmList = r.convs || [];
+        else { dmReview = false; dmCanReview = false; renderDmReviewBtn(); }
+      } else {
+        const r = await dmFetch('/dm/list');
+        if (!r.ok) { if (dmMode && !dmConv) chatNote.textContent = r.error || 'Messages are unavailable.'; return; }
+        dmList = r.convs || [];
+        if (dmCanReview !== !!r.monitor) { dmCanReview = !!r.monitor; renderDmReviewBtn(); }
+        if (dmMode && !dmConv) chatNote.textContent = '';
+      }
+      if (dmMode && !dmConv) renderDmList();
+      updateDmBadge();
+    } catch (e) {
+      if (dmMode && !dmConv) chatNote.textContent = 'Offline — messages will load when you reconnect.';
+    }
+  }
+  function scheduleDmList() {
+    clearTimeout(dmTimer);
+    // Faster while the list is on screen; slow in the background (badge).
+    const listOnScreen = dmMode && !dmConv && !isMin && dmPane().classList.contains('active') && !document.hidden;
+    const delay = listOnScreen ? 5000 : 20000;
+    dmTimer = setTimeout(async () => { await loadDmList(); scheduleDmList(); }, delay);
+  }
+  function renderDmReviewBtn() {
+    dmReviewBtn.hidden = !dmCanReview;
+    dmReviewBtn.setAttribute('aria-pressed', dmReview ? 'true' : 'false');
+    dmReviewBtn.classList.toggle('primary', dmReview);
+    if (dmMode && !dmConv) renderDmHead();
+  }
+  function renderDmHead() {
+    dmHead.innerHTML = '';
+    const t = document.createElement('div');
+    t.className = 't';
+    const m = document.createElement('div');
+    m.className = 'm';
+    if (!dmConv) {
+      t.textContent = dmReview ? 'Safety review' : 'Your messages';
+      m.textContent = dmReview ? 'Every conversation, read-only. Opening one is logged.' : 'Direct messages and group chats';
+      dmHead.appendChild(t); dmHead.appendChild(m);
+      return;
+    }
+    t.textContent = dmConv.title || 'Conversation';
+    if (dmConv.monitor) { const tag = document.createElement('span'); tag.className = 'review-tag'; tag.textContent = 'Safety review · read-only'; t.appendChild(tag); }
+    m.textContent = dmConv.kind === 'group' ? (dmConv.members || []).join(', ') : 'Direct message';
+    dmHead.appendChild(t); dmHead.appendChild(m);
+    if (dmConv.monitor) return;
+    const tools = document.createElement('div');
+    tools.className = 'tools';
+    const tool = (label, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'gpa-btn'; b.textContent = label; b.addEventListener('click', fn); tools.appendChild(b); };
+    if (dmConv.kind === 'group') {
+      tool('Add people', () => showDmForm('add'));
+      tool('Rename', dmRename);
+      if (currentUser && String(dmConv.by || '').toLowerCase() === currentUser.toLowerCase()) tool('Remove someone', dmRemove);
+      tool('Leave', dmLeave);
+    } else tool('Hide', dmHide);
+    dmHead.appendChild(tools);
+  }
+  function openConv(c) {
+    hideDmForm();
+    const review = dmReview;
+    dmConv = { id: c.id, kind: c.kind, title: c.title, members: c.members || [], by: c.by, monitor: review };
+    if (review) dmFetch('/dm/review-open', { id: c.id }).catch(() => {});
+    // Opening it clears its unread count here at once (the Worker clears it
+    // as soon as the messages have been on screen).
+    const hit = dmList.find((x) => x.id === c.id);
+    if (hit && !review) hit.n = 0;
+    updateDmBadge();
+    if (chatRoom !== c.id) switchChatRoom(c.id);
+    dmSetPaneMode();
+    renderDmHead();
+    syncChatNav();
+    if (window.matchMedia && !window.matchMedia('(pointer: coarse)').matches) { try { chatInput.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+  }
+  // The open conversation's details, from each poll.
+  function dmConvInfo(conv, monitor) {
+    if (!dmMode || !dmConv || dmConv.id !== conv.id) return;
+    const changed = dmConv.title !== conv.title || dmConv.monitor !== monitor || (dmConv.members || []).join() !== (conv.members || []).join();
+    dmConv = { ...dmConv, ...conv, monitor };
+    if (changed) { dmSetPaneMode(); renderDmHead(); }
+  }
+  function showDmListView() {
+    dmConv = null;
+    hideDmForm();
+    dmSetPaneMode();
+    renderDmHead();
+    renderDmList();
+    loadDmList();
+    scheduleDmList();
+  }
+  // Removed from a group (or it's gone): back to the list.
+  function dmGone() {
+    if (!dmMode) { switchChatRoom(lastPublicRoom || 'public'); return; }
+    chatNote.textContent = 'That conversation isn’t available any more.';
+    showDmListView();
+  }
+  function enterDms() {
+    dmMode = true;
+    try { localStorage.setItem(DM_NEW_SEEN_KEY, '1'); } catch (e) { /* storage blocked */ }
+    dmNewPill.hidden = true;
+    if (dmConv && isConvId(dmConv.id)) {
+      if (chatRoom !== dmConv.id) switchChatRoom(dmConv.id);
+      dmSetPaneMode();
+      renderDmHead();
+    } else showDmListView();
+  }
+  function exitDms() {
+    dmMode = false;
+    hideDmForm();
+    dmSetPaneMode();
+    chatNote.textContent = '';
+    if (isConvId(chatRoom)) switchChatRoom(lastPublicRoom || 'public');
+  }
+  async function dmPeople(q) {
+    if (Date.now() - dmPeopleAt < 800) return;
+    dmPeopleAt = Date.now();
+    try {
+      const r = await dmFetch('/dm/people?q=' + encodeURIComponent(q || ''));
+      if (!r.ok) return;
+      const dl = panel.querySelector('#gpa-dm-people');
+      dl.innerHTML = '';
+      (r.people || []).forEach((n) => { const o = document.createElement('option'); o.value = n; dl.appendChild(o); });
+    } catch (e) { /* suggestions are optional */ }
+  }
+  function renderDmChips() {
+    dmChipsEl.innerHTML = '';
+    dmChips.forEach((n, i) => {
+      const c = document.createElement('span');
+      c.className = 'gpa-dm-chip';
+      c.textContent = n;
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.textContent = '✕';
+      x.setAttribute('aria-label', 'Remove ' + n);
+      x.addEventListener('click', () => { dmChips.splice(i, 1); renderDmChips(); });
+      c.appendChild(x);
+      dmChipsEl.appendChild(c);
+    });
+  }
+  function dmAddChip() {
+    const names = dmTo.value.split(/[\s,;]+/).map((x) => x.trim().replace(/^@/, '')).filter(Boolean);
+    for (const n of names) if (!dmChips.some((c) => c.toLowerCase() === n.toLowerCase()) && (!currentUser || n.toLowerCase() !== currentUser.toLowerCase())) dmChips.push(n);
+    dmTo.value = '';
+    renderDmChips();
+  }
+  function showDmForm(mode) {
+    if (!dmSignedIn()) { chatNote.textContent = 'Sign in to send messages.'; return; }
+    dmFormMode = mode;
+    dmChips = [];
+    renderDmChips();
+    dmErr.textContent = '';
+    dmTo.value = '';
+    dmName.value = '';
+    const group = mode !== 'dm';
+    dmName.hidden = mode !== 'group';
+    panel.querySelector('#gpa-dm-add').hidden = !group;
+    panel.querySelector('#gpa-dm-form-title').textContent = mode === 'dm' ? 'New message' : mode === 'group' ? 'New group chat' : 'Add people to “' + (dmConv && dmConv.title) + '”';
+    dmTo.placeholder = group ? 'Add a name, then tap Add' : 'Their name';
+    panel.querySelector('#gpa-dm-go').textContent = mode === 'dm' ? 'Start' : mode === 'group' ? 'Create group' : 'Add';
+    dmForm.hidden = false;
+    dmPeopleAt = 0;
+    dmPeople('');
+    (mode === 'group' ? dmName : dmTo).focus();
+  }
+  function hideDmForm() { dmForm.hidden = true; dmFormMode = ''; }
+  async function dmSubmit() {
+    dmErr.textContent = '';
+    const go = panel.querySelector('#gpa-dm-go');
+    go.disabled = true;
+    try {
+      let r;
+      if (dmFormMode === 'dm') {
+        const to = dmTo.value.trim().replace(/^@/, '');
+        if (!to) { dmErr.textContent = 'Type their name.'; return; }
+        r = await dmFetch('/dm/start', { to });
+      } else {
+        if (dmTo.value.trim()) dmAddChip();
+        if (dmFormMode === 'group') {
+          if (!dmName.value.trim()) { dmErr.textContent = 'Give the group a name.'; return; }
+          r = await dmFetch('/dm/group', { name: dmName.value.trim(), members: dmChips });
+        } else {
+          if (!dmChips.length) { dmErr.textContent = 'Add at least one name.'; return; }
+          r = await dmFetch('/dm/manage', { id: dmConv.id, action: 'add', members: dmChips });
+        }
+      }
+      if (!r.ok) { dmErr.textContent = r.error || 'That didn’t work.'; return; }
+      hideDmForm();
+      const c = { ...r.conv, n: 0 };
+      if (!dmList.some((x) => x.id === c.id)) dmList.unshift(c);
+      dmReview = false; renderDmReviewBtn();
+      openConv(c);
+      loadDmList();
+    } catch (e) {
+      dmErr.textContent = 'Couldn’t reach the server.';
+    } finally { go.disabled = false; }
+  }
+  async function dmManage(body, ok) {
+    try {
+      const r = await dmFetch('/dm/manage', { id: dmConv.id, ...body });
+      if (!r.ok) { showToast(r.error || 'That didn’t work.'); return; }
+      if (ok) ok(r);
+      if (r.conv) { dmConv = { ...dmConv, ...r.conv }; renderDmHead(); }
+      loadDmList();
+    } catch (e) { showToast('Couldn’t reach the server.'); }
+  }
+  function dmRename() {
+    const name = (prompt('New name for the group:', dmConv.title || '') || '').trim();
+    if (name) dmManage({ action: 'rename', name });
+  }
+  function dmRemove() {
+    const others = (dmConv.members || []).filter((n) => !currentUser || n.toLowerCase() !== currentUser.toLowerCase());
+    const who = (prompt('Remove who? (' + others.join(', ') + ')') || '').trim().replace(/^@/, '');
+    if (who) dmManage({ action: 'remove', member: who });
+  }
+  function dmLeave() {
+    if (!confirm('Leave “' + dmConv.title + '”? You won’t see its messages any more unless someone adds you back.')) return;
+    dmManage({ action: 'leave' }, () => { dmList = dmList.filter((x) => x.id !== dmConv.id); showDmListView(); });
+  }
+  function dmHide() {
+    dmManage({ action: 'hide' }, () => { dmList = dmList.filter((x) => x.id !== dmConv.id); showToast('Hidden. It comes back if they message you again.'); showDmListView(); });
+  }
+  // A notification (#tab=dms&room=<id>) opens that conversation.
+  async function openDmFromLink(id) {
+    if (!isConvId(id)) return;
+    await loadDmList();
+    const c = dmList.find((x) => x.id === id) || { id, kind: id.startsWith('g-') ? 'group' : 'dm', title: 'Conversation', members: [] };
+    openConv(c);
+  }
+  dmBack.addEventListener('click', () => { if (isConvId(chatRoom)) switchChatRoom(lastPublicRoom || 'public'); showDmListView(); syncChatNav(); });
+  panel.querySelector('#gpa-dm-new').addEventListener('click', () => showDmForm('dm'));
+  panel.querySelector('#gpa-dm-newgroup').addEventListener('click', () => showDmForm('group'));
+  panel.querySelector('#gpa-dm-cancel').addEventListener('click', hideDmForm);
+  panel.querySelector('#gpa-dm-add').addEventListener('click', () => { dmAddChip(); dmTo.focus(); });
+  dmForm.addEventListener('submit', (e) => { e.preventDefault(); dmSubmit(); });
+  dmTo.addEventListener('input', () => dmPeople(dmTo.value.trim()));
+  dmTo.addEventListener('keydown', (e) => {
+    if (dmFormMode !== 'dm' && (e.key === ',' || (e.key === 'Enter' && dmTo.value.trim()))) { e.preventDefault(); dmAddChip(); }
+  });
+  dmReviewBtn.addEventListener('click', () => { dmReview = !dmReview; dmList = []; renderDmReviewBtn(); showDmListView(); });
+  setTimeout(() => {
+    try {
+      onSessionChange(() => { dmReview = false; dmList = []; dmConv = dmConv && dmMode ? dmConv : null; loadDmList(); });
+    } catch (e) { /* not ready */ }
+    loadDmList();
+    scheduleDmList();
+  }, 0);
 
   // ---- Extended tools -------------------------------------------------------
   // Voice input, read-aloud, text-selection assistant, table extractor, page
@@ -21734,6 +22258,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     if (!item || item.style.display === 'none') return;
     item.click();
     if (p.tab === 'chat' && p.room) openChatRoomFromLink(p.room);
+    if (p.tab === 'dms' && p.room && typeof openDmFromLink === 'function') openDmFromLink(p.room);
     if (/^[a-z]+$/.test(p.sec || '')) setTimeout(() => { const t = panel.querySelector(`.gps-tab[data-sec="${p.sec}"]`); if (t && !t.hidden) t.click(); }, 300);
     if (p.focus === 'push') whenEl(() => { const c = panel.querySelector('#gpa-push-card'); return c && c.offsetParent ? c : null; }).then(flashEl);
   }
@@ -25630,6 +26155,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         const sel = q('#gpa-chat-room');
         const roomName = sel && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '';
         if (note && /unavailable|could not|needs the worker|offline/i.test(note)) return 'Offline';
+        if (dmMode) return dmConv ? (dmConv.monitor ? 'Safety review · ' : 'Connected · ') + (dmConv.title || 'conversation') : dmReview ? 'Safety review' : 'Your messages';
         return roomName ? 'Connected · ' + roomName : 'Connecting';
       },
       music() {

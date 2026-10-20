@@ -14,7 +14,8 @@ new subscriber and then the owner would see things.
 | [3-playlists](#3-playlists-everyone-signed-in) | Spotify / Apple Music playlist → YouTube links, for everyone; **new:** 10 new songs a day each, your limit card |
 | [4-youtube-to-mp3](#4-youtube-to-mp3-owner) | The MP3 converter in Music → My music |
 | [5-subscribe-page](#5-subscribe-page) | The payment page, the $6 contribution box, and **new:** your $1 test (owner only) |
-| [12-proxy-tab](#12-proxy-tab-saints-proxy-worker) | **New:** the Proxy tab with several approved sites: a site loading through the proxy, HTTP 404, website down, other sites explained, blocked by a website, light theme |
+| [13-messages](#13-messages-everyone-and-stats) | **New:** Messages (direct messages and group chats) with its NEW label, unread badges, @everyone, your Safety review, and the stats card on Welcome |
+| [12-proxy-tab](#12-proxy-tab-saints-proxy-worker) | The Proxy tab with several approved sites: a site loading through the proxy, HTTP 404, website down, other sites explained, blocked by a website, light theme |
 | [11-countdown-renew-texting](#11-countdown-renew-and-texting) | **New:** time left at the top for everyone, the Renew box (link, text me the link, paying cash), your Cash & texting card |
 | [10-security-review](#10-security-review-brute-force-proof-and-fix) | **New:** proof that PINs and student numbers could be brute-forced, and the fix |
 | [9-fold-top-card](#9-fold-the-top-card) | **New:** the Ask AI card (and every tab's top card) folds to a thin bar |
@@ -375,3 +376,53 @@ page stays:
 **Light theme:**
 
 <img src="12-proxy-tab/7-light-theme.png" width="640" alt="Proxy tab in the white theme">
+
+## 13. Messages, @everyone and stats
+
+Taken in the automated test (`tests/browser/messages.mjs`) on iPhone 15
+size phones and one computer, with made-up names (`ana…`, `ben…`, `cy…`,
+and an admin `adm…`).
+
+**The sidebar:** Messages sits right under Chat with an orange **NEW**
+label. The label goes away on that device once the person has opened
+Messages.
+
+<img src="13-messages/1-sidebar-new.png" width="320" alt="Messages in the sidebar with a NEW label">
+
+**Messages, empty:** New message, New group, and the line that tells
+everyone the owner and admins can read messages.
+
+<img src="13-messages/2-messages-empty.png" width="320" alt="Messages with no conversations yet">
+
+**A direct message:** Ana messages Ben.
+
+<img src="13-messages/3-direct-message.png" width="320" alt="A direct message">
+
+**Ben gets a badge** on Messages without opening anything, and the
+conversation shows as unread in his list:
+
+<img src="13-messages/4-unread-badge.png" width="320" alt="Unread badge on Messages"> <img src="13-messages/5-list-unread.png" width="320" alt="Unread conversation in the list">
+
+**A group chat with @everyone:** the group's name and members, Add people,
+Rename and Leave, the "started" notice, and an @everyone message
+highlighted for everyone in the group.
+
+<img src="13-messages/6-group-everyone.png" width="320" alt="Group chat with an @everyone message highlighted">
+
+**Your Safety review** (you and admins only): every conversation, then one
+opened read-only with no message box. It's marked "Safety review ·
+read-only", it leaves no "Read by", and each one you open is written to
+the audit log.
+
+<img src="13-messages/7-safety-review-list.png" width="640" alt="Safety review list"> <img src="13-messages/8-safety-review-open.png" width="640" alt="A conversation open in Safety review, read-only">
+
+**Stats on Welcome**, for everyone: members, online now, messages today
+and this week (chat and private messages counted together, never their
+contents), group chats, and top chatters, trivia points, streaks and game
+records when there are any.
+
+<img src="13-messages/9-welcome-stats-desktop.png" width="640" alt="Saints Service stats on Welcome (computer)"> <img src="13-messages/10-welcome-stats-phone.png" width="320" alt="Saints Service stats on Welcome (phone)">
+
+**Dark mode on a phone:**
+
+<img src="13-messages/11-messages-dark.png" width="320" alt="Messages list, dark">

@@ -305,6 +305,11 @@ const pendingSec = new Map();     // sec:<day> -> { counts, recent[] }
 let pendingCount = 0, lastFlushAt = Date.now();
 const rateBuckets = new Map();    // user -> { windowStart, count }  (per instance)
 const reportBuckets = new Map();  // user -> { day, count }
+const convMemo = new Map();       // conv:<id> records, 30 s (per instance; see getConv)
+const MSG_GROUP_MAX = 20;         // people in a group chat, the creator included
+const MSG_NEW_PER_DAY = 20;       // new conversations a person may start per day
+const EVERYONE_COOLDOWN_SEC = 600;   // @everyone alerts: once per 10 minutes per person (staff exempt)
+const EVERYONE_MAX_ALERTS = 60;      // phone alerts one @everyone sends at most
 const V1_MAX_BODY = 24 * 1024 * 1024;   // largest AI request accepted (see /v1/*)
 // A response body as text, reading no more than maxBytes (the rest is
 // cancelled, never downloaded into memory).
@@ -3188,6 +3193,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         routes: [
           '/v1/*', '/read', '/track', '/status', '/active-count', '/health',
           '/chat/poll', '/chat/send', '/chat/react', '/chat/unsend', '/chat/report', '/chat/extras', '/games/score', '/games/leaderboard', '/unlock',
+          '/dm/list', '/dm/people', '/dm/start', '/dm/group', '/dm/manage', '/dm/review', '/stats/public',
           '/auth/register', '/auth/login', '/auth/me', '/auth/logout', '/auth/revoke',
           '/memory/*', '/eagler/*', ...Object.keys(ADMIN_ROUTES)
         ]
@@ -3765,11 +3771,67 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         return { ok: false, error: 'no such room' };
       }
       if (!kv) return { ok: false, error: 'chat storage not configured' };
+      // Messages: a direct message or group chat. Its members get in with a
+      // verified session; the owner and admins may read any of them (safety
+      // review, read-only: access.monitor); to anyone else it doesn't exist.
+      if (CONV_RE.test(id)) {
+        const conv = await getConv(kv, id);
+        if (!conv) return { ok: false, error: 'no such room' };
+        const p = await resolvePrincipal();
+        const me = p && p.kind === 'session' ? String(p.user).toLowerCase() : '';
+        if (me && conv.members.includes(me)) return { ok: true, id, conv, room: { name: convLabel(conv, me) } };
+        if (await canMonitorChats()) return { ok: true, id, conv, monitor: true, room: { name: convLabel(conv, '') } };
+        return { ok: false, error: 'no such room' };
+      }
       const room = await kv.get(roomKey(id), 'json');
       if (!room) return { ok: false, error: 'no such room' };
       const h = await sha256hex(id + '|' + String(code || '').trim().toUpperCase());
       if (!(await timingSafeEqualStr(h, room.codeHash))) return { ok: false, error: 'wrong room code' };
       return { ok: true, id, room };
+    };
+
+    // ---- Messages: direct messages and group chats --------------------------
+    // A conversation is an ordinary chat room (its own ChatRoom object, so
+    // replies, reactions, photos, voice, polls and read receipts all work)
+    // whose id is dm-<hash> (two people; the same pair always gets the same
+    // one) or g-<random> (a named group, 3 to MSG_GROUP_MAX people). Its
+    // record (conv:<id> in KV) says who is in it; each member's inbox object
+    // lists it with the latest message and their unread count (chat/room.js).
+    const CONV_RE = /^(dm|g)-[a-f0-9]{16,32}$/;
+    const convKey = (id) => 'conv:' + id;
+    const getConv = async (kv, id) => {
+      if (!CONV_RE.test(id) || !kv) return null;
+      const hit = convMemo.get(id);
+      if (hit && Date.now() - hit.at < 30000) return hit.conv;
+      const conv = await kv.get(convKey(id), 'json');
+      if (conv) convMemo.set(id, { conv, at: Date.now() });
+      if (convMemo.size > 500) convMemo.clear();
+      return conv;
+    };
+    const putConv = async (kv, conv) => {
+      conv.updatedAt = Date.now();
+      await kv.put(convKey(conv.id), JSON.stringify(conv));
+      convMemo.set(conv.id, { conv, at: Date.now() });
+    };
+    const convNames = (conv) => conv.members.map((m) => (conv.names && conv.names[m]) || m);
+    const convLabel = (conv, me) => (conv.kind === 'group' ? conv.name : convNames(conv).filter((n) => n.toLowerCase() !== me).join(', ') || 'Direct message');
+    const convMeta = (conv) => ({ id: conv.id, kind: conv.kind, name: conv.kind === 'group' ? conv.name : '', members: convNames(conv) });
+    // The owner and admins can read every conversation (read-only).
+    const canMonitorChats = async () => {
+      const p = await resolvePrincipal();
+      if (p && (ROLE_RANK_V2[p.role] || 0) >= ROLE_RANK_V2.admin) return true;
+      const code = req.headers.get('X-GPA-Owner') || '';
+      return !!(env && env.OWNER_CODE && code && (await timingSafeEqualStr(code, env.OWNER_CODE)));
+    };
+    // Room ids are cut at 40 characters, so a long name's inbox goes by a hash.
+    const inboxCall = async (who, action, body) => {
+      const k = String(who).toLowerCase();
+      return chatRoomCall(env, 'inbox-' + (k.length <= 34 ? k : (await sha256hex('inbox|' + k)).slice(0, 34)), action, body);
+    };
+    // Tells every member's inbox (and the owner's list of all conversations).
+    const inboxFanout = async (conv, action, body, members) => {
+      const all = [...(members || conv.members), '@all'];
+      await Promise.all(all.map((m) => inboxCall(m, action, { conv: convMeta(conv), ...(body || {}) }).catch(() => {})));
     };
 
     // ---- Subscribe app (/subscribe/): pay with Stripe, get approved ----------
@@ -4410,6 +4472,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         return json({ok:false,error:'Chat is unavailable in your region'},403);
       const room=await checkRoomAccess(kvMain,form.get('room'),form.get('code'));
       if(!room.ok)return json({ok:false,error:room.error},403);
+      if(room.monitor)return json({ok:false,error:'Only the people in this conversation can post in it.'},403);
       const rules=await getRoomCfg(kvMain,room.id);
       if(rules.bannedUsers.includes(lower))return json({ok:false,error:'Banned from this room'},403);
       const bytes=new Uint8Array(await file.arrayBuffer());
@@ -4526,6 +4589,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       }
       const access = await checkRoomAccess(kv, body.room, body.code);
       if (!access.ok) return json({ ok: false, error: access.error }, 200);
+      if (access.monitor) return json({ ok: false, error: 'Only the people in this conversation can post in it.' }, 200);
       const media=await chatPhoto(body.mediaId,user,access.id);
       if(body.mediaId&&!media)return json({ok:false,error:'Photo upload not found or not owned by this user'},200);
       const roomCfg = await getRoomCfg(kv, access.id);
@@ -4566,12 +4630,23 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       // devices) never has it to return.
       const mod = await getMod(kv, user);
       if (mod.shadowMuted) return json({ ok: true, ts });
+      // @everyone: highlights the message for everyone in the chat and alerts
+      // their phones (mention alerts on). Once per EVERYONE_COOLDOWN_SEC per
+      // person so it can't be spammed; the owner and staff aren't limited.
+      // Over the limit, the message still goes out, as plain text.
+      let everyone = null;   // 'sent' | 'cooldown'
+      if (/(^|[^a-z0-9_])@everyone\b/i.test(text)) {
+        const evKey = 'everyone:' + userLower;
+        if (userLower === OWNER || senderStaff || (sendP && (ROLE_RANK_V2[sendP.role] || 0) >= ROLE_RANK_V2.moderator)) everyone = 'sent';
+        else if (await kv.get(evKey)) everyone = 'cooldown';
+        else { await kv.put(evKey, String(Date.now()), { expirationTtl: EVERYONE_COOLDOWN_SEC }); everyone = 'sent'; }
+      }
       try {
         if (chatInRooms) {
           // The room appends it and assigns its timestamp (in log order).
           // A reply names the message it answers (replyTo = its ts); the room
           // attaches a short quote of it.
-          const added = await chatRoomCall(env, access.id, 'append', { msg: { u: user, t: text || (poll ? poll.q : ''), owner: userLower === OWNER, ...(senderStaff ? { staff: true } : {}), ...(media ? { media } : {}), ...(poll ? { poll } : {}), ...(track ? { track } : {}) }, replyTo: Number(body.replyTo) || 0 });
+          const added = await chatRoomCall(env, access.id, 'append', { msg: { u: user, t: text || (poll ? poll.q : ''), owner: userLower === OWNER, ...(senderStaff ? { staff: true } : {}), ...(media ? { media } : {}), ...(poll ? { poll } : {}), ...(track ? { track } : {}), ...(everyone === 'sent' ? { ev: true } : {}) }, replyTo: Number(body.replyTo) || 0 });
           if (added.trivia && added.trivia.won && access.id === 'public') {
             // Daily trivia: first correct answer wins a point.
             const pts = (await kv.get('trivia:points', 'json')) || {};
@@ -4585,7 +4660,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           replied = added.re || null;
         } else {
         const log = await readRoomLog(kv, access.id);
-        log.push({ u: user, t: text, ts, owner: userLower === OWNER, ...(media?{media}:{}) });
+        log.push({ u: user, t: text, ts, owner: userLower === OWNER, ...(media?{media}:{}), ...(everyone === 'sent' ? { ev: true } : {}) });
         // Keep the newest CHAT_MAX so one room's log can't grow past the
         // 25MB per-value ceiling however long it runs.
         const trimmed = log.slice(-CHAT_MAX);
@@ -4594,14 +4669,52 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       } catch (e) {
         return json({ ok: false, error: 'could not store message' }, 200);
       }
+      const conv = access.conv || null;
+      const said = text || (media ? 'Sent ' + (/^audio\//.test(media.type) ? 'a voice message' : 'a photo') : poll ? 'Sent a poll' : track ? 'Shared a song' : '');
+      const where = access.id === 'public' ? '#public' : access.id === STAFF_ROOM ? 'staff chat' : conv ? (conv.kind === 'group' ? conv.name : 'a direct message') : '#' + ((access.room && access.room.name) || access.id);
+      const linkTo = conv ? appLink('dms', { room: access.id }) : appLink('chat', { room: access.id });
+      const later = (p) => { if (ctx && ctx.waitUntil) ctx.waitUntil(p); return p; };
+      if (conv) {
+        // Every member's Messages list: the latest message, and one more
+        // unread for everyone but the sender. Members with alerts on get a
+        // phone alert (one per sender per minute); the owner's comes below.
+        later(Promise.all([...conv.members, '@all'].map((m) => inboxCall(m, 'inbox_bump', { conv: convMeta(conv), msg: { u: user, t: said, ts }, self: m === userLower, count: m === '@all' }).catch(() => {}))));
+        if (everyone !== 'sent') later((async () => {
+          for (const n of conv.members) {
+            if (n === userLower || n === OWNER || !(await userHasAlerts(env, n))) continue;
+            const tk = 'push:mrl:' + userLower + ':' + n;
+            if (await kv.get(tk)) continue;
+            await kv.put(tk, '1', { expirationTtl: 60 });
+            await notifyUser(env, n, { title: conv.kind === 'group' ? user + ' in ' + conv.name : user, body: said, url: linkTo, tag: 'dm-' + access.id }, url.origin);
+          }
+        })().catch(() => {}));
+      }
+      if (everyone === 'sent') {
+        // Who gets the phone alert: the conversation's members; for #public
+        // everyone with alerts on; staff chat, staff with alerts on; a
+        // private room, the people its room has seen.
+        later((async () => {
+          let names;
+          if (conv) names = conv.members;
+          else if (access.id === 'public' || access.id === STAFF_ROOM) names = (await kv.list({ prefix: 'push:user:', limit: 1000 })).keys.map((k) => k.name.slice('push:user:'.length));
+          else names = ((await chatRoomCall(env, access.id, 'read', { since: Number.MAX_SAFE_INTEGER }).catch(() => ({}))).people || []).map((x) => String(x.u || '').toLowerCase());
+          let sent = 0;
+          for (const n of [...new Set(names)]) {
+            if (sent >= EVERYONE_MAX_ALERTS) break;
+            if (!n || n === userLower || n === OWNER || n === 'anonymous') continue;
+            if (access.id === STAFF_ROOM) { const a = await getAcct(kv, n); if (!a || (ROLE_RANK_V2[a.role] || 0) < ROLE_RANK_V2.moderator) continue; }
+            if (!(await userHasAlerts(env, n))) continue;
+            await notifyUser(env, n, { title: user + ' → @everyone in ' + where, body: said, url: linkTo, tag: 'everyone-' + access.id }, url.origin);
+            sent++;
+          }
+        })().catch(() => {}));
+      }
       // @mentions alert the people named, on their phones if they turned
       // mention alerts on (#public and staff chat only: the Worker can't tell
       // who has joined a private room, and the alert shows the text).
       if (access.id === 'public' || access.id === STAFF_ROOM) {
         const named = [...new Set([...text.matchAll(/(^|[^a-z0-9_])@([a-z0-9_.-]{1,40})/gi)].map((m) => m[2].toLowerCase().replace(/\.+$/, '')))]
           .filter((n) => n && n !== userLower && n !== OWNER).slice(0, 5);
-        const where = access.id === 'public' ? '#public' : 'staff chat';
-        const said = text || (media ? 'Sent ' + (/^audio\//.test(media.type) ? 'a voice message' : 'a photo') : '');
         for (const n of named) {
           if (!(await userHasAlerts(env, n))) continue;
           if (access.id === STAFF_ROOM) { const a = await getAcct(kv, n); if (!a || (ROLE_RANK_V2[a.role] || 0) < ROLE_RANK_V2.moderator) continue; }
@@ -4612,20 +4725,25 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           if (ctx && ctx.waitUntil) ctx.waitUntil(p);
         }
       }
-      if (userLower !== OWNER) {
-        const roomLabel = access.id === 'public' ? '#public' : '#' + ((access.room && access.room.name) || access.id);
-        const said = text || (media ? 'Sent a photo' : '');
+      // The owner's own alerts. A conversation the owner isn't in sends none
+      // (they can still read it under Messages → Safety review).
+      if (userLower !== OWNER && (!conv || conv.members.includes(OWNER))) {
+        const roomLabel = conv ? (conv.kind === 'group' ? conv.name : 'a direct message') : access.id === 'public' ? '#public' : '#' + ((access.room && access.room.name) || access.id);
         // "@owner" (or the owner's name as a word) is a mention: it gets its
         // own, louder alert instead of the ordinary chat one.
-        if (replied && String(replied.u || '').toLowerCase() === OWNER) {
-          notify({ cat: 'mentions', title: user + ' replied to you in ' + roomLabel, body: said, url: appLink('chat', { room: access.id }), urgent: true });
+        if (everyone === 'sent') {
+          notify({ cat: 'mentions', title: user + ' → @everyone in ' + roomLabel, body: said, url: linkTo, urgent: true });
+        } else if (conv && conv.kind === 'dm') {
+          notify({ cat: 'mentions', title: user + ' messaged you', body: said, url: linkTo, urgent: true });
+        } else if (replied && String(replied.u || '').toLowerCase() === OWNER) {
+          notify({ cat: 'mentions', title: user + ' replied to you in ' + roomLabel, body: said, url: linkTo, urgent: true });
         } else if (new RegExp('(^|[^a-z0-9_])@?' + OWNER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(text)) {
-          notify({ cat: 'mentions', title: user + ' mentioned you in ' + roomLabel, body: said, url: appLink('chat', { room: access.id }), urgent: true });
+          notify({ cat: 'mentions', title: user + ' mentioned you in ' + roomLabel, body: said, url: linkTo, urgent: true });
         } else {
-          notify({ cat: access.id === 'public' ? 'chat' : 'chatrooms', title: user + ' in ' + roomLabel, body: said, url: appLink('chat', { room: access.id }) });
+          notify({ cat: access.id === 'public' ? 'chat' : 'chatrooms', title: user + ' in ' + roomLabel, body: said, url: linkTo });
         }
       }
-      return json({ ok: true, ts });
+      return json({ ok: true, ts, ...(everyone ? { everyone } : {}) });
     }
 
     if (url.pathname === '/chat/poll' && req.method === 'GET') {
@@ -4648,7 +4766,9 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         // Read receipts: while the chat is on screen the client says how far
         // it has read (?read=<ts>); it is recorded for the identified user
         // and everyone's cursors come back. Rooms only (Durable Objects).
-        const reader = pollId.user && pollId.user.toLowerCase() !== 'anonymous' && (await mayActInChatAs(pollId)) ? pollId.user : '';
+        // Someone reading a conversation for safety review leaves no read
+        // receipt or "here" in it.
+        const reader = !access.monitor && pollId.user && pollId.user.toLowerCase() !== 'anonymous' && (await mayActInChatAs(pollId)) ? pollId.user : '';
         const seen = parseInt(url.searchParams.get('read') || '0', 10) || 0;
         // Typing and who's here (see chat/room.js): ?here=1 while the chat is
         // on screen, ?typing=1 / 0 while there. Someone who can't post here
@@ -4658,6 +4778,11 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         let typing = url.searchParams.get('typing') === '1' ? true : url.searchParams.get('typing') === '0' ? false : null;
         if (typing === true && reader && !(await mayPostInChat(kv, reader, access.id))) typing = false;
         const room = chatInRooms ? await chatRoomCall(env, access.id, 'read', { since, reader, seen, here: here && !!reader, typing: reader ? typing : null }) : null;
+        // Reading a conversation clears its unread count in your inbox.
+        if (room && room.advanced && access.conv && reader) {
+          const ip = inboxCall(reader, 'inbox_read', { convId: access.id, ts: room.advanced }).catch(() => {});
+          if (ctx && ctx.waitUntil) ctx.waitUntil(ip);
+        }
         if (room) { reads = room.reads || []; live = { reactions: room.reactions || {}, unsent: room.unsent || [], edits: room.edits || {}, votes: room.votes || {}, pins: room.pins || [], typing: room.typing || [], people: room.people || [] }; }
         messages = (room ? room.messages : await readRoomLog(kv, access.id))
           .filter((m) => m && m.ts > since)
@@ -4669,7 +4794,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       // Quiet hours: shown to everyone; "exempt" for staff, who can still post.
       const quietNow = chatQuietNow(await getConfig(kv));
       if (quietNow && quietNow.active) live.quiet = { ...quietNow, exempt: !(await quietBlocks(await getConfig(kv), pollId.user)) };
-      return json({ ok: true, room: access.id, messages, reads, ...live, now: Date.now() });
+      const convInfo = access.conv ? { conv: { ...convMeta(access.conv), title: access.room.name, by: access.conv.by }, ...(access.monitor ? { monitor: true } : {}) } : {};
+      return json({ ok: true, room: access.id, messages, reads, ...live, ...convInfo, now: Date.now() });
     }
 
     // ---- Edit (own, 2 min), poll votes, pins (staff) ------------------------
@@ -4685,6 +4811,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       if (!allowedUser(await getConfig(kv), user)) return { error: json({ ok: false, error: ACCESS_DENIED }, 403) };
       const access = await checkRoomAccess(kv, body.room, body.code);
       if (!access.ok) return { error: json({ ok: false, error: access.error }, 200) };
+      if (access.monitor) return { error: json({ ok: false, error: 'Only the people in this conversation can post in it.' }, 200) };
       return { kv, user, access };
     };
     if ((url.pathname === '/chat/edit' || url.pathname === '/chat/vote' || url.pathname === '/chat/pin') && req.method === 'POST') {
@@ -4789,6 +4916,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       if (!allowedUser(await getConfig(kv), user)) return json({ ok: false, error: ACCESS_DENIED }, 403);
       const access = await checkRoomAccess(kv, body.room, body.code);
       if (!access.ok) return json({ ok: false, error: access.error }, 200);
+      if (access.monitor) return json({ ok: false, error: 'Only the people in this conversation can post in it.' }, 200);
       try {
         const r = await chatRoomCall(env, access.id, 'unsend', { ts: Number(body.ts) || 0, user });
         if (r.media && chatMediaBucket) { try { await chatMediaBucket.delete('chat-media/' + r.media); } catch (e) { /* the message is gone either way */ } }
@@ -4815,6 +4943,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       if (!allowedUser(cfg, user)) return json({ ok: false, error: ACCESS_DENIED }, 403);
       const access = await checkRoomAccess(kv, body.room, body.code);
       if (!access.ok) return json({ ok: false, error: access.error }, 200);
+      if (access.monitor) return json({ ok: false, error: 'Only the people in this conversation can post in it.' }, 200);
       // Shadow mute stays invisible to the muted person: it "works", nothing is kept.
       if (user.toLowerCase() !== OWNER && (await getMod(kv, user)).shadowMuted) return json({ ok: true });
       if (!(await mayPostInChat(kv, user, access.id))) return json({ ok: false, error: 'You can’t react in this chat right now.' }, 200);
@@ -4853,6 +4982,239 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         body: `${p.user} reported ${msg.u}: "${String(msg.t || '').slice(0, 140)}"` + (body.reason ? ' · ' + String(body.reason).slice(0, 80) : ''),
         url: adminLink('moderation', { report: id }) });
       return json({ ok: true });
+    }
+
+    // ---- Messages (direct messages and group chats) ------------------------
+    // Signed-in people only (a verified session). The conversations
+    // themselves are read and written through /chat/poll, /chat/send etc.
+    // with room = the conversation's id; these routes list, start and manage
+    // them. The owner and admins also get /dm/review (every conversation,
+    // read-only) for safety.
+    if (url.pathname.startsWith('/dm/')) {
+      const kv = kvMain;
+      if (!kv || !chatInRooms) return json({ ok: false, error: 'Messages aren’t available on this server.' }, 200);
+      const p = await resolvePrincipal();
+      if (!p || p.kind !== 'session') return json({ ok: false, error: 'Sign in to use Messages.', signin: true }, 401);
+      const me = String(p.user);
+      const meLower = me.toLowerCase();
+      const cfg = await getConfig(kv);
+      if (!allowedUser(cfg, me)) return json({ ok: false, error: deniedReason(cfg, me) }, 403);
+      const monitor = await canMonitorChats();
+      const body = req.method === 'POST' ? await readJson() : {};
+      const titled = (c) => ({ ...c, title: c.kind === 'group' ? c.name : (c.members || []).filter((n) => String(n).toLowerCase() !== meLower).join(', ') || 'Direct message' });
+      // Someone who can be messaged: an account that may use the console.
+      const person = async (raw) => {
+        const n = String(raw || '').trim().replace(/^@/, '').toLowerCase().slice(0, 40);
+        if (!n || !/^[a-z0-9_.-]{1,40}$/.test(n)) return null;
+        const a = await getAcct(kv, n);
+        if (!a || a.disabled || !allowedUser(cfg, n)) return null;
+        return { key: n, name: String(a.user || n) };
+      };
+      // New conversations per person per day (the owner isn't limited).
+      const newConvAllowed = async () => {
+        if (meLower === OWNER) return true;
+        const k = 'msgnew:' + dayKey() + ':' + meLower;
+        const n = parseInt(await kv.get(k), 10) || 0;
+        if (n >= MSG_NEW_PER_DAY) return false;
+        await kv.put(k, String(n + 1), { expirationTtl: 172800 });
+        return true;
+      };
+      const out = (conv) => json({ ok: true, conv: { ...convMeta(conv), title: convLabel(conv, meLower), by: conv.by } });
+      const mod = await getMod(kv, me);
+      const mayWrite = async () => meLower === OWNER || (!mod.shadowMuted && (await resolve(kv, me)).state !== 'blocked' && !cfg.readOnly && !(cfg.maintenance && cfg.maintenance.on));
+
+      if (url.pathname === '/dm/list' && req.method === 'GET') {
+        let box = { convs: [] };
+        try { box = await inboxCall(meLower, 'inbox_list', {}); } catch (e) { return json({ ok: false, error: 'Messages are temporarily unavailable.' }, 200); }
+        return json({ ok: true, me, monitor, convs: (box.convs || []).map(titled) });
+      }
+      if (url.pathname === '/dm/people' && req.method === 'GET') {
+        // Names you can start a conversation with: the allowed-users list,
+        // subscribers, the owner and people seen in #public lately.
+        const q = String(url.searchParams.get('q') || '').trim().replace(/^@/, '').toLowerCase().slice(0, 40);
+        const names = new Map();
+        const add = (n) => { const k = String(n || '').toLowerCase(); if (k && !names.has(k)) names.set(k, String(n)); };
+        try { ((await chatRoomCall(env, 'public', 'read', { since: Number.MAX_SAFE_INTEGER })).people || []).forEach((x) => add(x.u)); } catch (e) { /* none seen */ }
+        ((cfg.allowlist && cfg.allowlist.users) || []).forEach(add);
+        Object.keys(cfg.subscriptions || {}).forEach(add);
+        add(OWNER);
+        const list = [...names.entries()].filter(([k]) => k !== meLower && k !== 'anonymous' && allowedUser(cfg, k) && (!q || k.includes(q)))
+          .sort((a, b) => (q ? (a[0].startsWith(q) ? 0 : 1) - (b[0].startsWith(q) ? 0 : 1) : 0) || a[0].localeCompare(b[0])).slice(0, 30).map(([, v]) => v);
+        return json({ ok: true, people: list });
+      }
+      if (req.method !== 'POST' && url.pathname !== '/dm/review') return json({ ok: false, error: 'not found' }, 404);
+      if (url.pathname === '/dm/start') {
+        if (!(await mayWrite())) return json({ ok: false, error: 'You can’t start conversations right now.' }, 200);
+        const them = await person(body.to);
+        if (!them) return json({ ok: false, error: 'No one by that name can get messages here.' }, 200);
+        if (them.key === meLower) return json({ ok: false, error: 'That’s you.' }, 200);
+        const id = 'dm-' + (await sha256hex('dm|' + [meLower, them.key].sort().join('|'))).slice(0, 24);
+        let conv = await getConv(kv, id);
+        if (!conv) {
+          if (!(await newConvAllowed())) return json({ ok: false, error: `You can start ${MSG_NEW_PER_DAY} new conversations a day. Try again tomorrow.` }, 429);
+          conv = { id, kind: 'dm', members: [meLower, them.key].sort(), names: { [meLower]: me, [them.key]: them.name }, by: meLower, at: Date.now() };
+          await putConv(kv, conv);
+          await inboxFanout(conv, 'inbox_put');
+        } else await inboxCall(meLower, 'inbox_put', { conv: convMeta(conv) }).catch(() => {});
+        return out(conv);
+      }
+      if (url.pathname === '/dm/group') {
+        if (!(await mayWrite())) return json({ ok: false, error: 'You can’t start conversations right now.' }, 200);
+        const name = String(body.name || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40);
+        if (!name) return json({ ok: false, error: 'Give the group a name.' }, 200);
+        const raw = [...new Set((Array.isArray(body.members) ? body.members : []).map((x) => String(x || '').trim().replace(/^@/, '').toLowerCase()).filter((x) => x && x !== meLower))];
+        if (raw.length < 2) return json({ ok: false, error: 'A group needs at least 2 other people. For one person, send a direct message.' }, 200);
+        if (raw.length > MSG_GROUP_MAX - 1) return json({ ok: false, error: `A group can have up to ${MSG_GROUP_MAX} people.` }, 200);
+        const people = [];
+        for (const r of raw) {
+          const x = await person(r);
+          if (!x) return json({ ok: false, error: `“${r}” can’t get messages here.` }, 200);
+          people.push(x);
+        }
+        if (!(await newConvAllowed())) return json({ ok: false, error: `You can start ${MSG_NEW_PER_DAY} new conversations a day. Try again tomorrow.` }, 429);
+        const conv = { id: 'g-' + randHex(12), kind: 'group', name, members: [meLower, ...people.map((x) => x.key)], names: { [meLower]: me, ...Object.fromEntries(people.map((x) => [x.key, x.name])) }, by: meLower, at: Date.now() };
+        await putConv(kv, conv);
+        await postSystem(env, conv.id, 'group', 'Messages', `${me} started “${name}” with ${people.map((x) => x.name).join(', ')}.`);
+        await inboxFanout(conv, 'inbox_put');
+        return out(conv);
+      }
+      if (url.pathname === '/dm/manage') {
+        const conv = await getConv(kv, String(body.id || '').toLowerCase());
+        const action = String(body.action || '');
+        if (!conv || !conv.members.includes(meLower)) return json({ ok: false, error: 'no such conversation' }, 200);
+        if (action === 'hide') {
+          // Off your list until the next message in it.
+          await inboxCall(meLower, 'inbox_remove', { convId: conv.id }).catch(() => {});
+          return json({ ok: true, hidden: true });
+        }
+        if (conv.kind !== 'group') return json({ ok: false, error: 'Only group chats can be changed.' }, 200);
+        if (!(await mayWrite())) return json({ ok: false, error: 'You can’t change this group right now.' }, 200);
+        const note = (t) => postSystem(env, conv.id, 'group', 'Messages', t);
+        if (action === 'rename') {
+          const name = String(body.name || '').replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40);
+          if (!name) return json({ ok: false, error: 'Give the group a name.' }, 200);
+          conv.name = name;
+          await putConv(kv, conv);
+          await note(`${me} renamed the group “${name}”.`);
+          await inboxFanout(conv, 'inbox_put');
+          return out(conv);
+        }
+        if (action === 'add') {
+          const raw = [...new Set((Array.isArray(body.members) ? body.members : [body.members]).map((x) => String(x || '').trim().replace(/^@/, '').toLowerCase()).filter((x) => x && !conv.members.includes(x)))];
+          if (!raw.length) return json({ ok: false, error: 'They’re already in the group.' }, 200);
+          if (conv.members.length + raw.length > MSG_GROUP_MAX) return json({ ok: false, error: `A group can have up to ${MSG_GROUP_MAX} people.` }, 200);
+          const added = [];
+          for (const r of raw) {
+            const x = await person(r);
+            if (!x) return json({ ok: false, error: `“${r}” can’t get messages here.` }, 200);
+            added.push(x);
+          }
+          conv.members.push(...added.map((x) => x.key));
+          for (const x of added) conv.names[x.key] = x.name;
+          await putConv(kv, conv);
+          await note(`${me} added ${added.map((x) => x.name).join(', ')}.`);
+          await inboxFanout(conv, 'inbox_put');
+          return out(conv);
+        }
+        if (action === 'remove' || action === 'leave') {
+          const who = action === 'leave' ? meLower : String(body.member || '').trim().replace(/^@/, '').toLowerCase();
+          if (!conv.members.includes(who)) return json({ ok: false, error: 'They aren’t in the group.' }, 200);
+          if (action === 'remove' && conv.by !== meLower && meLower !== OWNER) return json({ ok: false, error: 'Only the person who started the group can remove people.' }, 200);
+          if (action === 'remove' && who === meLower) return json({ ok: false, error: 'Use Leave instead.' }, 200);
+          const shown = (conv.names && conv.names[who]) || who;
+          conv.members = conv.members.filter((m) => m !== who);
+          await putConv(kv, conv);
+          await note(action === 'leave' ? `${shown} left the group.` : `${me} removed ${shown}.`);
+          await inboxCall(who, 'inbox_remove', { convId: conv.id }).catch(() => {});
+          await inboxFanout(conv, 'inbox_put');
+          return action === 'leave' ? json({ ok: true, left: true }) : out(conv);
+        }
+        return json({ ok: false, error: 'unknown action' }, 400);
+      }
+      if (url.pathname === '/dm/review' || url.pathname === '/dm/review-open') {
+        // Owner and admins: every conversation, for safety. Opening one is
+        // written to the audit log (Admin → Audit).
+        if (!monitor) return json({ ok: false, error: 'Only the owner and admins can review conversations.' }, 403);
+        if (url.pathname === '/dm/review-open') {
+          const conv = await getConv(kv, String(body.id || '').toLowerCase());
+          if (!conv) return json({ ok: false, error: 'no such conversation' }, 200);
+          await logAudit(kv, { route: '/dm/review-open', action: 'review', target: conv.id, meta: { kind: conv.kind, members: convNames(conv).join(', ').slice(0, 180) } });
+          return json({ ok: true, conv: { ...convMeta(conv), title: convLabel(conv, '') , by: conv.by } });
+        }
+        let all = { convs: [] };
+        try { all = await inboxCall('@all', 'inbox_list', {}); } catch (e) { return json({ ok: false, error: 'Messages are temporarily unavailable.' }, 200); }
+        return json({ ok: true, convs: (all.convs || []).map((c) => ({ ...c, n: 0, title: c.kind === 'group' ? c.name : (c.members || []).join(' & ') })) });
+      }
+      return json({ ok: false, error: 'not found' }, 404);
+    }
+
+    // ---- Public stats (Welcome page) ----------------------------------------
+    // Numbers anyone signed in can see: people, who's on, messages today and
+    // this week, conversation counts (no names or contents), and the top
+    // chatters, trivia points, streaks and game records. Worked out at most
+    // once a minute per Cloudflare location (Cache API), so it costs little.
+    if (url.pathname === '/stats/public' && req.method === 'GET') {
+      const kv = kvMain;
+      if (!kv) return json({ ok: false }, 200);
+      const cfg = await getConfig(kv);
+      if (!allowedUser(cfg, (await effectiveUser(url.searchParams.get('user'))).user)) return json({ ok: false, error: ACCESS_DENIED }, 403);
+      const cacheKey = new Request('https://stats.saints.internal/public/v1');
+      const cache = typeof caches !== 'undefined' && caches.default ? caches.default : null;
+      if (cache && url.searchParams.get('fresh') !== '1') {
+        const hit = await cache.match(cacheKey).catch(() => null);
+        if (hit) return json(await hit.json());
+      }
+      const now = Date.now();
+      const utcDay = (t) => new Date(t).toISOString().slice(0, 10);
+      const today = utcDay(now);
+      const weekFrom = utcDay(now - 6 * 864e5);
+      const stats = { ok: true, at: now };
+      // People: the allowed-users list and current subscribers, or (list off) accounts.
+      if (cfg.allowlist && cfg.allowlist.on) {
+        const set = new Set([OWNER, ...((cfg.allowlist.users) || [])]);
+        for (const k of Object.keys(cfg.subscriptions || {})) if (allowedUser(cfg, k)) set.add(k);
+        stats.people = [...set].filter((k) => allowedUser(cfg, k)).length;
+      } else {
+        let n = 0, cursor;
+        for (let i = 0; i < 5; i++) { const pg = await kv.list({ prefix: 'acct:', cursor }); n += pg.keys.length; if (pg.list_complete || !pg.cursor) break; cursor = pg.cursor; }
+        stats.people = n;
+      }
+      if (chatInRooms) {
+        try {
+          const pub = await chatRoomCall(env, 'public', 'read', { since: Number.MAX_SAFE_INTEGER });
+          stats.online = (pub.people || []).filter((x) => x.state !== 'away').length;
+        } catch (e) { stats.online = null; }
+        try {
+          const d = await chatRoomCall(env, 'public', 'stats', { from: today });
+          const w = await chatRoomCall(env, 'public', 'stats', { from: weekFrom });
+          stats.publicToday = d.total;
+          stats.publicWeek = w.total;
+          stats.topChatters = (w.people || []).slice(0, 3).map((x) => ({ u: x.u, n: x.n }));
+        } catch (e) { /* leave out */ }
+        try {
+          const all = await inboxCall('@all', 'inbox_list', {});
+          const days = all.days || {};
+          stats.privateToday = days[today] || 0;
+          stats.privateWeek = Object.entries(days).filter(([d]) => d >= weekFrom).reduce((a, [, v]) => a + v, 0);
+          stats.groups = (all.convs || []).filter((c) => c.kind === 'group').length;
+          stats.dms = (all.convs || []).filter((c) => c.kind === 'dm').length;
+        } catch (e) { /* leave out */ }
+      }
+      const ownerToday = ownerClock(env, now).date;
+      stats.trivia = Object.values((await kv.get('trivia:points', 'json')) || {}).filter((v) => v && v.n > 0).sort((a, b) => b.n - a.n).slice(0, 3).map((v) => ({ u: v.u, n: v.n }));
+      stats.streaks = Object.entries((await kv.get('streaks', 'json')) || {}).filter(([, v]) => v && v.n >= 2 && streakAlive(v, ownerToday)).sort((a, b) => b[1].n - a[1].n).slice(0, 3).map(([k, v]) => ({ u: v.u || k, n: v.n }));
+      const holders = {};
+      for (const g of LB_GAMES) {
+        const lb = await kv.get('lb:' + g, 'json');
+        const first = lb && lb.top && lb.top[0];
+        if (first) { const k = first.u.toLowerCase(); holders[k] = { u: first.u, n: ((holders[k] && holders[k].n) || 0) + 1 }; }
+      }
+      stats.records = Object.values(holders).sort((a, b) => b.n - a.n).slice(0, 3);
+      if (cache) {
+        const put = cache.put(cacheKey, new Response(JSON.stringify(stats), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=60' } })).catch(() => {});
+        if (ctx && ctx.waitUntil) ctx.waitUntil(put);
+      }
+      return json(stats);
     }
 
     // ---- Admin command center (v2) ----------------------------------------
@@ -5467,7 +5829,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         const name = String(body.name || '').trim().slice(0, 40);
         if (!name) return json({ error: 'name required' }, 400);
         const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || ('room' + Date.now().toString(36));
-        if (id === 'staff' || id === 'public') return json({ error: 'That name is reserved. Pick another.' }, 400);
+        if (id === 'staff' || id === 'public' || /^(dm|g|inbox)-/.test(id)) return json({ error: 'That name is reserved. Pick another.' }, 400);
         if (id === 'public') return json({ error: '"public" is reserved' }, 400);
         const code = genCode();
         await kv.put(roomKey(id), JSON.stringify({
