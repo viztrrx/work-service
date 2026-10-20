@@ -39,6 +39,32 @@ Optional:
 | `PROXY_KEY` | `/site/` and `/status/` need `?k=<key>`; the Proxy tab sends it when you enter it under **Connection settings → Proxy access key**. A soft gate: the key travels in URLs, so it keeps casual visitors out but is not a strong secret. Set it as a **Secret** in the dashboard, never in git. |
 | `RATE_PER_MIN` | Soft per-IP limit on `/site/` (default 240). |
 
+## YouTube compatibility (iPhone/Safari)
+
+The full YouTube application depends on JavaScript requests, storage and player
+services that this minimal HTML proxy does not emulate. Simply adding
+`youtube.com` to `TARGET_ORIGINS` caused YouTube to display its misleading
+“Connect to the internet” screen even when the device was online.
+
+For **approved** YouTube hostnames, this Worker now responds with its own
+transparent compatibility view **before** attempting to fetch the YouTube SPA:
+
+- `/site/www.youtube.com/watch?v=VIDEO_ID`, `/site/m.youtube.com/watch?v=VIDEO_ID`,
+  `/site/youtube.com/shorts/VIDEO_ID`, and `/site/youtu.be/VIDEO_ID`
+  use YouTube's **official iframe player** for a valid 11-character video ID.
+- YouTube home/search/other pages display a clear explanation and an
+  **Open on YouTube** link instead of a false network-offline message.
+- `/status/` reports an `official-embed` or `external-open` mode, so the
+  Saints Service tab does not report a failed upstream HEAD request for a
+  page which the Worker itself is serving.
+
+The official embed can still be blocked by YouTube's embedding rules, iOS
+Safari's inherited iframe sandbox, or the host website's CSP. A direct-open
+link is always present. This does not circumvent embedding restrictions or
+provide a full YouTube proxy. The Worker-generated video page uses
+`strict-origin-when-cross-origin` to satisfy YouTube's documented embed
+identification requirement. No YouTube account credentials are proxied.
+
 ## Routes
 
 | Route | What it does |

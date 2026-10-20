@@ -27,6 +27,8 @@
  * request credentials are never forwarded; the Worker's own pages carry a
  * no-scripts CSP.
  */
+import { youtubeMode, youtubeResponse } from "./youtube.js";
+
 const DEFAULT_ORIGINS = "https://example.com";
 const MAX_BYTES = 12 * 1024 * 1024;      // cap on a proxied response body
 const UPSTREAM_TIMEOUT_MS = 12000;
@@ -262,6 +264,10 @@ export default {
       const r = resolveSite(path.slice("/status/".length), url, env, allowed, hosts);
       if (r.refuse) return statusJson({ outcome: r.outcome, host: r.hostPart }, 403);
       if (await rateLimited(request, env, request.headers.get("cf-connecting-ip") || "")) return statusJson({ outcome: "rate-limited" }, 429);
+      // For approved YouTube destinations, the page uses the official player
+      // or an honest open-in-browser explanation instead of the broken SPA.
+      const youtube = youtubeMode(r.target);
+      if (youtube) return statusJson({ outcome: "ok", status: 200, host: r.hostPart, mode: youtube.videoId ? "official-embed" : "external-open" });
       try {
         const res = await fetch(r.target.href, { method: "HEAD", redirect: "manual",
           signal: typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) : undefined });
@@ -301,6 +307,11 @@ export default {
     if (await rateLimited(request, env, ip)) {
       return errorPage(429, "Too many requests", "This proxy is busy. Wait a minute and try again.");
     }
+
+    // YouTube's client app relies on APIs this simple proxy does not rewrite.
+    // Use the official embed where possible; otherwise explain the limitation.
+    const youtube = youtubeMode(target);
+    if (youtube) return youtubeResponse(youtube, request.method);
 
     try {
       const headers = new Headers();
