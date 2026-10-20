@@ -14,6 +14,7 @@ new subscriber and then the owner would see things.
 | [3-playlists](#3-playlists-everyone-signed-in) | Spotify / Apple Music playlist → YouTube links, for everyone; **new:** 10 new songs a day each, your limit card |
 | [4-youtube-to-mp3](#4-youtube-to-mp3-owner) | The MP3 converter in Music → My music |
 | [5-subscribe-page](#5-subscribe-page) | The payment page, the $6 contribution box, and **new:** your $1 test (owner only) |
+| [15-owner-pin-reset](#15-resetting-your-own-pin-owner) | **New:** reset your own PIN in Settings → Memory with Admin connected |
 | [14-music-rename-and-popups](#14-renaming-songs-and-chromebook-pop-ups) | **New:** rename a song (name, artist, file name) and download it; pop-up notifications on a Chromebook |
 | [13-messages](#13-messages-everyone-and-stats) | **New:** Messages (direct messages and group chats) with its NEW label, unread badges, @everyone, your Safety review, and the stats card on Welcome |
 | [12-proxy-tab](#12-proxy-tab-saints-proxy-worker) | The Proxy tab with several approved sites: a site loading through the proxy, HTTP 404, website down, other sites explained, blocked by a website, light theme |
@@ -457,3 +458,12 @@ mentions and @everyone" or "every chat message", and Send a test.
 **Clicking a pop-up** opens that conversation:
 
 <img src="14-music-rename-and-popups/6-chromebook-popup-opens-dm.png" width="640" alt="The conversation opened from a pop-up">
+
+## 15. Resetting your own PIN (owner)
+
+Taken in `tests/browser/owner-pin.mjs` on iPhone size: the owner name with
+no server sign-in and Admin connected, as on your phone. Settings → Memory →
+Reconnect said "Wrong PIN."; **Forgot your PIN? Reset it** asks for a new
+PIN twice, then Memory connects.
+
+<img src="15-owner-pin-reset/1-forgot-your-pin.png" width="320" alt="Forgot your PIN? Reset it"> <img src="15-owner-pin-reset/2-new-pin.png" width="320" alt="New PIN form"> <img src="15-owner-pin-reset/3-memory-connected.png" width="320" alt="Memory connected">

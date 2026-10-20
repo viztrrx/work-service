@@ -13,6 +13,20 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **Owner PIN reset** (owner: Memory → Reconnect said "Wrong PIN."; that is
+  the LOCAL profile check in `reconnectWithPin`; under it the server said
+  "name reserved": the owner account was never created on the server, which
+  needs OWNER_CODE). New POST `/auth/owner-pin` {user, verifier, site}: owner
+  name only, proven by the owner admin token or X-GPA-Owner (else 403 +
+  `noteFailure(admin)` + sec event); sets salt/verifier (creates the account
+  with ownerVerified if missing), epoch+1 (old sessions die), clears
+  acctlock/acctfail, `issue()`s a session, audits, alerts the owner.
+  Client: `resetOwnerPin()` (also rewrites the local profile's pinHash) and
+  the Memory gate's "Forgot your PIN? Reset it" (`#gmem-reset-row`, form
+  `#gmem-reset`; shown when an admin token / owner code is in memory;
+  others see "Sign out, then Forgot PIN?"). Tests: owner-pin.test.mjs (3),
+  browser owner-pin.mjs (10).
+  Before that:
   **Messages for the owner without a server sign-in** (owner's iPhone said
   "Sign in to send and get messages"): the owner name only gets a server
   session when OWNER_CODE is proven at account creation, so the owner's
@@ -953,7 +967,8 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 
 | Commit | What |
 |---|---|
-| (this) | Messages for the owner with no server sign-in (admin token / owner code = owner: `chatIdentity()`) |
+| (this) | Owner PIN reset (Settings → Memory, /auth/owner-pin) |
+| `df5f46d` | Messages for the owner with no server sign-in (admin token / owner code = owner: `chatIdentity()`) |
 | `bac7267` | Rename songs; owner upload fix (admin token hid the session); Chromebook pop-ups |
 | `ec28acb` | Messages (DMs + group chats, safety review), @everyone, Welcome stats |
 | `bfd4068` | Proxy: several approved sites (allowlist, /status/, isolation) |
@@ -1024,6 +1039,7 @@ node tests/browser/chat-live.mjs           # 23
 node tests/browser/chat-replies.mjs        # 20
 node tests/browser/chat-round2.mjs         # 26 (fake microphone)
 node tests/browser/messages.mjs            # 35 (DMs, groups, safety review, @everyone, Welcome stats)
+node tests/browser/owner-pin.mjs           # 10 (owner resets their own PIN)
 node tests/browser/owner-messages.mjs      # 9 (owner with no server sign-in, Admin connected)
 node tests/browser/my-music-edit.mjs       # 11 (rename songs; owner upload with Admin connected)
 node tests/browser/chromebook-notify.mjs   # 17 (pop-ups, Chromebook UA, injected on 2 sites; ~4 min)

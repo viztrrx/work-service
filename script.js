@@ -4578,6 +4578,17 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
                     <input id="gmem-pin" class="gpa-input" type="password" autocomplete="current-password" placeholder="Your PIN" aria-label="Your PIN" />
                     <button id="gmem-pin-go" class="gps-btn gps-btn-primary">Reconnect</button>
                   </div>
+                  <p class="gps-hint" id="gmem-forgot-hint" hidden>Forgot your PIN? Sign out, then tap “Forgot PIN?” on the sign-in screen.</p>
+                  <div class="gps-row" id="gmem-reset-row" hidden><button id="gmem-reset-open" class="gps-btn" type="button">Forgot your PIN? Reset it</button></div>
+                  <div class="gmem-reset" id="gmem-reset" hidden>
+                    <p class="gps-hint">Owner only. Your Admin connection (or owner code) proves it’s you, so the old PIN isn’t needed. The new PIN replaces it on this device and on the server; other sign-ins are signed out.</p>
+                    <div class="gps-row">
+                      <input id="gmem-new-pin" class="gpa-input" type="password" autocomplete="new-password" placeholder="New PIN (4+)" aria-label="New PIN" />
+                      <input id="gmem-new-pin2" class="gpa-input" type="password" autocomplete="new-password" placeholder="New PIN again" aria-label="New PIN again" />
+                      <button id="gmem-reset-go" class="gps-btn gps-btn-primary" type="button">Reset PIN</button>
+                    </div>
+                    <p class="gps-hint" id="gmem-reset-msg" role="status" aria-live="polite"></p>
+                  </div>
                 </div>
                 <div class="gmem-body" id="gmem-body" hidden>
                   <div class="gps-list">
@@ -5970,6 +5981,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpa-chat-pins button.p-btn:hover { background: color-mix(in srgb, var(--gpa-text) 10%, transparent); color: var(--gpa-text); }
       .gpa-chat-quiet { padding: 7px 10px; font-size: 12px; border-radius: 10px; border: 1px solid var(--gpa-border); background: var(--gpa-panel); color: var(--gpa-text); }
       .gpa-chat-quiet[hidden] { display: none; }
+      #gmem-gate [hidden] { display: none !important; }
       .gpa-dn-chip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--gpa-border); border-radius: 12px; background: color-mix(in srgb, var(--gpa-accent) 10%, var(--gpa-panel)); font-size: 13px; }
       .gpa-dn-chip[hidden] { display: none; }
       .gpa-dn-chip .t { flex: 1 1 200px; }
@@ -17725,6 +17737,31 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     } catch (e) { serverSessionStatus = 'offline'; }
     emitSession();
   }
+  // The owner's own PIN reset (Settings → Memory → "Forgot your PIN?"): the
+  // admin token or owner code on this device proves it's the owner, so the
+  // old PIN isn't needed. The Worker sets the new PIN (making the owner's
+  // account if there was none) and signs this device in; the local profile
+  // takes the new PIN too, so signing in here uses it from now on.
+  async function resetOwnerPin(pin) {
+    if (!AUTH_BASE() || !currentUser) return { ok: false, error: 'Sign in first.' };
+    const h = { 'Content-Type': 'text/plain' };
+    const tok = admGet(ADMIN_KEYS.TELE_TOKEN), code = admGet(ADMIN_KEYS.OWNER_CODE);
+    if (tok) h.Authorization = 'Bearer ' + tok;
+    if (code) h['X-GPA-Owner'] = code;
+    if (!tok && !code) return { ok: false, error: 'Connect Admin (Admin tab → your admin token) or enter your owner code first.' };
+    try {
+      const verifier = await serverVerifier(currentUser, pin);
+      const res = await fetch(AUTH_BASE() + '/auth/owner-pin', { method: 'POST', headers: h, body: JSON.stringify({ user: currentUser, verifier, site: location.host }) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.ok || !d.token) return { ok: false, error: d.error || ('Couldn’t reset the PIN (HTTP ' + res.status + ').') };
+      const profile = readProfile(currentUser);
+      if (profile) { profile.pinHash = await makePinRecord(currentUser.toLowerCase(), pin); profile.updatedAt = Date.now(); writeProfile(currentUser, profile); }
+      storeServerSession(currentUser, d);
+      serverSessionStatus = 'ok'; serverSessionError = '';
+      emitSession();
+      return { ok: true };
+    } catch (e) { return { ok: false, error: 'Couldn’t reach the server. Check your connection and try again.' }; }
+  }
   // Re-link with a PIN typed in later (after a reload or an expired token).
   async function reconnectWithPin(pin) {
     const profile = readProfile(currentUser);
@@ -26282,6 +26319,11 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           setOut('gmem-gate-title', gate.title);
           setOut('gmem-gate-desc', gate.desc);
           memEl('gmem-pin-row').hidden = !gate.pin;
+          // The owner (Admin connected or owner code on this device) can reset their own PIN here.
+          const ownerProof = !!(admGet(ADMIN_KEYS.TELE_TOKEN) || admGet(ADMIN_KEYS.OWNER_CODE));
+          memEl('gmem-reset-row').hidden = !gate.pin || !ownerProof || !memEl('gmem-reset').hidden;
+          memEl('gmem-forgot-hint').hidden = !gate.pin || ownerProof;
+          if (!gate.pin) memEl('gmem-reset').hidden = true;
         }
       }
       if (memoryState.settings) {
@@ -26430,6 +26472,27 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       else loadMemory();
     });
     memEl('gmem-pin').addEventListener('keydown', (e) => { if (e.key === 'Enter') memEl('gmem-pin-go').click(); });
+    memEl('gmem-reset-open').addEventListener('click', () => {
+      memEl('gmem-reset').hidden = false;
+      memEl('gmem-reset-row').hidden = true;
+      memEl('gmem-reset-msg').textContent = '';
+      memEl('gmem-new-pin').focus();
+    });
+    memEl('gmem-reset-go').addEventListener('click', async () => {
+      const a = memEl('gmem-new-pin').value, b = memEl('gmem-new-pin2').value;
+      const say = (t) => { memEl('gmem-reset-msg').textContent = t; };
+      if (!a || a.length < 4) { say('Pick a PIN with at least 4 characters.'); return; }
+      if (a !== b) { say('The two PINs don’t match.'); return; }
+      memEl('gmem-reset-go').disabled = true;
+      say('Resetting…');
+      const r = await resetOwnerPin(a);
+      memEl('gmem-reset-go').disabled = false;
+      if (!r.ok) { say(r.error); return; }
+      memEl('gmem-new-pin').value = ''; memEl('gmem-new-pin2').value = '';
+      memEl('gmem-reset').hidden = true;
+      showToast('PIN reset. You’re connected; use the new PIN from now on.');
+      loadMemory();
+    });
     // "Manage" links in Ask AI / Notes and the Ask chip open this section.
     panel.addEventListener('click', (e) => {
       if (!e.target.closest('[data-open-memory]')) return;

@@ -766,6 +766,10 @@ Each room's messages live in their own Durable Object (`CHAT_ROOMS`, see `chat/r
 
 **Grouping.** Several messages in a row from the same person (within 5 minutes) show their picture and name once, with the rest as plain lines underneath, like iMessage. Someone else's message, a reply or a 5-minute gap starts a new group. On a computer, hovering a grouped line shows its time and the ↩ / ☺ buttons.
 
+### Resetting your own PIN (owner) {#owner-pin}
+
+If Settings → Memory → **Reconnect** says "Wrong PIN." (or "This name is reserved for the console's owner"), tap **Forgot your PIN? Reset it** there. It shows when Admin is connected (or your owner code is entered) on that device, which proves it's you, so the old PIN isn't needed. Type a new PIN twice and tap **Reset PIN**: it becomes your PIN on that device and on the server (your owner account is created if it didn't exist yet), Memory connects, older sign-ins on other devices are signed out, and you get a security alert. Everyone else uses **Forgot PIN?** on the sign-in screen.
+
 ### Messages: direct messages and group chats {#messages}
 
 ![Messages](docs/screenshots/13-messages/5-list-unread.png)

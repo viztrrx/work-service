@@ -2385,6 +2385,38 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         needsStudentId: role !== 'owner' && !acct.studentId && !(env && env.STUDENT_ID_OPTIONAL === '1'), email: acct.studentId ? acct.studentId + '@' + SCHOOL_DOMAIN : '' });
       const roleOf = (acct) => (String(acct.user).toLowerCase() === OWNER && acct.ownerVerified ? 'owner' : (ROLE_PERMS[acct.role] ? acct.role : 'user'));
 
+      // The owner's own PIN reset: proven by the admin token (Admin
+      // connected) or the owner code, so the owner never needs the old PIN.
+      // Sets the new PIN (creates the owner's account if there is none yet),
+      // signs out every older sign-in, clears any lock, and signs this device in.
+      if (url.pathname === '/auth/owner-pin' && req.method === 'POST') {
+        const body = await readJson();
+        const user = String(body.user || '').trim();
+        const verifier = String(body.verifier || '');
+        if (!USERNAME_RE.test(user) || user.toLowerCase() !== OWNER) return json({ ok: false, error: 'Only the owner can reset their PIN this way. Everyone else uses “Forgot PIN?” on the sign-in screen.' }, 403);
+        if (!/^[0-9a-f]{64}$/.test(verifier)) return json({ ok: false, error: 'invalid verifier' }, 400);
+        if (await isLockedOut(kv, 'admin', ip)) return json({ ok: false, error: 'too many attempts — try again later' }, 429);
+        const p = await resolvePrincipal();
+        const code = req.headers.get('X-GPA-Owner') || '';
+        const proven = (p && p.kind === 'token' && p.role === 'owner') || (env && env.OWNER_CODE && code && (await timingSafeEqualStr(code, env.OWNER_CODE)));
+        if (!proven) {
+          await noteFailure(kv, 'admin', ip);
+          await noteSec('owner_claim', { user, note: 'owner PIN reset without the admin token or owner code' });
+          return json({ ok: false, error: 'Connect Admin (Admin tab → your admin token) or enter your owner code on this device first.' }, 403);
+        }
+        const salt = randHex(16);
+        let acct = await getAcct(kv, OWNER);
+        if (acct) Object.assign(acct, { salt, verifier: await sha256hex(salt + '|' + verifier), ownerVerified: true, disabled: false, epoch: (acct.epoch || 0) + 1, sessions: [] });
+        else acct = { user, verifier: await sha256hex(salt + '|' + verifier), salt, role: 'user', ownerVerified: true, createdAt: Date.now(), epoch: 0, sessions: [] };
+        try { await kv.delete(acctLockKey(OWNER)); } catch (e) { /* none */ }
+        await clearAccountFailures(OWNER);
+        await clearFailures(kv, 'login', ip);
+        const sess = await issue(acct, body.site);
+        await logAudit(kv, { route: '/auth/owner-pin', action: 'owner_pin_reset', target: acct.user });
+        await noteSec('owner_pin_reset', { user: acct.user });
+        notify({ cat: 'security', title: 'Your PIN was reset', body: 'Your Saints Service PIN was changed at ' + ownerTime(env) + '. Other sign-ins were signed out.', urgent: true, url: adminLink('security', { focus: 'events' }) });
+        return json({ ok: true, token: sess.token, exp: sess.exp, account: view(acct, roleOf(acct)) });
+      }
       if (url.pathname === '/auth/register' && req.method === 'POST') {
         if (await isLockedOut(kv, 'login', ip)) return json({ ok: false, error: 'too many attempts — try again later' }, 429);
         const body = await readJson();
