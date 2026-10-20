@@ -73,6 +73,29 @@ test('proxy: health lists every approved site (CORS); preview links them; config
   assert.equal(site.headers.get('location'), W + '/site/example.com/');
 });
 
+test('proxy: YouTube public hosts need exact host authorization', async () => {
+  const youtubeEnv = { TARGET_ORIGINS: 'https://example.com https://youtube.com https://www.youtube.com https://m.youtube.com https://youtu.be' };
+  const health = await (await call('/health', {}, youtubeEnv)).json();
+  assert.deepEqual(health.targets, ['example.com', 'youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be']);
+  const up = stubUpstream(async (href) => href === 'https://youtube.com/'
+    ? new Response(null, { status: 301, headers: { location: 'https://www.youtube.com/' } })
+    : new Response('test', { headers: { 'content-type': 'text/plain' } }));
+  try {
+    let res = await call('/site/youtube.com/', {}, youtubeEnv);
+    assert.equal(res.status, 301);
+    assert.equal(res.headers.get('location'), W + '/site/www.youtube.com/');
+    for (const host of ['www.youtube.com', 'm.youtube.com', 'youtu.be']) {
+      res = await call('/site/' + host + '/', {}, youtubeEnv);
+      assert.equal(res.status, 200, host);
+      assert.equal(up.seen.at(-1).url, 'https://' + host + '/');
+    }
+    const count = up.seen.length;
+    assert.equal((await call('/site/accounts.google.com/', {}, youtubeEnv)).status, 403);
+    assert.equal((await call('/site/notyoutube.com/', {}, youtubeEnv)).status, 403);
+    assert.equal(up.seen.length, count, 'nonapproved hosts cannot be fetched');
+  } finally { up.restore(); }
+});
+
 test('proxy: each approved site by host; anything else refused before any request', async () => {
   const up = stubUpstream(async () => new Response('plain', { headers: { 'content-type': 'text/plain', 'set-cookie': 'a=1', 'content-security-policy': "frame-ancestors 'self'", 'strict-transport-security': 'max-age=1' } }));
   try {

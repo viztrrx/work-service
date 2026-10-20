@@ -27,6 +27,7 @@ Edit `TARGET_ORIGINS` in `proxy-worker/wrangler.jsonc` (then push to `main`; Clo
 
 - Separate with spaces, commas or new lines. Each must be a plain `https://host` (no path, port, query or `user@`).
 - Each subdomain is its own entry (`www.my-site.org` ≠ `my-site.org`).
+- Common YouTube hostnames are included in the default approved list: `youtube.com`, `www.youtube.com`, `m.youtube.com`, and `youtu.be`. This allows these destinations but does **not** make YouTube's complex browser app, login, or video playback fully compatible with this lightweight proxy. Use YouTube's official embed mechanism where permitted, and respect its embedding restrictions.
 - Refused automatically (and counted as `invalid` in `/health`): `http://`, IP addresses (v4/v6/decimal/hex), `localhost`, bare names without a dot, `.local` / `.internal` / `.lan` / `.home.arpa` / `.intranet`, cloud metadata names.
 - `TARGET_ORIGIN` (the old single-site variable) still works and is merged in.
 - Values set in `wrangler.jsonc` overwrite dashboard values on each deploy, so keep the list in the file.
