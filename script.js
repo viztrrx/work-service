@@ -3653,7 +3653,6 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
               <div id="gpa-dm-err" class="gpa-sub gpa-dm-err" role="status" aria-live="polite"></div>
             </form>
             <ul id="gpa-dm-list" class="gpa-dm-list" aria-label="Conversations"></ul>
-            <p class="gpa-sub gpa-dm-safety">🛡 To keep everyone safe, the owner and admins can read messages.</p>
           </div>
           <div id="gpa-dn-chip" class="gpa-dn-chip" role="region" aria-label="Pop-up notifications" hidden>
             <span class="t">🔔 Get a pop-up on this computer when someone messages or mentions you.</span>
