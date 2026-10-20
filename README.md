@@ -877,6 +877,26 @@ Roles are `owner`, `admin`, `moderator` and `user`. Permissions live in one map,
 
 Be clear\-eyed about enforcement: this is JavaScript running in someone else's browser, so the block page, lock, and kick are client\-side — a technically capable user could edit them out of their own copy. The part that genuinely bites is server\-side: your Worker refuses to proxy AI requests for a blocked user (it checks the `X-GPA-User` the client sends and returns 403), so a blocked user loses the AI features for real. AI requests go through the Worker's `/v1/*` proxy, so blocking, the approval queue, per\-user freezes, quotas and the model allowlist all apply there. The gaps that remain, plainly: someone in direct mode with their own key bypasses the Worker entirely (that's their key to spend), and clients still on the old build only assert a username. Once everyone runs the current build, turn on **Require verified sessions** in Admin → Security so the Worker ignores asserted names entirely. For a personal tool shared with friends this is plenty; it is not a hardened access\-control system, and nothing client\-side ever can be.
 
+### Claude in the admin console {#claude}
+
+**Admin → Claude** (the owner and admins) is a chat with Claude Code about this repository. Ask a question or describe a change; Claude reads the code, edits it, runs the tests and pushes to `main`, which deploys it like any other push. Each chat keeps its history, so follow\-ups ("now make it blue") work. Pick the model (Opus, Sonnet, Haiku, Fable) and effort for each message.
+
+It runs on the owner's **Claude Pro plan**: every message starts [`.github/workflows/claude-chat.yml`](.github/workflows/claude-chat.yml), which runs Claude Code in GitHub Actions with a token from `claude setup-token`. A reply takes a minute or two. Before pushing, the workflow checks the syntax of every changed JavaScript file and runs `npm test`; if a test that passed on `main` now fails, nothing is pushed and the chat says why. The reply, files changed, commit, tokens, time and estimated API\-equivalent cost come back to the Worker ([`web/console/claude.js`](web/console/claude.js)).
+
+Setup, once:
+
+1. On a computer with Claude Code, run `claude setup-token`, sign in with the Pro account and copy the token.
+2. GitHub → this repository → Settings → Secrets and variables → Actions: add `CLAUDE_CODE_OAUTH_TOKEN` (that token) and `CLAUDE_CALLBACK_SECRET` (any long random text).
+3. GitHub → Settings → Developer settings → Fine\-grained tokens: a token for this repository only, with **Actions: Read and write**.
+4. Cloudflare → Workers & Pages → `donnajbe` → Settings → Variables and Secrets: add the secrets `GITHUB_TOKEN` (step 3) and `CLAUDE_CALLBACK_SECRET` (the same text as step 2).
+
+Limits worth knowing:
+
+- Changes go live on `main` without review. If one breaks the console, fix it from GitHub or revert the commit (each reply links it).
+- Claude's 5\-hour and weekly plan limits aren't available to other sites, so the tab shows its own usage (messages, tokens, time, estimated cost) and links to [claude.ai/settings/usage](https://claude.ai/settings/usage) for the plan's real numbers.
+- Admins can send `CLAUDE_ADMIN_DAILY` messages a day (25 unless set) and see only their own chats; the owner sees everyone's and has no cap. Moderators and users don't see the tab.
+- Messages are workflow inputs, so anyone who can see this repository's Actions runs can read them. Don't put secrets in a message.
+
 ### Memory {#memory}
 
 ![Settings → Memory](docs/screenshots/settings-memory.png)

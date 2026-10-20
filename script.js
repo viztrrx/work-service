@@ -838,7 +838,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       welcome: ['feature', 'A Saints Service stats card: members, online now, messages today and this week, group chats, top chatters, trivia, streaks and game records'] } },
     { at: '2026-10-20T19:00:00-04:00', commit: '', title: 'Rename songs; pop-ups on Chromebooks', parts: {
       music: ['feature', 'My music: change a song’s name, artist and file name (✎), and download it under that name (⬇); after uploading one song its rename form opens. Fixed: the owner’s uploads said “Sign in to keep your own music” while Admin was connected'],
-      chat: ['feature', 'Pop-up notifications on Chrome and Chromebooks for messages, mentions and @everyone (or every chat message), wherever Saints Service is open, shown once even with several tabs; turned on from the bell strip or Settings → Account'] } }
+      chat: ['feature', 'Pop-up notifications on Chrome and Chromebooks for messages, mentions and @everyone (or every chat message), wherever Saints Service is open, shown once even with several tabs; turned on from the bell strip or Settings → Account'] } },
+    { at: '2026-10-20T23:30:00-04:00', commit: '', title: 'Claude in the admin console', parts: {
+      'admin#claude': ['added'], admin: ['feature', 'Admin → Claude (owner and admins): chat with Claude Code about the console and have it change the code, with model and effort pickers, usage and the pushed commit; runs on the owner’s Claude Pro plan through GitHub Actions'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -847,7 +849,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   };
   const SECTION_IDS = {
     theme: ['overview', 'theme', 'colors', 'panel', 'effects', 'type', 'icon', 'ai', 'memory', 'controls', 'account', 'advanced'],
-    admin: ['overview', 'users', 'ai', 'memory', 'security', 'moderation', 'content', 'system', 'automation', 'developer', 'audit', 'danger']
+    admin: ['overview', 'users', 'ai', 'memory', 'security', 'moderation', 'content', 'system', 'automation', 'developer', 'claude', 'audit', 'danger']
   };
   const VH_RANK = { fix: 1, feature: 2, added: 2, redesign: 3 };
   // Computes { part: { version, updated, history: [{version, at, kind, note, title, commit}] } }
@@ -1809,6 +1811,64 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gac-dl dd { margin: 0; overflow-wrap: anywhere; }
       .gac-pre { margin: 0; max-height: 340px; overflow: auto; padding: 10px 12px; border-radius: var(--gps-r2); background: var(--gpa-bg2); border: 1px solid var(--gpa-border); font: 11.5px/1.5 'Geist Mono', ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
       .gac-meta { margin: 0 12px 10px; }
+      /* ---- Admin → Claude: a Claude Code-style chat on the owner's Pro plan ---- */
+      .gcl { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 14px; min-height: 520px; }
+      .gcl-side { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+      .gcl-new { width: 100%; justify-content: center; }
+      .gcl-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; overflow: auto; max-height: 560px; }
+      .gcl-item { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 8px 10px; border: 1px solid transparent; border-radius: var(--gps-r2); background: none; color: var(--gpa-text); font: inherit; text-align: left; cursor: pointer; }
+      .gcl-item:hover { background: var(--gps-soft); }
+      .gcl-item[aria-current="true"] { background: color-mix(in srgb, var(--gpa-accent) 12%, var(--gpa-field)); border-color: color-mix(in srgb, var(--gpa-accent) 40%, var(--gpa-border)); }
+      .gcl-item b { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .gcl-item span { font-size: 11px; color: var(--gpa-sub); display: flex; gap: 6px; align-items: center; }
+      .gcl-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gpa-sub); flex: 0 0 auto; }
+      .gcl-dot.running, .gcl-dot.queued { background: var(--gpa-warning); box-shadow: 0 0 8px var(--gpa-warning); animation: gcl-pulse 1.4s ease-in-out infinite; }
+      .gcl-dot.done { background: var(--gpa-success); }
+      .gcl-dot.error { background: var(--gpa-danger); }
+      @keyframes gcl-pulse { 50% { opacity: 0.35; } }
+      .gcl-main { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--gpa-border); border-radius: var(--gps-r3); background: var(--gpa-card-bg); overflow: hidden; }
+      .gcl-top { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--gps-soft); }
+      .gcl-top h3 { margin: 0; font-size: 14px; flex: 1 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .gcl-usage { display: flex; align-items: center; gap: 8px; font: 500 11px 'Geist Mono', ui-monospace, monospace; color: var(--gpa-sub); }
+      .gcl-meter { width: 96px; height: 6px; border-radius: 999px; background: var(--gpa-field); overflow: hidden; }
+      .gcl-meter i { display: block; height: 100%; background: var(--gpa-accent); transition: width var(--gps-t2) ease; }
+      .gcl-meter.hot i { background: var(--gpa-warning); }
+      .gcl-thread { flex: 1 1 auto; min-height: 280px; max-height: 560px; overflow: auto; padding: 16px 14px; display: flex; flex-direction: column; gap: 14px; }
+      .gcl-msg { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+      .gcl-msg.user { align-items: flex-end; }
+      .gcl-msg.user .gcl-bubble { max-width: 85%; padding: 9px 12px; border-radius: 14px 14px 4px 14px; background: var(--gpa-field); border: 1px solid var(--gpa-border); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+      .gcl-who { font-size: 11px; color: var(--gpa-sub); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .gcl-mark { width: 18px; height: 18px; border-radius: 6px; display: inline-grid; place-items: center; font: 700 11px 'Geist Mono', ui-monospace, monospace; color: var(--gpa-accent-fg); background: linear-gradient(135deg, var(--gpa-accent), var(--gpa-accent2)); }
+      .gcl-reply { font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+      .gcl-reply p { margin: 0 0 8px; } .gcl-reply p:last-child { margin-bottom: 0; }
+      .gcl-reply h4 { margin: 10px 0 4px; font-size: 13.5px; }
+      .gcl-reply ul { margin: 0 0 8px; padding-left: 20px; }
+      .gcl-reply code { font: 12px 'Geist Mono', ui-monospace, monospace; padding: 1px 5px; border-radius: 5px; background: var(--gpa-field); }
+      .gcl-reply pre { margin: 0 0 8px; padding: 10px 12px; border-radius: var(--gps-r2); background: var(--gpa-bg2); border: 1px solid var(--gpa-border); overflow: auto; }
+      .gcl-reply pre code { padding: 0; background: none; white-space: pre; }
+      .gcl-status { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--gpa-sub); }
+      .gcl-spin { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--gpa-border); border-top-color: var(--gpa-accent); animation: gcl-spin 0.9s linear infinite; }
+      @keyframes gcl-spin { to { transform: rotate(360deg); } }
+      .gcl-err { padding: 8px 12px; border-radius: var(--gps-r2); border: 1px solid color-mix(in srgb, var(--gpa-danger) 45%, var(--gpa-border)); background: color-mix(in srgb, var(--gpa-danger) 8%, var(--gpa-field)); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+      .gcl-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 11.5px; color: var(--gpa-sub); }
+      .gcl-tools a { color: var(--gpa-accent); text-decoration: none; font-weight: 600; } .gcl-tools a:hover { text-decoration: underline; }
+      .gcl-files { margin: 0; padding: 6px 10px; border-radius: var(--gps-r2); background: var(--gpa-field); font-size: 12px; }
+      .gcl-files summary { cursor: pointer; color: var(--gpa-sub); }
+      .gcl-files ul { margin: 6px 0 2px; padding-left: 18px; font: 11.5px/1.6 'Geist Mono', ui-monospace, monospace; }
+      .gcl-compose { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--gps-soft); background: var(--gpa-panel); }
+      .gcl-compose textarea { width: 100%; min-height: 64px; max-height: 240px; resize: vertical; padding: 10px 12px; border-radius: var(--gps-r2); border: 1px solid var(--gpa-border); background: var(--gpa-field); color: var(--gpa-text); font: inherit; font-size: 13px; line-height: 1.5; box-sizing: border-box; }
+      .gcl-compose textarea:focus { outline: none; border-color: var(--gpa-accent); }
+      .gcl-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      .gcl-bar select { width: auto; flex: 0 0 auto; font-size: 12px; padding: 5px 8px; }
+      .gcl-bar .gcl-hint { flex: 1 1 140px; font-size: 11px; color: var(--gpa-sub); min-width: 0; }
+      .gcl-bar .gps-btn-primary { margin-left: auto; }
+      .gcl-empty { margin: auto; max-width: 420px; text-align: center; color: var(--gpa-sub); font-size: 13px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+      .gcl-empty .gcl-mark { width: 40px; height: 40px; border-radius: 12px; font-size: 20px; }
+      .gcl-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+      .gcl-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; align-items: end; height: 70px; }
+      .gcl-days div { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; height: 100%; font: 500 10px 'Geist Mono', ui-monospace, monospace; color: var(--gpa-sub); }
+      .gcl-days i { display: block; width: 100%; min-height: 2px; border-radius: 4px 4px 0 0; background: var(--gpa-chart-1); }
+      @media (max-width: 720px) { .gcl { grid-template-columns: minmax(0, 1fr); } .gcl-list { max-height: 160px; } }
       .gac-keys li { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--gps-soft); }
       .gac-keys li > div:first-child { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
       .gac-keys-meta { font-size: 11.5px; color: var(--gpa-sub); }
@@ -22989,6 +23049,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       { id: 'system', label: 'System', icon: 'panel', perm: 'system.view', desc: 'Worker health, configuration, feature switches and client updates.' },
       { id: 'automation', label: 'Automation', icon: 'timer', perm: 'automation.run', desc: 'Scheduled jobs: last run, next run, and manual runs.' },
       { id: 'developer', label: 'Developer', icon: 'lab', perm: 'system.view', desc: 'Diagnostics that never reveal secret values, plus raw worker details.' },
+      { id: 'claude', label: 'Claude', icon: 'ai', perm: 'claude.use', desc: 'Chat with Claude Code about this console and have it change the code. Runs on the owner’s Claude Pro plan and pushes to main.' },
       { id: 'audit', label: 'Audit log', icon: 'note', perm: 'audit.view', desc: 'Every admin action: who, what, target, result and request id.' },
       { id: 'danger', label: 'Danger zone', icon: 'warn', perm: 'danger.execute', desc: 'Irreversible or system-wide actions. Each needs a typed confirmation and is audited.' }
     ];
@@ -23003,6 +23064,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       system: '<div class="gv gv-stack"><i><s></s><s></s></i><i><s></s><s></s></i><i><s></s><s></s></i></div>',
       automation: '<div class="gv gv-flow"><i></i><i></i><i></i><i></i><b></b><b></b><b></b></div>',
       developer: '<div class="gv gv-term"><i><s></s><s></s><s></s><em></em></i></div>',
+      claude: GPX_SCENES.ask,
       audit: '<div class="gv gv-time"><i></i><i></i><i></i><i></i><b></b></div>',
       danger: '<div class="gv gv-hazard"><i></i><b>!</b></div>'
     };
@@ -23881,6 +23943,176 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           b.querySelector('#gac-dev-copy').addEventListener('click', () => { try { navigator.clipboard.writeText(b.querySelector('#gac-dev-out').textContent); showToast('Copied.'); } catch (e) { /* ignore */ } });
           placeLegacy('developer');
         }
+      },
+      // Claude (owner and admins): a Claude Code-style chat. Each message runs
+      // Claude Code in GitHub Actions on the owner's Pro plan; the reply,
+      // usage and pushed commit come back through the worker
+      // (web/console/claude.js), so the open chat polls while one is working.
+      async claude() {
+        const b = body('claude');
+        const cs = state.claude || (state.claude = { conv: null, info: null, timer: 0, tick: 0 });
+        const pref = (k, d) => { try { return localStorage.getItem('gpa_claude_' + k) || d; } catch (e) { return d; } };
+        const savePref = (k, v) => { try { localStorage.setItem('gpa_claude_' + k, v); } catch (e) { /* ignore */ } };
+        const busy = (m) => m && m.role === 'assistant' && (m.status === 'queued' || m.status === 'running');
+        const short = (n) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(Math.round(n || 0)));
+        const clock = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+        // Small, safe markdown: everything is escaped first.
+        const md = (text) => {
+          const parts = String(text || '').split(/```[a-zA-Z0-9_-]*\n?/);
+          return parts.map((p, i) => {
+            if (i % 2) return `<pre><code>${esc(p.replace(/\n$/, ''))}</code></pre>`;
+            return p.split(/\n{2,}/).filter((x) => x.trim()).map((para) => {
+              const inline = (t) => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+              const lines = para.split('\n');
+              if (lines.every((l) => /^\s*([-*]|\d+\.)\s+/.test(l))) return `<ul>${lines.map((l) => `<li>${inline(l.replace(/^\s*([-*]|\d+\.)\s+/, ''))}</li>`).join('')}</ul>`;
+              if (/^#{1,4}\s/.test(lines[0])) return `<h4>${inline(lines[0].replace(/^#+\s*/, ''))}</h4>` + (lines.length > 1 ? `<p>${lines.slice(1).map(inline).join('<br>')}</p>` : '');
+              return `<p>${lines.map(inline).join('<br>')}</p>`;
+            }).join('');
+          }).join('');
+        };
+        const modelName = (id) => ((cs.info && cs.info.models.find((m) => m.id === id)) || { label: id }).label;
+
+        const info = cs.info = await api('/admin/claude/convs');
+        const days = info.usage.days;
+        const today = days[0];
+        const ready = info.ready.github && info.ready.callback;
+        setHero('claude', !ready ? 'Needs setup' : info.convs.some((c) => c.status === 'queued' || c.status === 'running') ? 'Working' : 'Ready', !ready ? 'error' : 'done');
+
+        const usageStrip = () => {
+          const lim = info.usage.limit;
+          const pct = lim ? Math.min(100, Math.round((info.usage.sentToday / lim) * 100)) : 0;
+          return `<div class="gcl-usage" title="Tokens and estimated API-equivalent cost of today’s runs. Your plan’s own limits are on claude.ai.">`
+            + (lim ? `<span>${esc(info.usage.sentToday)}/${esc(lim)} today</span><div class="gcl-meter${pct >= 80 ? ' hot' : ''}"><i style="width:${pct}%"></i></div>` : `<span>${esc(today.n)} today · ${esc(short(today.input + today.output + today.cacheRead + today.cacheWrite))} tokens</span>`)
+            + `<a class="gac-link" href="https://claude.ai/settings/usage" target="_blank" rel="noopener">Plan usage ↗</a></div>`;
+        };
+
+        const setupCard = () => card('Set up Claude', `<p class="gps-hint">Claude runs Claude Code in GitHub Actions on your Claude Pro plan, then pushes its change to main. One-time setup:</p>
+          <ol class="gps-hint" style="margin:0;padding-left:18px;line-height:1.7">
+            <li>On a computer with Claude Code: run <code>claude setup-token</code>, sign in with your Pro account, and copy the token.</li>
+            <li>GitHub → ${esc(info.repo)} → Settings → Secrets and variables → Actions: add <code>CLAUDE_CODE_OAUTH_TOKEN</code> (that token) and <code>CLAUDE_CALLBACK_SECRET</code> (any long random text).</li>
+            <li>GitHub → Settings → Developer settings → Fine-grained tokens: make a token for <b>${esc(info.repo)}</b> only, with <b>Actions: Read and write</b>.</li>
+            <li>Cloudflare → Workers &amp; Pages → donnajbe → Settings → Variables and Secrets: add secrets <code>GITHUB_TOKEN</code> (step 3) and <code>CLAUDE_CALLBACK_SECRET</code> (the same text as step 2).</li>
+          </ol>
+          <ul class="gac-health" style="margin-top:8px"><li class="${info.ready.github ? '' : 'bad'}"><i></i><span>GITHUB_TOKEN on the Worker</span><em>${info.ready.github ? 'set' : 'missing'}</em></li><li class="${info.ready.callback ? '' : 'bad'}"><i></i><span>CLAUDE_CALLBACK_SECRET on the Worker</span><em>${info.ready.callback ? 'set' : 'missing'}</em></li></ul>`, 'key');
+
+        const usageCard = () => {
+          const max = Math.max(1, ...days.map((d) => d.input + d.output + d.cacheRead + d.cacheWrite));
+          const week = days.reduce((a, d) => ({ n: a.n + d.n, t: a.t + d.input + d.output + d.cacheRead + d.cacheWrite, c: a.c + d.cost, ms: a.ms + d.ms }), { n: 0, t: 0, c: 0, ms: 0 });
+          const models = {};
+          days.forEach((d) => Object.entries(d.byModel || {}).forEach(([m, x]) => { models[m] = (models[m] || 0) + x.n; }));
+          return foldCard('Usage', `<div class="gac-kpis">${kpi('Messages, 7 days', week.n)}${kpi('Tokens, 7 days', short(week.t), 'Input, output and cache')}${kpi('Est. API cost', '$' + week.c.toFixed(2), 'What these runs would cost on the API. Your Pro plan isn’t charged per run.')}${kpi('Run time', Math.round(week.ms / 60000) + ' min')}</div>`
+            + `<div class="gcl-days" style="margin-top:12px">${days.slice().reverse().map((d) => `<div title="${esc(d.day)}: ${esc(d.n)} messages, ${esc(short(d.input + d.output + d.cacheRead + d.cacheWrite))} tokens"><i style="height:${Math.round(((d.input + d.output + d.cacheRead + d.cacheWrite) / max) * 100)}%"></i>${esc(d.day.slice(5))}</div>`).join('')}</div>`
+            + (Object.keys(models).length ? `<ul class="gac-rank" style="margin-top:10px">${Object.entries(models).map(([m, n]) => `<li><span>${esc(modelName(m))}</span><span>${esc(n)} messages</span></li>`).join('')}</ul>` : '')
+            + `<p class="gps-hint" style="margin-top:8px">Claude’s 5-hour and weekly plan limits aren’t available to other sites, so they’re not shown here. <a class="gac-link" href="https://claude.ai/settings/usage" target="_blank" rel="noopener">See them on claude.ai ↗</a></p>`, 'bolt', 'gcl-usage-card');
+        };
+
+        const thread = (conv) => {
+          if (!conv) {
+            return `<div class="gcl-empty"><span class="gcl-mark">✳</span><div><b>What should we change?</b></div><div>Ask about the code or describe a change. Claude reads the repository, edits it, runs the tests and pushes to main, which deploys it. Replies take a minute or two.</div>
+              <div class="gcl-chips">${['Explain how the admin console is organized', 'Make the music tab’s play button bigger', 'Find anything that still says donnajbesaints'].map((t) => `<button class="gps-btn" type="button" data-gcl-chip="${esc(t)}">${esc(t)}</button>`).join('')}</div></div>`;
+          }
+          return conv.messages.map((m) => {
+            if (m.role === 'user') return `<div class="gcl-msg user"><div class="gcl-who">${esc(m.by)} · ${esc(when(m.ts))}</div><div class="gcl-bubble">${esc(m.text)}</div></div>`;
+            const u = m.usage || {};
+            const head = `<div class="gcl-who"><span class="gcl-mark">✳</span><b>Claude</b><span>${esc(modelName(m.model))} · ${esc(m.effort)} effort</span></div>`;
+            if (busy(m)) {
+              const since = m.status === 'running' ? (m.started || m.ts) : m.ts;
+              return `<div class="gcl-msg">${head}<div class="gcl-status"><span class="gcl-spin"></span><span data-gcl-since="${esc(since)}">${m.status === 'running' ? 'Working' : 'Starting'} · ${esc(clock(Date.now() - since))}</span>${m.runUrl ? `<a class="gac-link" href="${esc(m.runUrl)}" target="_blank" rel="noopener">Watch the run ↗</a>` : ''}</div></div>`;
+            }
+            return `<div class="gcl-msg">${head}`
+              + (m.text ? `<div class="gcl-reply">${md(m.text)}</div>` : '')
+              + (m.error ? `<div class="gcl-err">${esc(m.error)}</div>` : '')
+              + (m.files && m.files.length ? `<details class="gcl-files"><summary>${esc(m.files.length)} file${m.files.length === 1 ? '' : 's'} changed${m.commit ? '' : ' (not pushed)'}</summary><ul>${m.files.map((f) => `<li>${esc(f)}</li>`).join('')}</ul></details>` : '')
+              + `<div class="gcl-tools">${m.commit ? `<span class="gac-badge ok">Pushed to main</span><a href="https://github.com/${esc(info.repo)}/commit/${esc(m.commit)}" target="_blank" rel="noopener">${esc(m.commit.slice(0, 7))}</a>` : ''}`
+              + `${u.input || u.output ? `<span>${esc(short(u.input + u.output + u.cacheRead + u.cacheWrite))} tokens · ${esc(clock(u.ms))} · ${esc(u.turns)} turns · ~$${esc((u.cost || 0).toFixed(2))}</span>` : ''}`
+              + `${m.runUrl ? `<a href="${esc(m.runUrl)}" target="_blank" rel="noopener">Run ↗</a>` : ''}</div></div>`;
+          }).join('');
+        };
+
+        const draw = () => {
+          const conv = cs.conv;
+          const model = (conv && conv.model) || pref('model', info.defaults.model);
+          const effort = (conv && conv.effort) || pref('effort', info.defaults.effort);
+          const working = !!(conv && conv.messages.some(busy));
+          const old = b.querySelector('#gcl-text');
+          const draft = old ? old.value : '';
+          const scroll = b.querySelector('.gcl-thread');
+          const atBottom = !scroll || scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 40;
+          b.innerHTML = (ready ? '' : setupCard())
+            + `<div class="gcl"><aside class="gcl-side"><button class="gps-btn gps-btn-primary gcl-new" type="button" id="gcl-new">${gpxLbl('plus', 'New chat')}</button>`
+            + `<ul class="gcl-list">${info.convs.map((c) => `<li><button class="gcl-item" type="button" data-gcl-open="${esc(c.id)}" aria-current="${conv && conv.id === c.id}"><b>${esc(c.title)}</b><span><i class="gcl-dot ${esc(c.status)}"></i>${esc(ago(c.updated))}${info.isOwner && c.by !== info.me ? ' · ' + esc(c.by) : ''}</span></button></li>`).join('') || '<li class="gps-hint" style="padding:8px">No chats yet.</li>'}</ul></aside>`
+            + `<div class="gcl-main"><div class="gcl-top"><h3>${esc(conv ? conv.title : 'New chat')}</h3>${usageStrip()}${conv ? '<button class="gps-btn" type="button" id="gcl-del">Delete</button>' : ''}</div>`
+            + `<div class="gcl-thread" aria-live="polite">${thread(conv)}</div>`
+            + `<form class="gcl-compose" id="gcl-form"><textarea id="gcl-text" placeholder="${working ? 'Claude is working…' : conv ? 'Reply to Claude…' : 'Describe a change or ask about the code…'}" ${working || !ready ? 'disabled' : ''} maxlength="8000"></textarea>`
+            + `<div class="gcl-bar"><select id="gcl-model" aria-label="Model">${info.models.map((m) => `<option value="${esc(m.id)}" ${m.id === model ? 'selected' : ''} title="${esc(m.note)}">${esc(m.label)}</option>`).join('')}</select>`
+            + `<select id="gcl-effort" aria-label="Effort">${info.efforts.map((e) => `<option value="${esc(e)}" ${e === effort ? 'selected' : ''}>${esc(e[0].toUpperCase() + e.slice(1))} effort</option>`).join('')}</select>`
+            + `<span class="gcl-hint" id="gcl-hint">${esc((info.models.find((m) => m.id === model) || {}).note || '')} Changes go live on main.</span>`
+            + `<button class="gps-btn gps-btn-primary" type="submit" id="gcl-send" ${working || !ready ? 'disabled' : ''}>${gpxLbl('send', 'Send')}</button></div></form></div></div>`
+            + usageCard();
+          wireFold(b, 'gcl-usage-card', 'gpa_claude_usage_open');
+          const ta = b.querySelector('#gcl-text');
+          ta.value = draft;
+          const th = b.querySelector('.gcl-thread');
+          if (atBottom) th.scrollTop = th.scrollHeight;
+          b.querySelector('#gcl-new').addEventListener('click', () => { cs.conv = null; draw(); b.querySelector('#gcl-text').focus(); });
+          b.querySelectorAll('[data-gcl-open]').forEach((x) => x.addEventListener('click', () => open(x.dataset.gclOpen)));
+          b.querySelectorAll('[data-gcl-chip]').forEach((x) => x.addEventListener('click', () => { ta.value = x.dataset.gclChip; ta.focus(); }));
+          const del = b.querySelector('#gcl-del');
+          if (del) del.addEventListener('click', async () => {
+            if (!confirm('Delete this chat? Changes Claude already pushed stay on main.')) return;
+            try { await api('/admin/claude/delete', { method: 'POST', body: { id: conv.id } }); cs.conv = null; showToast('Chat deleted.'); RENDER.claude().catch((e) => errorBox('claude', e)); }
+            catch (e) { showToast(e.message, { type: 'danger' }); }
+          });
+          b.querySelector('#gcl-model').addEventListener('change', (e) => { savePref('model', e.target.value); b.querySelector('#gcl-hint').textContent = ((info.models.find((m) => m.id === e.target.value) || {}).note || '') + ' Changes go live on main.'; });
+          b.querySelector('#gcl-effort').addEventListener('change', (e) => savePref('effort', e.target.value));
+          ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); b.querySelector('#gcl-form').requestSubmit(); } });
+          b.querySelector('#gcl-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const text = ta.value.trim();
+            if (!text) return;
+            const sendBtn = b.querySelector('#gcl-send');
+            sendBtn.disabled = true;
+            try {
+              const r = await api('/admin/claude/send', { method: 'POST', body: { convId: conv ? conv.id : null, text, model: b.querySelector('#gcl-model').value, effort: b.querySelector('#gcl-effort').value } });
+              ta.value = '';
+              cs.conv = r.conv;
+              RENDER.claude().catch((er) => errorBox('claude', er));
+            } catch (er) { showToast(er.message, { type: 'danger' }); sendBtn.disabled = false; if (conv) open(conv.id); }
+          });
+          poll();
+        };
+
+        // While a reply is on its way: refresh the open chat every 5 seconds
+        // and tick its timer every second, only while this section is shown.
+        const poll = () => {
+          clearTimeout(cs.timer); clearInterval(cs.tick);
+          if (!(cs.conv && cs.conv.messages.some(busy))) return;
+          cs.tick = setInterval(() => {
+            if (state.section !== 'claude') { clearInterval(cs.tick); return; }
+            b.querySelectorAll('[data-gcl-since]').forEach((x) => { x.textContent = x.textContent.replace(/[\d:]+$/, clock(Date.now() - Number(x.dataset.gclSince))); });
+          }, 1000);
+          cs.timer = setTimeout(async () => {
+            if (state.section !== 'claude' || !cs.conv) return;
+            const id = cs.conv.id;
+            try {
+              const r = await api('/admin/claude/conv?id=' + encodeURIComponent(id));
+              if (!cs.conv || cs.conv.id !== id) return;
+              const finished = !r.conv.messages.some(busy);
+              cs.conv = r.conv;
+              if (finished) { RENDER.claude().catch((e) => errorBox('claude', e)); return; }
+              draw();
+            } catch (e) { poll(); }
+          }, 5000);
+        };
+        const open = async (id) => {
+          try { cs.conv = (await api('/admin/claude/conv?id=' + encodeURIComponent(id))).conv; draw(); }
+          catch (e) { showToast(e.message, { type: 'danger' }); }
+        };
+
+        if (cs.conv) {
+          try { cs.conv = (await api('/admin/claude/conv?id=' + encodeURIComponent(cs.conv.id))).conv; } catch (e) { cs.conv = null; }
+        }
+        draw();
       },
       async audit() {
         const d = await api('/admin/audit');

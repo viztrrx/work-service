@@ -9,6 +9,7 @@ import { audiusSearch, audiusStream, listLibrary, addToLibrary, removeFromLibrar
 import { PUSH_CATEGORIES, vapidKeys, validSubscription, addSubscription, updateSubscription, removeSubscription, getSubscription, sendPush, notifyOwner, ownerTime, cleanCategories, anySubscriberWants,
   ownerHour, addUserSubscription, findUserSubscription, removeUserSubscription, userHasAlerts, notifyUser, rememberUserDevice, pushOnDevice } from './web/console/push.js';
 import { validateMutation } from './mobile/backend/validation.js';
+import { handleClaudeAdmin, handleClaudeCallback } from './web/console/claude.js';
 import { AdminMobileState, stateCall, digest, randomToken, validSource, relayCall, queueEvent } from './mobile/backend/state.js';
 export { AdminMobileState };
 import { ChatRoom, chatRoomCall } from './chat/room.js';
@@ -153,7 +154,8 @@ const ROLE_PERMS = {
     'memory.view', 'memory.manage',
     'security.view', 'security.manage',
     'moderation.view', 'moderation.manage',
-    'system.view', 'automation.run', 'audit.view'
+    'system.view', 'automation.run', 'audit.view',
+    'claude.use'
   ],
   moderator: ['users.view', 'users.suspend', 'moderation.view', 'moderation.manage', 'system.view'],
   user: []
@@ -1838,8 +1840,15 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       '/admin/jobs/run':       { method: 'POST', perm: 'automation.run', v2: true },
       '/admin/memory/stats':   { method: 'GET',  perm: 'memory.view', v2: true },
       '/admin/memory/user':    { method: 'POST', perm: 'memory.content', v2: true },
-      '/admin/danger':         { method: 'POST', perm: 'danger.execute', v2: true }
+      '/admin/danger':         { method: 'POST', perm: 'danger.execute', v2: true },
+      // Claude (Admin → Claude; see web/console/claude.js).
+      '/admin/claude/convs':   { method: 'GET',  perm: 'claude.use', v2: true },
+      '/admin/claude/conv':    { method: 'GET',  perm: 'claude.use', v2: true },
+      '/admin/claude/send':    { method: 'POST', perm: 'claude.use', v2: true },
+      '/admin/claude/delete':  { method: 'POST', perm: 'claude.use', v2: true }
     };
+    // The Claude run in GitHub Actions reporting back (its own shared secret).
+    if (url.pathname === '/claude/callback') return handleClaudeCallback(req, env, json);
     if (url.pathname === '/mobile/health' && req.method === 'GET') {
       try { if(!env.TELEMETRY) return json({ok:false},503);await env.TELEMETRY.get('config');return json({ok:true,version:WORKER_VERSION}); }
       catch {return json({ok:false},503);}
@@ -1915,6 +1924,10 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           return json({ok:a.ok,accepted:a.ok,deliveryConfirmed:false,error:a.ok ? undefined : (a.reason || a.error),apnsStatus:a.status},a.ok ? 200 : 502);
         }
       }catch(e){return json({error:e.status ? e.message : 'Mobile service unavailable'},e.status || 503);}
+    }
+
+    if (url.pathname.startsWith('/admin/claude/')) {
+      return handleClaudeAdmin({ req, url, env, principal: await resolvePrincipal(), owner: OWNER, json, logAudit });
     }
 
     // ======================================================================
