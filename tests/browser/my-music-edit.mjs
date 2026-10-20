@@ -62,7 +62,7 @@ try {
   await admin('/admin/config', { allowlist: { on: false } });
   // 1: the owner, signed in, with Admin connected (the admin token is saved
   // on the device and sent with music requests).
-  const own = await phone('viztrrx');
+  const own = await phone('ivan');
   await R(own.page, (r, a) => {
     const n = r.querySelector('.gpa-dropdown-item[data-tab="admin"]'); n.style.display = ''; n.click();
     const f = r.querySelector('#gac-auth-fields');

@@ -107,7 +107,7 @@ try {
 
   // 6-7: the owner's phone app, Admin → Security.
   ({ ctx, page } = await open('phone'));
-  await attempt(page, 'viztrrx', 'signup');
+  await attempt(page, 'ivan', 'signup');
   await dismissLang(page);
   await R(page, (r) => { const n = r.querySelector('.gpa-dropdown-item[data-tab="admin"]'); n.style.display = ''; n.click(); });
   await page.waitForTimeout(500);

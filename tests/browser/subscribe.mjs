@@ -254,7 +254,7 @@ try {
 
   // 7b: the owner's test contribution: from $1, only with the owner's PIN.
   await page.goto(env.workerUrl + '/subscribe/');
-  await page.fill('#user', 'viztrrx');
+  await page.fill('#user', 'ivan');
   const ownerShown = await page.waitForFunction(() => !document.getElementById('owner-box').hidden, null, { timeout: 8000 }).then(() => true, () => false);
   check('The owner’s name: “Test contribution” from $1 with a PIN box (no Subscribe)', ownerShown && (await page.textContent('#form-title')) === 'Test contribution' && await page.isHidden('#subbox') && (await page.textContent('#contrib [data-amt="1"]')).trim() === '$1' && (await page.textContent('#give')).trim() === 'Contribute $1.00', await page.textContent('#hint'));
   await page.screenshot({ path: path.join(OUT, '11-owner-test-contribution.png') });
@@ -277,7 +277,7 @@ try {
   await op.waitForFunction(() => !!document.getElementById('gpa-root-host'));
   for (const btn of ['#gpa-signup-btn', '#gpa-login-btn']) {   // a fresh test Worker, or one where the owner already signed up
     if (await R(op, (r) => r.querySelector('#gpa-login').style.display === 'none')) break;
-    await op.fill(sr('#gpa-login-user'), 'viztrrx');
+    await op.fill(sr('#gpa-login-user'), 'ivan');
     await op.fill(sr('#gpa-login-pin'), '246810');
     await op.click(sr(btn));
     await op.waitForTimeout(2500);
@@ -326,7 +326,7 @@ try {
   await op.evaluate(() => window.addEventListener('click', (e) => { if (e.composedPath().some((n) => n.tagName === 'A' && n.getAttribute && n.getAttribute('data-em') === 'share')) e.preventDefault(); }, true));
   await R(op, (r, u) => [...r.querySelectorAll('.gac-email-row')].find((x) => x.dataset.user === u).querySelector('a[data-em="share"]').click(), NAME);
   await op.waitForFunction((u) => { const el = [...document.getElementById('gpa-root-host').shadowRoot.querySelectorAll('.gac-email-row')].find((x) => x.dataset.user === u); return el && /Shared /.test(el.textContent); }, NAME, { timeout: 10000 }).catch(() => {});
-  check('…and it’s marked “Shared”, by the owner', /Shared \w+ \d+/.test(await emRow()) && /shared by viztrrx/.test(await emRow()), await emRow());
+  check('…and it’s marked “Shared”, by the owner', /Shared \w+ \d+/.test(await emRow()) && /shared by ivan/.test(await emRow()), await emRow());
   check('Their Subscribers row shows the email too', /223929@alseducation\.onmicrosoft\.com/.test(await R(op, (r, u) => { const el = [...r.querySelectorAll('.gac-subscr')].find((x) => x.dataset.user === u); return el ? el.textContent : ''; }, NAME)));
 
   // The owner resets a forgotten PIN (Allowed users → Reset PIN): a one-time code.

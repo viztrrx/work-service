@@ -13,6 +13,18 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **Owner renamed to `ivan`** (owner: "locked out my owner acc… make it so
+  'ivan' is the new owner instead of viztrrx and allow it to be used in the
+  web as well"). worker.js `DEFAULT_OWNER = 'ivan'` (all 5 `env.OWNER ||`
+  fallbacks) and root wrangler.jsonc `"vars": { "OWNER": "ivan" }` (owner-
+  approved: config vars override the dashboard's on deploy; bindings
+  unchanged). `/auth/register` for the owner name also accepts the owner
+  admin token (client sends it when Admin is connected); Memory gate button
+  says "Set up your owner PIN" when the server said "reserved". All browser
+  tests sign in as `ivan` now. viztrrx is an ordinary name; its data
+  (mylib/mem/convs) stays under it. Test: browser new-owner.mjs (11: web
+  sign-up → Admin → set owner PIN; app sign-in with it at the same time).
+  Before that:
   **Owner PIN reset** (owner: Memory → Reconnect said "Wrong PIN."; that is
   the LOCAL profile check in `reconnectWithPin`; under it the server said
   "name reserved": the owner account was never created on the server, which
@@ -367,7 +379,7 @@ list (rounds 1–3) was finished and pushed.
   **don't start new features unless the owner asks**; offer them.
 
 ### How the owner works (follow this exactly)
-- **The owner:** username `viztrrx` (the Worker's `OWNER`), Lehigh Acres,
+- **The owner:** username `ivan` (was `viztrrx` until 2026-10-20; the Worker's `OWNER`, set in wrangler.jsonc vars and `DEFAULT_OWNER` in worker.js), Lehigh Acres,
   FL; time zone `America/New_York`. They're non-technical-ish, run the
   console as the **iPhone home-screen app** (`/console/`), get phone
   notifications from it (including "Worker error" alerts, which they
@@ -477,7 +489,7 @@ after Proxy, before Games.
   12 PM (all owner time). Listing crons in wrangler replaces dashboard ones.
 
 ### Worker vars/secrets (Cloudflare only)
-`ADMIN_TOKEN`, `COADMIN_TOKEN`, `OWNER_CODE`, `OWNER` (default `viztrrx`),
+`ADMIN_TOKEN`, `COADMIN_TOKEN`, `OWNER_CODE`, `OWNER` (`ivan`, set in wrangler.jsonc vars; default `DEFAULT_OWNER`),
 `OWNER_TZ` (default New York), `EAGLER_*`, `ALLOW_QUERY_TOKEN`, optional
 `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` (else generated into
 KV `push:vapid`), `CONSOLE_SCRIPT_URL`, `AUDIUS_API`,
@@ -967,7 +979,8 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 
 | Commit | What |
 |---|---|
-| (this) | Owner PIN reset (Settings → Memory, /auth/owner-pin) |
+| (this) | Owner renamed to ivan (wrangler vars OWNER, DEFAULT_OWNER) |
+| `5a93642` | Owner PIN reset (Settings → Memory, /auth/owner-pin) |
 | `df5f46d` | Messages for the owner with no server sign-in (admin token / owner code = owner: `chatIdentity()`) |
 | `bac7267` | Rename songs; owner upload fix (admin token hid the session); Chromebook pop-ups |
 | `ec28acb` | Messages (DMs + group chats, safety review), @everyone, Welcome stats |
@@ -1039,6 +1052,7 @@ node tests/browser/chat-live.mjs           # 23
 node tests/browser/chat-replies.mjs        # 20
 node tests/browser/chat-round2.mjs         # 26 (fake microphone)
 node tests/browser/messages.mjs            # 35 (DMs, groups, safety review, @everyone, Welcome stats)
+node tests/browser/new-owner.mjs           # 11 (owner ivan on the web and the app)
 node tests/browser/owner-pin.mjs           # 10 (owner resets their own PIN)
 node tests/browser/owner-messages.mjs      # 9 (owner with no server sign-in, Admin connected)
 node tests/browser/my-music-edit.mjs       # 11 (rename songs; owner upload with Admin connected)

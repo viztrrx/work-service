@@ -93,7 +93,7 @@ try {
   const box = await R(kj.page, (r) => ({ href: r.querySelector('#gpa-renew-open').href, sms: !r.querySelector('#gpa-renew-sms').hidden, cash: r.querySelector('#gpa-renew-cash').textContent }));
   check('Renew opens: the subscribe link', opened && box.href === env.workerUrl + '/subscribe/', box.href);
   check('…“Text me the link” (texting is on)', box.sms);
-  check('…and paying cash: who to give it to (the owner, automatically) and the number to text CASH to', /in person to viztrrx \(owner\)/.test(box.cash) && /text CASH to \(239\) 555-0100/.test(box.cash), box.cash);
+  check('…and paying cash: who to give it to (the owner, automatically) and the number to text CASH to', /in person to ivan \(owner\)/.test(box.cash) && /text CASH to \(239\) 555-0100/.test(box.cash), box.cash);
   await kj.page.fill(sr('#gpa-renew-phone'), '(239) 555-0123');
   await kj.page.click(sr('#gpa-renew-send'));
   await waitFor(kj.page, (r) => /Sent to|Couldn|isn’t/.test(r.querySelector('#gpa-renew-msg').textContent), null, 10000);
@@ -106,7 +106,7 @@ try {
   const body = JSON.stringify({ data: { id: 'ev_' + run, event_type: 'message.received', payload: { from: { phone_number: '+12395550123' }, to: [{ phone_number: '+12395550100' }], text: 'paying cash' } } });
   const sig = Buffer.from(await crypto.subtle.sign({ name: 'Ed25519' }, keys.privateKey, new TextEncoder().encode(t + '|' + body))).toString('base64');
   const hook = await fetch(env.workerUrl + '/sms/inbound', { method: 'POST', headers: { 'Content-Type': 'application/json', 'telnyx-signature-ed25519': sig, 'telnyx-timestamp': String(t) }, body });
-  check('Texting CASH: the reply says who to give the cash to', hook.status === 200 && texts.length === 2 && /paying cash\? Give the monthly price in person to viztrrx \(owner\)\. They mark you as paid\./.test(texts[1].text), JSON.stringify(texts[1]));
+  check('Texting CASH: the reply says who to give the cash to', hook.status === 200 && texts.length === 2 && /paying cash\? Give the monthly price in person to ivan \(owner\)\. They mark you as paid\./.test(texts[1].text), JSON.stringify(texts[1]));
   const forged = await fetch(env.workerUrl + '/sms/inbound', { method: 'POST', headers: { 'Content-Type': 'application/json', 'telnyx-signature-ed25519': sig, 'telnyx-timestamp': String(t) }, body: body.replace('paying cash', 'CASH CASH') });
   check('A webhook that isn’t really from Telnyx is refused (no reply sent)', forged.status === 401 && texts.length === 2);
 
@@ -123,13 +123,13 @@ try {
   check('An admin sees “No expiry” (and no Renew button)', st.shown && st.left === 'No expiry' && !st.renew && /doesn’t expire/.test(st.note), JSON.stringify(st));
   await ana.page.locator('#gpa-root-host').screenshot({ path: path.join(OUT, '04-admin-no-expiry.png') });
   const info = await (await fetch(env.workerUrl + '/sms/info')).json();
-  check('The cash list is now the owner and the admin, automatically', info.cash.join('|') === 'viztrrx (owner)|' + ANA, info.cash.join(', '));
+  check('The cash list is now the owner and the admin, automatically', info.cash.join('|') === 'ivan (owner)|' + ANA, info.cash.join(', '));
 
   // The owner's Cash & texting card.
   owner = await computer();
   for (const btn of ['#gpa-signup-btn', '#gpa-login-btn']) {
     if (await R(owner.page, (r) => r.querySelector('#gpa-login').style.display === 'none')) break;
-    await signIn(owner.page, 'viztrrx', btn);
+    await signIn(owner.page, 'ivan', btn);
   }
   await R(owner.page, (r, a) => {
     const n = r.querySelector('.gpa-dropdown-item[data-tab="admin"]'); n.style.display = ''; n.click();
@@ -147,7 +147,7 @@ try {
   await R(owner.page, (r) => r.querySelector('.gps-tab[data-asec="security"]').click());
   const cardOk = await waitFor(owner.page, (r) => { const b = r.querySelector('#gac-sms'); return b && /Texting is/.test(b.textContent); }, null, 15000);
   const cardText = await R(owner.page, (r) => r.querySelector('#gac-sms').textContent.replace(/\s+/g, ' '));
-  check('Owner: Security → Cash & texting: texting on from (239) 555-0100, the automatic list, and who texted CASH', cardOk && /Texting is on from \(239\) 555-0100/.test(cardText) && cardText.includes('viztrrx (owner), ' + ANA) && cardText.includes(KJ) && /\(239\) 555-0123/.test(cardText), cardText.slice(0, 300));
+  check('Owner: Security → Cash & texting: texting on from (239) 555-0100, the automatic list, and who texted CASH', cardOk && /Texting is on from \(239\) 555-0100/.test(cardText) && cardText.includes('ivan (owner), ' + ANA) && cardText.includes(KJ) && /\(239\) 555-0123/.test(cardText), cardText.slice(0, 300));
   await R(owner.page, (r) => r.querySelector('#gac-sms-card').scrollIntoView({ block: 'start' }));
   await owner.page.waitForTimeout(300);
   await owner.page.locator(sr('#gac-sms-card')).screenshot({ path: path.join(OUT, '05-owner-cash-texting.png') });

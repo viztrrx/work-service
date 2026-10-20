@@ -90,7 +90,7 @@ try {
   await kj.page.evaluate(() => localStorage.removeItem('gpa_chat_effects'));
 
   // 2: flair, from Admin → Users → kj.
-  const own = await device('viztrrx', 'laptop');
+  const own = await device('ivan', 'laptop');
   await R(own.page, (r, a) => {
     const n = r.querySelector('.gpa-dropdown-item[data-tab="admin"]'); n.style.display = ''; n.click();
     const f = r.querySelector('#gac-auth-fields');

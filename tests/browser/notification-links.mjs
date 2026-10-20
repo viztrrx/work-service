@@ -77,7 +77,7 @@ try {
   // Owner signs in to the app once.
   await page.goto(env.workerUrl + '/console/');
   await ready();
-  await page.fill(sr('#gpa-login-user'), 'viztrrx');
+  await page.fill(sr('#gpa-login-user'), 'ivan');
   await page.fill(sr('#gpa-login-pin'), '135790');
   await page.click(sr('#gpa-signup-btn'));
   await page.waitForTimeout(2500);

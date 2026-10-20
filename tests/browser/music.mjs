@@ -96,7 +96,7 @@ try {
   for (const t of (await adminApi('/music/library')).tracks || []) await adminApi('/music/delete', { id: t.id });
 
   // ---- Owner adds songs ----
-  let { ctx, page } = await open('desktop', 'viztrrx');
+  let { ctx, page } = await open('desktop', 'ivan');
   // Owner proof for uploads: the admin token held in memory (Admin → Connect).
   await R(page, (r) => r.querySelector('.gpa-dropdown-item[data-tab="admin"]').style.display = '');
   await R(page, (r) => r.querySelector('.gpa-dropdown-item[data-tab="admin"]').click());

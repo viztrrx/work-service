@@ -144,7 +144,7 @@ try {
 
   // 6: the owner's switch.
   const own = await computer();
-  s = await signIn(own.page, 'viztrrx', 'create');
+  s = await signIn(own.page, 'ivan', 'create');
   await R(own.page, (r) => { const n = r.querySelector('.gpa-dropdown-item[data-tab="admin"]'); n.style.display = ''; n.click(); });
   await own.page.waitForTimeout(400);
   await R(own.page, (r, a) => {

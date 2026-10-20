@@ -33,7 +33,7 @@ fs.mkdirSync(OUT, { recursive: true });
 const { devices } = createRequire(path.join(ROOT, 'package.json'))('playwright');
 const ADMIN = 'test-admin-token-0123456789abcdef';
 const OWNER_CODE = 'owner-code-test-0123456789';
-const OWNER = 'viztrrx';
+const OWNER = 'ivan';
 const PIN = '246810';
 const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + String(detail).slice(0, 400) : ''}`); };

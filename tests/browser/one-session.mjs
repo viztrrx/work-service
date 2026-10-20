@@ -107,7 +107,7 @@ try {
 
   // 6: the owner's view.
   const O = await open();
-  await attempt(O.page, 'viztrrx', '135790', 'signup');
+  await attempt(O.page, 'ivan', '135790', 'signup');
   await dismissLang(O.page);
   const connect = () => R(O.page, (root, a) => {
     const n = root.querySelector('.gpa-dropdown-item[data-tab="admin"]'); n.style.display = ''; n.click();

@@ -99,7 +99,7 @@ try {
   await admin('/admin/config', { allowlist: { on: false, users: [] } });
   // 1: owner, list off.
   const owner = await phone();
-  await signUp(owner.page, 'viztrrx');
+  await signUp(owner.page, 'ivan');
   await openSubscribers(owner.page);
   check('With Allowed users off, the card warns and offers “Turn it on”', await R(owner.page, (r) => !!r.querySelector('#gac-subs-allow') && /only matter while/.test(r.querySelector('.gac-subs-warn').textContent)));
   await shot(owner.page, '01-list-off-warning.png');

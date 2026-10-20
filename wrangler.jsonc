@@ -12,6 +12,12 @@
 	// being wiped. Secrets (ADMIN_TOKEN, COADMIN_TOKEN, OWNER_CODE) are always
 	// kept by `wrangler deploy`; set them in the dashboard, never here.
 	"keep_vars": true,
+	// The owner's username. Set here (not only in the dashboard) so a deploy
+	// always uses it: a value here replaces the dashboard's OWNER on deploy.
+	// Changed from viztrrx to ivan on 2026-10-20 at the owner's request.
+	"vars": {
+		"OWNER": "ivan"
+	},
 	// Accounts, sessions, AI memory, chat, moderation, telemetry and the admin
 	// console all store their data here (env.TELEMETRY in worker.js). This is
 	// the existing namespace; a deploy without it would drop the binding.

@@ -48,7 +48,7 @@ async function phone(user) {
 
 try {
   await admin('/admin/config', { allowlist: { on: false } });
-  const own = await phone('viztrrx');
+  const own = await phone('ivan');
   await R(own.page, (r, a) => {
     const n = r.querySelector('.gpa-dropdown-item[data-tab="admin"]'); n.style.display = ''; n.click();
     const f = r.querySelector('#gac-auth-fields');
@@ -71,7 +71,7 @@ try {
   await own.page.waitForTimeout(1200);
   check('A PIN that isn’t this device’s says “Wrong PIN.”', /Wrong PIN/.test(await own.page.evaluate(() => document.getElementById('gpa-root-host').shadowRoot.textContent)));
   const link = await R(own.page, (r) => !r.querySelector('#gmem-reset-row').hidden && r.querySelector('#gmem-reset-open').textContent);
-  check('“Forgot your PIN? Reset it” shows for the owner', link === 'Forgot your PIN? Reset it', String(link));
+  check('A reset button shows for the owner (“Set up your owner PIN” when the server has no owner account yet)', link === 'Forgot your PIN? Reset it' || link === 'Set up your owner PIN', String(link));
   await own.page.waitForTimeout(2500);
   await shot(own.page, '01-forgot-pin.png');
   await R(own.page, (r) => r.querySelector('#gmem-reset-open').click());
@@ -93,7 +93,7 @@ try {
   // Sign out; the old PIN is refused, the new one works.
   await R(own.page, (r) => r.querySelector('#gpa-logout-btn').click());
   await own.page.waitForTimeout(800);
-  await own.page.fill(sr('#gpa-login-user'), 'viztrrx');
+  await own.page.fill(sr('#gpa-login-user'), 'ivan');
   await own.page.fill(sr('#gpa-login-pin'), '246810');
   await own.page.click(sr('#gpa-login-btn'));
   await own.page.waitForTimeout(2000);

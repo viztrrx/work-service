@@ -52,7 +52,7 @@ export { ChatRoom };
 //     (URLs lose their query strings; tokens and guesses are never logged).
 //
 // Env vars: TELEMETRY (KV binding), ADMIN_TOKEN (owner secret), OWNER
-// (username, defaults 'viztrrx'). Optional, all off unless set:
+// (username, defaults 'ivan'). Optional, all off unless set:
 //   OWNER_CODE     — a shared secret a client must send as the X-GPA-Owner
 //                    header to post to /track or /chat/send as the OWNER
 //                    username. Prevents anyone else from claiming that name.
@@ -158,6 +158,9 @@ const ROLE_PERMS = {
   moderator: ['users.view', 'users.suspend', 'moderation.view', 'moderation.manage', 'system.view'],
   user: []
 };
+// The owner's username when the OWNER variable isn't set (wrangler.jsonc sets
+// it too). Changed from 'viztrrx' to 'ivan' on 2026-10-20 at the owner's request.
+const DEFAULT_OWNER = 'ivan';
 const ROLE_RANK_V2 = { user: 0, moderator: 1, admin: 2, owner: 3 };
 const permsFor = (role) => ROLE_PERMS[role] || [];
 const can = (principal, perm) => {
@@ -544,7 +547,7 @@ async function autoSubscribeListed(env, cfg, now = Date.now()) {
   const a = cfg && cfg.allowlist;
   if (!kv || !a || !a.on || !Array.isArray(a.users) || !a.users.length) return [];
   cfg.subscriptions = cfg.subscriptions && typeof cfg.subscriptions === 'object' ? cfg.subscriptions : {};
-  const owner = String((env && env.OWNER) || 'viztrrx').toLowerCase();
+  const owner = String((env && env.OWNER) || DEFAULT_OWNER).toLowerCase();
   const { start, end } = monthBounds(now, (env && env.OWNER_TZ) || 'America/New_York');
   const added = [];
   for (const key of a.users) {
@@ -607,7 +610,7 @@ async function checkPresence(env, ownerName, origin, { force = false } = {}) {
     if (await kv.get('push:presence:chk')) return null;
     await kv.put('push:presence:chk', '1', { expirationTtl: 60 });
   }
-  const owner = String(ownerName || (env && env.OWNER) || 'viztrrx').toLowerCase();
+  const owner = String(ownerName || (env && env.OWNER) || DEFAULT_OWNER).toLowerCase();
   const names = new Map();
   let cursor;
   do {
@@ -721,7 +724,7 @@ function ownerWeekStart(env, ts) {
 // Distinct people with the console open now (presence keys), owner excluded.
 async function onlineNames(env) {
   const kv = env && env.TELEMETRY;
-  const owner = String((env && env.OWNER) || 'viztrrx').toLowerCase();
+  const owner = String((env && env.OWNER) || DEFAULT_OWNER).toLowerCase();
   const names = new Map();
   let cursor;
   do {
@@ -870,7 +873,7 @@ const aiCallers = new WeakMap();
 const PRESENCE_CRON = '*/5 * * * *';
 async function reportAiFailure(req, res, env, ctx) {
   const user = aiCallers.get(req);
-  if (!user || String(user).toLowerCase() === String((env && env.OWNER) || 'viztrrx').toLowerCase()) return;
+  if (!user || String(user).toLowerCase() === String((env && env.OWNER) || DEFAULT_OWNER).toLowerCase()) return;
   let type = 'error', message = 'HTTP ' + res.status;
   try {
     const j = await res.clone().json();
@@ -967,8 +970,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     // plus a kick counter the client compares against to force a one-time
     // sign-out. Read wherever we need to enforce or report it.
     // The owner is immune to all moderation and always allowed, even in
-    // private mode. Defaults to 'viztrrx'; override with an OWNER env var.
-    const OWNER = String((env && env.OWNER) || 'viztrrx').toLowerCase();
+    // private mode. Defaults to 'ivan'; override with an OWNER env var.
+    const OWNER = String((env && env.OWNER) || DEFAULT_OWNER).toLowerCase();
 
     const getMod = async (kv, user) => {
       if (!kv || !user) return { state: 'active', reason: '', kickNonce: 0 };
@@ -2449,10 +2452,12 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         }
         let ownerVerified = false;
         if (userLower === OWNER) {
-          // The owner's name can only be claimed by proving OWNER_CODE; with no
-          // OWNER_CODE configured it can't be claimed at all (use the admin token).
+          // The owner's name can only be claimed by proving OWNER_CODE...
+          // ...or by the owner's admin token (Admin connected on this device).
           const proof = req.headers.get('X-GPA-Owner') || '';
-          if (!(env && env.OWNER_CODE) || !(await timingSafeEqualStr(proof, env.OWNER_CODE))) {
+          const tokenP = await resolvePrincipal();
+          const byToken = !!(tokenP && tokenP.kind === 'token' && tokenP.role === 'owner');
+          if (!byToken && (!(env && env.OWNER_CODE) || !(await timingSafeEqualStr(proof, env.OWNER_CODE)))) {
             await noteSec('owner_claim_refused', { user });
             return json({ ok: false, error: 'name reserved' }, 403);
           }

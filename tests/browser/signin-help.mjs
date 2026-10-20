@@ -163,7 +163,7 @@ try {
   owner = await computer();
   for (const btn of ['#gpa-signup-btn', '#gpa-login-btn']) {
     if (await R(owner.page, (r) => r.querySelector('#gpa-login').style.display === 'none')) break;
-    await signIn(owner.page, 'viztrrx', '246810', btn);
+    await signIn(owner.page, 'ivan', '246810', btn);
   }
   await R(owner.page, (r, a) => {
     const n = r.querySelector('.gpa-dropdown-item[data-tab="admin"]'); n.style.display = ''; n.click();

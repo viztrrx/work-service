@@ -52,7 +52,7 @@ const say = async (page, text) => { await page.fill(sr('#gpa-chat-input'), text)
 try {
   await admin('/admin/config', { allowlist: { on: false } });
   const kj = await phone('kj' + run);
-  const own = await phone('viztrrx');
+  const own = await phone('ivan');
   await R(own.page, (r, a) => {
     const n = r.querySelector('.gpa-dropdown-item[data-tab="admin"]'); n.style.display = ''; n.click();
     const f = r.querySelector('#gac-auth-fields');

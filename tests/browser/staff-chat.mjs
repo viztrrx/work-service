@@ -101,7 +101,7 @@ try {
   await shot(kj.page, '03-regular-user-sidebar.png');
 
   // 2: the owner, Admin connected (admin token in memory = staff).
-  const own = await phone('viztrrx');
+  const own = await phone('ivan');
   await R(own.page, (r, a) => {
     const n = r.querySelector('.gpa-dropdown-item[data-tab="admin"]'); n.style.display = ''; n.click();
     const f = r.querySelector('#gac-auth-fields');

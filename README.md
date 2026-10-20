@@ -328,7 +328,7 @@ only for subscribers. New here? Subscribe first." You get a "kj contributed $20"
 Security → Subscribers shows a contributions total and "contributed $X" on
 their row. Nothing to set up: it uses the same Stripe key and webhook.
 
-**Test it yourself with $1 (owner only).** Type your own name (viztrrx) on
+**Test it yourself with $1 (owner only).** Type your own name (ivan) on
 the subscribe page: it turns into **Test contribution**, from **$1**, with a
 **Your PIN (owner)** box. Type your Saints Service PIN, tap **Contribute
 $1.00**, and pay on Stripe's page. It's a real charge: it shows in Stripe →
@@ -480,7 +480,7 @@ minute, plus the exact date and time it ends. People paying monthly see
 - **Open the subscribe page** / **Copy link**;
 - **Text me the link**: they type their phone number and get one text with the
   subscribe link (only when texting is set up, below);
-- **Paying cash?**: "Give $13.80 in person to viztrrx (owner) or …", and "or
+- **Paying cash?**: "Give $13.80 in person to ivan (owner) or …", and "or
   text CASH to (239) 555-0100".
 
 **Texting CASH.** Anyone who texts **CASH** to your Telnyx number gets a reply
@@ -765,6 +765,12 @@ Each room's messages live in their own Durable Object (`CHAT_ROOMS`, see `chat/r
 **Share a song.** In Music, the 💬 button on the now-playing bar shares the song to the chat room you're in. Everyone sees a card with the title and artist and a **▶ Play** button that plays it in their console (songs from the shared library, Audius, or someone's **My music** uploads).
 
 **Grouping.** Several messages in a row from the same person (within 5 minutes) show their picture and name once, with the rest as plain lines underneath, like iMessage. Someone else's message, a reply or a 5-minute gap starts a new group. On a computer, hovering a grouped line shows its time and the ↩ / ☺ buttons.
+
+### The owner name {#owner-name}
+
+The owner is **ivan** (it was viztrrx until 2026-10-20). It's set in `wrangler.jsonc` (`"vars": { "OWNER": "ivan" }`), which replaces any `OWNER` variable in the Cloudflare dashboard on each deploy; the Worker's own default is also `ivan`. To change it again, edit both and push. Things saved under the old name (its My music, memory, conversations) stay with that name, which is now an ordinary account.
+
+**First time as ivan** (on the web or in the app): sign up as `ivan` with your PIN. If the server says the name is reserved, connect Admin (Admin tab → your admin token), then Settings → Memory → **Set up your owner PIN**, type the PIN twice. After that, sign in as `ivan` with that PIN anywhere, on several devices at once.
 
 ### Resetting your own PIN (owner) {#owner-pin}
 

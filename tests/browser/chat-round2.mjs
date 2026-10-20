@@ -127,7 +127,7 @@ try {
   await shot(kj.page, '05-edited.png');
 
   // 4: pins (the owner, Admin connected = staff).
-  const own = await device('viztrrx', 'laptop');
+  const own = await device('ivan', 'laptop');
   await R(own.page, (r, a) => {
     const n = r.querySelector('.gpa-dropdown-item[data-tab="admin"]'); n.style.display = ''; n.click();
     const f = r.querySelector('#gac-auth-fields');

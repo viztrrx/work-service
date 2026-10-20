@@ -17670,7 +17670,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       }
       if (r.status === 404 && r.data.missing) {
         const ownerCode = admGet(ADMIN_KEYS.OWNER_CODE);
-        r = await post('/auth/register', ownerCode ? { 'X-GPA-Owner': ownerCode } : null);
+        const adminTok = admGet(ADMIN_KEYS.TELE_TOKEN);
+        r = await post('/auth/register', ownerCode || adminTok ? { ...(ownerCode ? { 'X-GPA-Owner': ownerCode } : {}), ...(adminTok ? { Authorization: 'Bearer ' + adminTok } : {}) } : null);
       }
       if (r.status === 423 && r.data.deviceLocked) {
         showDeviceLock(r.data.until);
@@ -26322,6 +26323,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           // The owner (Admin connected or owner code on this device) can reset their own PIN here.
           const ownerProof = !!(admGet(ADMIN_KEYS.TELE_TOKEN) || admGet(ADMIN_KEYS.OWNER_CODE));
           memEl('gmem-reset-row').hidden = !gate.pin || !ownerProof || !memEl('gmem-reset').hidden;
+          memEl('gmem-reset-open').textContent = /reserved/.test(serverSessionError || '') ? 'Set up your owner PIN' : 'Forgot your PIN? Reset it';
           memEl('gmem-forgot-hint').hidden = !gate.pin || ownerProof;
           if (!gate.pin) memEl('gmem-reset').hidden = true;
         }
