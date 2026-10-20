@@ -14,6 +14,7 @@ new subscriber and then the owner would see things.
 | [3-playlists](#3-playlists-everyone-signed-in) | Spotify / Apple Music playlist → YouTube links, for everyone; **new:** 10 new songs a day each, your limit card |
 | [4-youtube-to-mp3](#4-youtube-to-mp3-owner) | The MP3 converter in Music → My music |
 | [5-subscribe-page](#5-subscribe-page) | The payment page, the $6 contribution box, and **new:** your $1 test (owner only) |
+| [14-music-rename-and-popups](#14-renaming-songs-and-chromebook-pop-ups) | **New:** rename a song (name, artist, file name) and download it; pop-up notifications on a Chromebook |
 | [13-messages](#13-messages-everyone-and-stats) | **New:** Messages (direct messages and group chats) with its NEW label, unread badges, @everyone, your Safety review, and the stats card on Welcome |
 | [12-proxy-tab](#12-proxy-tab-saints-proxy-worker) | The Proxy tab with several approved sites: a site loading through the proxy, HTTP 404, website down, other sites explained, blocked by a website, light theme |
 | [11-countdown-renew-texting](#11-countdown-renew-and-texting) | **New:** time left at the top for everyone, the Renew box (link, text me the link, paying cash), your Cash & texting card |
@@ -426,3 +427,32 @@ records when there are any.
 **Dark mode on a phone:**
 
 <img src="13-messages/11-messages-dark.png" width="320" alt="Messages list, dark">
+
+## 14. Renaming songs and Chromebook pop-ups
+
+Taken in the automated tests (`tests/browser/my-music-edit.mjs` on iPhone
+size; `tests/browser/chromebook-notify.mjs` with a Chromebook's Chrome,
+Saints Service injected into two made-up websites, "Class notes" and
+"Homework site").
+
+**After uploading one song, its rename form opens**, filled in from the
+file name. This upload is the owner's with Admin connected, the case that
+used to say "Sign in to keep your own music."
+
+<img src="14-music-rename-and-popups/1-rename-after-upload.png" width="320" alt="Rename form after uploading a song">
+
+**Saved:** the new name and artist, with ⬇ Download (saved under the new
+file name) and ✎ to edit again. A regular user can do the same with their
+own songs.
+
+<img src="14-music-rename-and-popups/2-renamed.png" width="320" alt="Renamed song"> <img src="14-music-rename-and-popups/3-regular-user.png" width="320" alt="A regular user's renamed song">
+
+**On a Chromebook:** a bell strip in Chat turns pop-ups on (Chrome asks
+once per website). Settings → Account shows them on, with "Messages,
+mentions and @everyone" or "every chat message", and Send a test.
+
+<img src="14-music-rename-and-popups/4-chromebook-bell-strip.png" width="640" alt="Bell strip in Chat"> <img src="14-music-rename-and-popups/5-chromebook-settings.png" width="640" alt="Pop-up notifications in Settings">
+
+**Clicking a pop-up** opens that conversation:
+
+<img src="14-music-rename-and-popups/6-chromebook-popup-opens-dm.png" width="640" alt="The conversation opened from a pop-up">

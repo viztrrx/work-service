@@ -5,9 +5,9 @@ import { subscribePage, subscribeReady, priceCents, displayCents, stripe, checko
 import { parseYouTubeLink, videoDetails, rightsNote } from './web/mp3.js';
 import { smsReady, normPhone, prettyPhone, sendSms, telnyxSignatureOk, smsKeyword, namesList } from './web/sms.js';
 import { readPlaylist, readLists, writeLists, newList, listSummary, publicList, searchYouTube, matchCacheKey, LISTS_MAX, MATCH_BATCH, MATCH_SCAN } from './web/playlists.js';
-import { audiusSearch, audiusStream, listLibrary, addToLibrary, removeFromLibrary, serveLibraryFile, audioKind, listMine, mineUsage, addToMine, removeFromMine, MINE_DAILY_UPLOADS } from './web/music.js';
+import { audiusSearch, audiusStream, listLibrary, addToLibrary, removeFromLibrary, serveLibraryFile, audioKind, listMine, mineUsage, addToMine, removeFromMine, editMine, editLibrary, MINE_DAILY_UPLOADS } from './web/music.js';
 import { PUSH_CATEGORIES, vapidKeys, validSubscription, addSubscription, updateSubscription, removeSubscription, getSubscription, sendPush, notifyOwner, ownerTime, cleanCategories, anySubscriberWants,
-  ownerHour, addUserSubscription, findUserSubscription, removeUserSubscription, userHasAlerts, notifyUser } from './web/console/push.js';
+  ownerHour, addUserSubscription, findUserSubscription, removeUserSubscription, userHasAlerts, notifyUser, rememberUserDevice, pushOnDevice } from './web/console/push.js';
 import { validateMutation } from './mobile/backend/validation.js';
 import { AdminMobileState, stateCall, digest, randomToken, validSource, relayCall, queueEvent } from './mobile/backend/state.js';
 export { AdminMobileState };
@@ -1116,6 +1116,16 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         principalMemo={kind:'mobile',role:session.role,actor:session.actor,user:session.user,sid:session.id,mobilePerms:session.perms.filter(x=>permsFor(session.role).includes('*') || permsFor(session.role).includes(x)),mobile:session};
         return principalMemo;
       }
+      principalMemo = await resolveSession();
+      return principalMemo;
+    };
+    // The signed-in session on this request (X-GPA-Session, or ?s= on a GET),
+    // checked on its own: a request can carry an admin token as well (the
+    // owner with Admin connected), and that must not hide who is signed in.
+    let sessionMemo;
+    const resolveSession = async () => {
+      if (sessionMemo !== undefined) return sessionMemo;
+      const kv = env && env.TELEMETRY;
       const st = req.headers.get('X-GPA-Session') || bodySessionToken;
       if (st) {
         const p = await verifySessionToken(st);
@@ -1144,21 +1154,26 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
               }
             }
             const role = String(acct.user).toLowerCase() === OWNER && acct.ownerVerified ? 'owner' : (ROLE_PERMS[acct.role] ? acct.role : 'user');
-            principalMemo = { kind: 'session', role, actor: acct.user, user: acct.user, sid: p.s, acct, payload: p };
-            return principalMemo;
+            sessionMemo = { kind: 'session', role, actor: acct.user, user: acct.user, sid: p.s, acct, payload: p };
+            return sessionMemo;
           }
         }
       }
-      principalMemo = null;
-      return principalMemo;
+      sessionMemo = null;
+      return sessionMemo;
     };
     // The identity a user-facing route should use: the verified session user
     // when there is one, otherwise the asserted name (legacy clients) unless
     // the owner has turned legacy identity off. A session and a different
     // asserted name is a spoofing attempt and is recorded as such.
     const effectiveUser = async (asserted) => {
-      const p = await resolvePrincipal();
+      const tokenP = await resolvePrincipal();
+      const p = tokenP && tokenP.kind === 'session' ? tokenP : await resolveSession();
       const claimed = String(asserted || '').slice(0, 80);
+      // The owner's admin token is the owner, signed in or not.
+      if (!p && tokenP && tokenP.kind === 'token' && tokenP.role === 'owner' && claimed.toLowerCase() === OWNER) return { user: claimed, verified: true };
+      // So is the owner code (X-GPA-Owner), for the owner's own name.
+      if (!p && claimed.toLowerCase() === OWNER && env && env.OWNER_CODE && (await timingSafeEqualStr(req.headers.get('X-GPA-Owner') || '', env.OWNER_CODE))) return { user: claimed, verified: true };
       if (p && p.kind === 'session') {
         if (claimed && claimed.toLowerCase() !== String(p.user).toLowerCase()) {
           await noteSec('identity_mismatch', { user: p.user, note: 'asserted ' + claimed });
@@ -3193,7 +3208,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         routes: [
           '/v1/*', '/read', '/track', '/status', '/active-count', '/health',
           '/chat/poll', '/chat/send', '/chat/react', '/chat/unsend', '/chat/report', '/chat/extras', '/games/score', '/games/leaderboard', '/unlock',
-          '/dm/list', '/dm/people', '/dm/start', '/dm/group', '/dm/manage', '/dm/review', '/stats/public',
+          '/dm/list', '/dm/people', '/dm/start', '/dm/group', '/dm/manage', '/dm/review', '/stats/public', '/notify/claim',
           '/auth/register', '/auth/login', '/auth/me', '/auth/logout', '/auth/revoke',
           '/memory/*', '/eagler/*', ...Object.keys(ADMIN_ROUTES)
         ]
@@ -3447,7 +3462,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         }
         if (!validSubscription(body.subscription)) return json({ error: 'That is not a push subscription from a supported browser.' }, 400);
         await vapidKeys(env, { create: true });
-        const rec = await addSubscription(env, body.subscription, { categories: body.categories, name: body.name, quiet: body.quiet });
+        const rec = await addSubscription(env, body.subscription, { categories: body.categories, name: body.name, quiet: body.quiet, ua: (await deviceHashes()).uaH });
         return json({ ok: true, subscription: rec });
       }
       // Mention alerts for everyone: each signed-in person manages their own.
@@ -3457,13 +3472,17 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         if (url.pathname === '/push/me/subscribe') {
           if (!validSubscription(body.subscription)) return json({ error: 'That is not a push subscription from a supported browser.' }, 400);
           await vapidKeys(env, { create: true });
-          return json({ ok: true, subscription: await addUserSubscription(env, p.user, body.subscription, body.name) });
+          return json({ ok: true, subscription: await addUserSubscription(env, p.user, body.subscription, body.name, (await deviceHashes()).uaH) });
         }
         const mid = String(body.id || ''), mkey = String(body.key || '');
         if (url.pathname === '/push/me/unsubscribe') return json({ ok: await removeUserSubscription(env, p.user, mid, mkey) });
         const mine = await findUserSubscription(env, p.user, mid, mkey);
         if (!mine) return json({ error: 'unknown device' }, 404);
-        if (url.pathname === '/push/me/status') return json({ ok: true, subscription: { id: mine.id, name: mine.name, created: mine.created } });
+        if (url.pathname === '/push/me/status') {
+          // Remembers which browser this is (subscriptions from before it was saved).
+          await rememberUserDevice(env, p.user, mine.id, (await deviceHashes()).uaH);
+          return json({ ok: true, subscription: { id: mine.id, name: mine.name, created: mine.created } });
+        }
         if (url.pathname === '/push/me/test') {
           const r = await sendPush(mine, { title: 'Saints Service', body: 'Mention alerts are working. Sent at ' + ownerTime(env) + '.', cat: 'test', url: appLink('chat', {}), ts: Date.now() }, await vapidKeys(env), env.VAPID_SUBJECT || url.origin);
           return json({ ok: r.ok, status: r.status }, r.ok ? 200 : 502);
@@ -4208,7 +4227,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         if (env.OWNER_CODE && code && await timingSafeEqualStr(code, env.OWNER_CODE)) return OWNER;
         return null;
       };
-      const isUpload = url.pathname === '/music/upload' || url.pathname === '/music/delete';
+      const isUpload = url.pathname === '/music/upload' || url.pathname === '/music/delete' || url.pathname === '/music/edit';
       if (!isUpload && !allowedUser(cfg, listener)) return json({ ok: false, error: ACCESS_DENIED }, 403);
       if (!isUpload) {
         const st = await resolve(kv, listener || 'anonymous');
@@ -4397,6 +4416,16 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
             await kv.put(rk, String(n + 1), { expirationTtl: 2 * 24 * 3600 });
             return json({ ok: true, track, usage: await mineUsage(kv, me) });
           }
+          if (url.pathname === '/music/mine/edit' && req.method === 'POST') {
+            // Rename your own song: its title, artist and file name.
+            let body = {};
+            try { body = JSON.parse(await req.text()) || {}; } catch (e) { return json({ ok: false, error: 'invalid request' }, 400); }
+            const fields = {};
+            for (const k of ['title', 'artist', 'file']) if (typeof body[k] === 'string') fields[k] = body[k];
+            const track = await editMine(env, me, String(body.id || ''), fields);
+            if (!track) return json({ ok: false, error: 'That song isn’t in your music.' }, 404);
+            return json({ ok: true, track });
+          }
           if (url.pathname === '/music/mine/delete' && req.method === 'POST') {
             let body = {};
             try { body = JSON.parse(await req.text()) || {}; } catch (e) { return json({ ok: false, error: 'invalid request' }, 400); }
@@ -4407,6 +4436,17 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
             return json({ ok, usage: await mineUsage(kv, me) }, ok ? 200 : 404);
           }
           return json({ error: 'not found' }, 404);
+        }
+        if (url.pathname === '/music/edit' && req.method === 'POST') {
+          if (!(await staff())) return json({ ok: false, error: 'Only the owner and admins can change songs in the shared library.' }, 403);
+          let body = {};
+          try { body = JSON.parse(await req.text()) || {}; } catch (e) { return json({ ok: false, error: 'invalid request' }, 400); }
+          const fields = {};
+          for (const k of ['title', 'artist', 'file']) if (typeof body[k] === 'string') fields[k] = body[k];
+          const track = await editLibrary(env, String(body.id || ''), fields);
+          if (!track) return json({ ok: false, error: 'not found' }, 404);
+          await logAudit(kv, { route: url.pathname, action: 'music_edit', target: track.title + ' — ' + track.artist });
+          return json({ ok: true, track });
         }
         if (url.pathname === '/music/delete' && req.method === 'POST') {
           if (!(await staff())) return json({ ok: false, error: 'Only the owner and admins can remove songs.' }, 403);
@@ -5146,6 +5186,28 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         return json({ ok: true, convs: (all.convs || []).map((c) => ({ ...c, n: 0, title: c.kind === 'group' ? c.name : (c.members || []).join(' & ') })) });
       }
       return json({ ok: false, error: 'not found' }, 404);
+    }
+
+    // ---- Pop-up notifications in the console (Chrome, Chromebooks) -----------
+    // The console shows a desktop notification for a new direct message,
+    // mention, @everyone or (if asked) chat message. It can be open in several
+    // tabs or on several websites at once, so before showing one it asks
+    // here: each message key is handed out once per browser (per signed-in
+    // person, kept in their inbox object, which takes one request at a time).
+    // It also says whether this browser already gets push alerts for those
+    // messages (the Saints Service app), so they don't show twice.
+    if (url.pathname === '/notify/claim' && req.method === 'POST') {
+      const kv = kvMain;
+      if (!kv || !chatInRooms) return json({ ok: false, fresh: [] }, 200);
+      const p = await resolveSession();
+      if (!p) return json({ ok: false, error: 'Sign in first.', fresh: [] }, 401);
+      const body = await readJson();
+      const keys = [...new Set((Array.isArray(body.keys) ? body.keys : []).map((k) => String(k || '').slice(0, 80)).filter((k) => /^[a-z0-9:|@._-]{3,80}$/i.test(k)))].slice(0, 20);
+      const dev = await deviceHashes();
+      let fresh = [];
+      try { fresh = keys.length ? (await inboxCall(p.user, 'inbox_claim', { convId: 'claims', keys, dev: dev.uaH + dev.ipH.slice(0, 8) })).fresh || [] : []; } catch (e) { fresh = []; }
+      const push = await pushOnDevice(env, p.user, dev.uaH, String(p.user).toLowerCase() === OWNER);
+      return json({ ok: true, fresh, push });
     }
 
     // ---- Public stats (Welcome page) ----------------------------------------

@@ -785,6 +785,17 @@ Each room's messages live in their own Durable Object (`CHAT_ROOMS`, see `chat/r
 
 **Stats on Welcome.** A **Saints Service stats** card on Welcome, the same for everyone: members, online now, messages today and this week (#public and private messages counted together; only counts, never who wrote to whom or what), group chats, and the top three chatters in #public this week, trivia points, weekday streaks and game records. The Worker works it out at most once a minute (`/stats/public`).
 
+**Pop-up notifications on Chrome and Chromebooks.** Saints Service runs injected into websites on Chromebooks, so it shows its own Chrome notifications (on a Chromebook they appear at the bottom right and in the tray by the clock):
+
+- **Turn on:** the 🔔 strip in Chat or Messages, or Settings → Account → **Pop-up notifications**. Chrome asks "Allow notifications?" once for each website Saints Service is opened on; choose **Allow**. The page never asks by surprise.
+- **What pops up:** direct and group messages, @mentions and @everyone by default; pick "plus every chat message" for all of #public too. Nothing pops up for a chat that's already on your screen.
+- **When:** while Saints Service is open in a Chrome tab (any website, or the app), even when that tab is in the background or another window is in front. Chrome may hold them back up to a minute in a tab that's been in the background a while. With no tab open, nothing in a web page can run; for that, use **Mention alerts** in the Saints Service app (below), which sends push alerts while Chrome is running.
+- **Only once:** with Saints Service open in several tabs or on several websites, each message pops up once (the Worker hands each message out once per browser), and not at all where this browser already gets the same alert from the app.
+- **Clicking one** brings the tab to the front and opens that conversation or room.
+- **Not showing up?** Click the icon left of the address bar → Site settings → Notifications → Allow, then reload. On a Chromebook, also make sure Do Not Disturb is off (click the clock). Settings → Account → **Send a test** checks it.
+
+**Mention alerts (push, also with no tab open):** in the Saints Service app (`/console/` on the Worker, installable in Chrome), Settings → Account → Mention alerts → Turn on. It covers direct messages, @mentions and @everyone. On a website, the card has an **Open the Saints Service app** button.
+
 ### AI usage meter {#usage-meter}
 
 Anyone you give a limit to (Admin → Users → a person → **Quota overrides**, or a quota for everyone in AI & Usage) sees a slim meter under the console's header on every tab: **AI requests today** (or **this month**), a progress bar, how many are left, and when it resets. It turns amber at 80% and red at the limit ("Daily limit reached. AI requests are paused until …"). A per\-minute rate shows as a short note instead of a bar. People without a limit, and you, never see it. The numbers come from the same counters the Worker enforces, refreshed on every status check and right after each AI request. Daily quotas reset at midnight UTC (8 PM New York time in summer, 7 PM in winter); monthly ones on the 1st.
@@ -893,6 +904,8 @@ Three ways to play something:
 
 Playback keeps running while you switch sections — the player stays in the DOM, just hidden.
 
+
+**Rename your songs.** In Music → My music, ✎ on a song changes its **name**, **artist** and **file name**; ⬇ downloads it under that file name (the extension always matches the audio). After you upload a single song, its rename form opens filled in from the file name ("Artist - Title.mp3"). Everyone signed in can do this with their own songs; the owner and admins can also rename songs in the Shared library (logged in Audit).
 ### Eaglercraft {#eaglercraft}
 
 ![The Eaglercraft tab before fullscreen](docs/screenshots/eaglercraft.png)

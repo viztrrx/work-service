@@ -174,7 +174,7 @@ const readSubs = async (kv) => { try { return (await kv.get('push:subs', 'json')
 const writeSubs = (kv, subs) => kv.put('push:subs', JSON.stringify(subs));
 const publicSub = (s) => ({ id: s.id, categories: cleanCategories(s.categories), quiet: s.quiet || null, created: s.created, name: s.name });
 
-export async function addSubscription(env, sub, { categories, name, quiet } = {}) {
+export async function addSubscription(env, sub, { categories, name, quiet, ua } = {}) {
   const kv = env.TELEMETRY;
   const subs = (await readSubs(kv)).filter((s) => s.endpoint !== sub.endpoint);
   if (subs.length >= MAX_SUBS) subs.splice(0, subs.length - MAX_SUBS + 1);   // drop the oldest
@@ -182,7 +182,7 @@ export async function addSubscription(env, sub, { categories, name, quiet } = {}
   const rec = {
     id: crypto.randomUUID(), keyHash: await sha256hex(manageKey), endpoint: sub.endpoint,
     p256dh: sub.keys.p256dh, auth: sub.keys.auth, categories: cleanCategories(categories),
-    quiet: cleanQuiet(quiet), name: String(name || 'iPhone').slice(0, 40), created: Date.now()
+    quiet: cleanQuiet(quiet), name: String(name || 'iPhone').slice(0, 40), created: Date.now(), ...(ua ? { ua: String(ua).slice(0, 32) } : {})
   };
   subs.push(rec);
   await writeSubs(kv, subs);
@@ -270,13 +270,13 @@ export async function notifyOwner(env, event, origin) {
 const USER_MAX_DEVICES = 3;
 const userKey = (user) => 'push:user:' + String(user || '').trim().toLowerCase().slice(0, 40);
 async function readUserSubs(kv, user) { try { return (await kv.get(userKey(user), 'json')) || []; } catch (e) { return []; } }
-export async function addUserSubscription(env, user, sub, name) {
+export async function addUserSubscription(env, user, sub, name, ua) {
   const kv = env.TELEMETRY;
   const subs = (await readUserSubs(kv, user)).filter((s) => s.endpoint !== sub.endpoint);
   if (subs.length >= USER_MAX_DEVICES) subs.splice(0, subs.length - USER_MAX_DEVICES + 1);
   const manageKey = b64u.enc(crypto.getRandomValues(new Uint8Array(24)));
   const rec = { id: crypto.randomUUID(), keyHash: await sha256hex(manageKey), endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth,
-    name: String(name || 'iPhone').slice(0, 40), created: Date.now() };
+    name: String(name || 'iPhone').slice(0, 40), created: Date.now(), ...(ua ? { ua: String(ua).slice(0, 32) } : {}) };
   subs.push(rec);
   await kv.put(userKey(user), JSON.stringify(subs));
   return { id: rec.id, manageKey, name: rec.name, created: rec.created };
@@ -294,6 +294,30 @@ export async function removeUserSubscription(env, user, id, manageKey) {
   if (left.length === subs.length) return false;
   if (left.length) await kv.put(userKey(user), JSON.stringify(left)); else await kv.delete(userKey(user));
   return true;
+}
+// A device that already gets push alerts, by its browser (ua: a hash of the
+// User-Agent, saved when alerts were turned on): the console page skips its
+// own pop-up for the same message there, so nothing shows twice.
+export async function rememberUserDevice(env, user, id, ua) {
+  const kv = env.TELEMETRY;
+  const subs = await readUserSubs(kv, user);
+  const s = subs.find((x) => x.id === id);
+  if (!s || !ua || s.ua === ua) return;
+  s.ua = String(ua).slice(0, 32);
+  await kv.put(userKey(user), JSON.stringify(subs));
+}
+export async function pushOnDevice(env, user, ua, isOwner) {
+  const out = { mention: false, chat: false };
+  if (!ua) return out;
+  try {
+    if ((await readUserSubs(env.TELEMETRY, user)).some((s) => s.ua === ua)) out.mention = true;
+    if (isOwner) for (const s of await readSubs(env.TELEMETRY)) {
+      if (s.ua !== ua) continue;
+      if (wants(s, 'mentions')) out.mention = true;
+      if (wants(s, 'chat') && wants(s, 'chatrooms')) out.chat = true;
+    }
+  } catch (e) { /* no alerts known */ }
+  return out;
 }
 export async function userHasAlerts(env, user) { return (await readUserSubs(env.TELEMETRY, user)).length > 0; }
 // event: { title, body, url, tag? }. Never throws.

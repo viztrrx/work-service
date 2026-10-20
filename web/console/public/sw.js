@@ -41,7 +41,8 @@ self.addEventListener('push', (event) => {
     badge: '/console/icon-192.png',
     timestamp: m.ts || Date.now(),
     silent: m.silent === true,
-    renotify: false,
+    // A newer message for the same chat replaces the old one and still alerts.
+    renotify: !!m.tag,
     data: { url: typeof m.url === 'string' && m.url.startsWith('/console/') ? m.url : '/console/' }
   }));
 });

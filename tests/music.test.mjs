@@ -230,3 +230,62 @@ test('my music: anyone signed in uploads their own songs; saved to their account
     assert.equal((await t.jsonOf(await t.call('/music/mine?user=kj', { headers: { 'X-GPA-Session': kj } }))).tracks.length, 0);
   } finally { t.restore(); }
 });
+
+test('my music: rename a song (title, artist, file name); downloads use the file name', async () => {
+  const t = setup();
+  try {
+    const v = (u) => (u + '0'.repeat(64)).slice(0, 64).replace(/[^0-9a-f]/g, 'a');
+    const login = async (u) => {
+      await t.call('/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: u, verifier: v(u) }) });
+      return (await t.jsonOf(await t.call('/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: u, verifier: v(u) }) }))).token;
+    };
+    const kj = await login('kj'), sam = await login('sam');
+    const fd = new FormData();
+    fd.append('file', new File([MP3], 'Grupo Frontera, Fuerza Regida - COQUETA (Letra Oficial).mp3', { type: 'audio/mpeg' }));
+    const enc = new Response(fd);
+    const body = await enc.arrayBuffer();
+    const up = await t.jsonOf(await t.call('/music/mine/upload?user=kj', { method: 'POST', headers: { 'Content-Type': enc.headers.get('Content-Type'), 'Content-Length': String(body.byteLength), 'X-GPA-Session': kj }, body }));
+    assert.equal(up.track.file, 'Grupo Frontera, Fuerza Regida - COQUETA (Letra Oficial).mp3');
+    assert.equal(up.track.artist, 'Grupo Frontera, Fuerza Regida');
+    const edit = (tok, user, fields) => t.call('/music/mine/edit?user=' + user, { method: 'POST', headers: { 'X-GPA-Session': tok, 'Content-Type': 'application/json' }, body: JSON.stringify({ id: up.track.id, ...fields }) });
+    const r = await t.jsonOf(await edit(kj, 'kj', { title: 'Coqueta', artist: 'Grupo Frontera & Fuerza Regida', file: 'coqueta/final:.wav' }));
+    assert.equal(r.ok, true);
+    assert.equal(r.track.title, 'Coqueta');
+    assert.equal(r.track.artist, 'Grupo Frontera & Fuerza Regida');
+    assert.equal(r.track.file, 'coqueta final.mp3', 'no slashes; the extension matches the audio');
+    const mine = await t.jsonOf(await t.call('/music/mine?user=kj', { headers: { 'X-GPA-Session': kj } }));
+    assert.equal(mine.tracks[0].title, 'Coqueta');
+    assert.equal((await t.jsonOf(await edit(kj, 'kj', { title: '  ' }))).ok, false, 'a song needs a name');
+    assert.equal((await edit(sam, 'sam', { title: 'mine now' })).status, 404, 'not someone else’s');
+    assert.equal((await edit(null, 'kj', { title: 'x' })).status, 401, 'signed in only');
+    // Download with the name.
+    const dl = await t.call('/music/file/' + up.track.id + '?user=sam&dl=' + encodeURIComponent('coqueta final.mp3'));
+    assert.equal(dl.status, 200);
+    assert.match(dl.headers.get('content-disposition'), /attachment; filename="coqueta final\.mp3"/);
+    // Shared library: owner and admins only.
+    const lib = await t.jsonOf(await t.upload(owner, MP3, 'Nova - Midnight Drive.mp3'));
+    const le = (h) => t.call('/music/edit', { method: 'POST', headers: { ...h, 'Content-Type': 'application/json' }, body: JSON.stringify({ id: lib.track.id, title: 'Midnight Drive (Remix)' }) });
+    assert.equal((await le({ 'X-GPA-Session': kj })).status, 403);
+    assert.equal((await t.jsonOf(await le(owner))).track.title, 'Midnight Drive (Remix)');
+  } finally { t.restore(); }
+});
+
+test('my music: the owner with Admin connected (admin token + session) can upload', async () => {
+  const t = setup();
+  try {
+    const v = 'b'.repeat(64);
+    await t.call('/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: 'boss', verifier: v }) });
+    const tok = (await t.jsonOf(await t.call('/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user: 'boss', verifier: v }) }))).token;
+    const send = async (headers) => {
+      const fd = new FormData();
+      fd.append('file', new File([MP3], 'A - B.mp3', { type: 'audio/mpeg' }));
+      const enc = new Response(fd);
+      const body = await enc.arrayBuffer();
+      return t.call('/music/mine/upload?user=boss', { method: 'POST', headers: { 'Content-Type': enc.headers.get('Content-Type'), 'Content-Length': String(body.byteLength), ...headers }, body });
+    };
+    assert.equal((await send({ 'X-GPA-Session': tok, ...owner })).status, 200, 'session + admin token');
+    assert.equal((await send({ 'X-GPA-Owner': 'owner-code-1' })).status, 200, 'owner code alone');
+    assert.equal((await send({ 'X-GPA-Owner': 'wrong' })).status, 401);
+    assert.equal((await t.jsonOf(await t.call('/music/mine?user=boss', { headers: { 'X-GPA-Session': tok, ...owner } }))).tracks.length, 2);
+  } finally { t.restore(); }
+});

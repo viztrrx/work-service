@@ -835,7 +835,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     { at: '2026-10-20T15:00:00-04:00', commit: '', title: 'Messages, @everyone and stats', parts: {
       chat: ['feature', 'New “Messages” under Chat: direct messages and group chats (add people, rename, leave) with unread badges; @everyone in any chat highlights and alerts everyone in it (once every 10 minutes per person)'],
       admin: ['feature', 'Owner and admins: Safety review in Messages lists every conversation and opens it read-only (logged in Audit)'],
-      welcome: ['feature', 'A Saints Service stats card: members, online now, messages today and this week, group chats, top chatters, trivia, streaks and game records'] } }
+      welcome: ['feature', 'A Saints Service stats card: members, online now, messages today and this week, group chats, top chatters, trivia, streaks and game records'] } },
+    { at: '2026-10-20T19:00:00-04:00', commit: '', title: 'Rename songs; pop-ups on Chromebooks', parts: {
+      music: ['feature', 'My music: change a song’s name, artist and file name (✎), and download it under that name (⬇); after uploading one song its rename form opens. Fixed: the owner’s uploads said “Sign in to keep your own music” while Admin was connected'],
+      chat: ['feature', 'Pop-up notifications on Chrome and Chromebooks for messages, mentions and @everyone (or every chat message), wherever Saints Service is open, shown once even with several tabs; turned on from the bell strip or Settings → Account'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -2131,7 +2134,14 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpa-tracks-wrap:empty { display: none; }
       .gpa-tracks-head { font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gpa-sub); margin: 14px 2px 6px; }
       .gpa-tracks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-      .gpa-track { display: flex; align-items: center; gap: 4px; border-radius: var(--gps-r2); }
+      .gpa-track { display: flex; align-items: center; gap: 4px; border-radius: var(--gps-r2); flex-wrap: wrap; }
+      .gpa-track-edit { flex: 1 0 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 8px; padding: 10px; margin: 2px 0 6px; border: 1px solid var(--gpa-border); border-radius: var(--gps-r2); background: var(--gpa-field); }
+      .gpa-track-edit label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--gpa-sub); }
+      .gpa-track-edit .gpa-input { font-size: 16px; }
+      .gpa-track-edit .row { grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .gpa-track-edit .note { font-size: 12px; color: var(--gpa-sub); }
+      .gpa-track-edit .err { font-size: 12px; color: var(--gpa-danger, #e5453a); }
+      a.gpa-track-dl { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
       .gpa-track-main {
         flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: var(--gps-r2);
         border: 1px solid transparent; background: transparent; color: var(--gpa-text); font: inherit; text-align: left; cursor: pointer;
@@ -3645,6 +3655,11 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             <ul id="gpa-dm-list" class="gpa-dm-list" aria-label="Conversations"></ul>
             <p class="gpa-sub gpa-dm-safety">🛡 To keep everyone safe, the owner and admins can read messages.</p>
           </div>
+          <div id="gpa-dn-chip" class="gpa-dn-chip" role="region" aria-label="Pop-up notifications" hidden>
+            <span class="t">🔔 Get a pop-up on this computer when someone messages or mentions you.</span>
+            <button id="gpa-dn-chip-on" class="gpa-btn primary" type="button">Turn on</button>
+            <button id="gpa-dn-chip-x" class="gpa-btn gpx-btn-ghost" type="button" aria-label="Not now" title="Not now">✕</button>
+          </div>
           <div id="gpa-chat-note" class="gpa-sub gpx-note"></div>
           <div id="gpa-chat-people" class="gpa-chat-people" hidden></div>
           <div id="gpa-chat-quiet" class="gpa-chat-quiet" role="status" hidden></div>
@@ -3731,7 +3746,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
               <button id="gpa-mine-add" class="gpa-btn" type="button">${gpxLbl('upload', 'Upload songs')}</button>
               <input type="file" id="gpa-mine-file" accept="audio/*,.mp3,.m4a,.aac,.ogg,.wav,.flac,.webm" multiple hidden />
             </div>
-            <p class="gpa-sub">Upload songs from your computer. They're saved to your account, so they're here on any device when you sign in. Play one and tap 💬 to share it in chat; anyone there can stream it.</p>
+            <p class="gpa-sub">Upload songs from your computer. They're saved to your account, so they're here on any device when you sign in. Play one and tap 💬 to share it in chat; anyone there can stream it. Tap ✎ on a song to change its name, artist or file name, and ⬇ to download it.</p>
             <details id="gpa-mp3" class="gpx-details gpa-mp3" hidden>
               <summary class="gpa-mp3-sum">${GPS_ICONS.music}<span>YouTube to MP3</span><span class="gpa-mp3-tag">Owner</span></summary>
               <div class="gpa-mp3-body">
@@ -4692,12 +4707,27 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
                   <div><div class="gps-label">Chat effects</div><p class="gps-hint">Confetti and balloons when someone says “congrats”, “happy birthday” or “gg”.</p></div>
                   <button class="gps-switch primary" id="gpa-fx-switch" type="button" aria-pressed="true" aria-label="Chat effects">Chat effects</button>
                 </div>
+                <div class="gps-item gpa-push" id="gpa-desk-notify" data-k="pop-up notifications chrome chromebook desktop computer messages dm chat mentions everyone">
+                  <div class="gpa-push-head">
+                    <div><div class="gps-label">Pop-up notifications</div><p class="gps-hint" id="gpa-dn-hint">A notification on this computer (Chrome, Chromebook) when someone messages you, mentions you or uses @everyone, while Saints Service is open in a tab.</p></div>
+                    <button id="gpa-dn-toggle" class="gps-btn primary" type="button">Turn on</button>
+                  </div>
+                  <div class="gps-row gpa-dn-opts" id="gpa-dn-opts" hidden>
+                    <select id="gpa-dn-level" class="gpa-input" aria-label="What to get pop-ups for">
+                      <option value="dm">Messages, mentions and @everyone</option>
+                      <option value="all">Those, plus every chat message</option>
+                    </select>
+                    <button id="gpa-dn-test" class="gps-btn" type="button">Send a test</button>
+                  </div>
+                  <p class="gps-hint" id="gpa-dn-msg" role="status" aria-live="polite"></p>
+                </div>
                 <div class="gps-item gpa-push" id="gpa-mention-push" data-k="mention alerts notifications push phone iphone chat @">
                   <div class="gpa-push-head">
-                    <div><div class="gps-label">Mention alerts</div><p class="gps-hint" id="gpa-mpush-hint">A notification on this device when someone @mentions you in #public or staff chat.</p></div>
+                    <div><div class="gps-label">Mention alerts</div><p class="gps-hint" id="gpa-mpush-hint">A notification on this device when someone messages you, @mentions you or uses @everyone, even when Saints Service isn’t open.</p></div>
                     <button id="gpa-mpush-toggle" class="gps-btn" type="button">Turn on</button>
                   </div>
                   <div class="gps-row" id="gpa-mpush-actions" hidden><button id="gpa-mpush-test" class="gps-btn" type="button">Send a test</button></div>
+                  <div class="gps-row" id="gpa-mpush-open" hidden><button id="gpa-mpush-openapp" class="gps-btn" type="button">Open the Saints Service app</button></div>
                   <p class="gps-hint" id="gpa-mpush-msg" role="status" aria-live="polite"></p>
                 </div>
                 <div class="gps-item gps-item-row" data-k="account server session sign in connected memory devices">
@@ -5941,6 +5971,12 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpa-chat-pins button.p-btn:hover { background: color-mix(in srgb, var(--gpa-text) 10%, transparent); color: var(--gpa-text); }
       .gpa-chat-quiet { padding: 7px 10px; font-size: 12px; border-radius: 10px; border: 1px solid var(--gpa-border); background: var(--gpa-panel); color: var(--gpa-text); }
       .gpa-chat-quiet[hidden] { display: none; }
+      .gpa-dn-chip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--gpa-border); border-radius: 12px; background: color-mix(in srgb, var(--gpa-accent) 10%, var(--gpa-panel)); font-size: 13px; }
+      .gpa-dn-chip[hidden] { display: none; }
+      .gpa-dn-chip .t { flex: 1 1 200px; }
+      .gpa-dn-opts { gap: 8px; flex-wrap: wrap; align-items: center; }
+      .gpa-dn-opts[hidden] { display: none; }
+      .gpa-dn-opts select { flex: 1 1 200px; width: auto; }
       /* Messages (direct messages and group chats) share the Chat pane. */
       .gpa-new-pill { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 9px; font-weight: 800; letter-spacing: .06em; color: #fff; background: linear-gradient(135deg, #e5453a, #f59e0b); line-height: 14px; pointer-events: none; }
       .gpa-new-pill[hidden] { display: none; }
@@ -5983,7 +6019,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpa-pane.dm-listing #gpa-chat-log, .gpa-pane.dm-listing .gpx-composer-dock, .gpa-pane.dm-listing #gpa-chat-people,
       .gpa-pane.dm-listing #gpa-chat-pins, .gpa-pane.dm-listing #gpa-chat-typing, .gpa-pane.dm-listing #gpa-chat-quiet, .gpa-pane.dm-listing .gpx-empty-chat,
       .gpa-pane.dm-listing #gpa-chat-replying, .gpa-pane.dm-listing #gpa-chat-editing, .gpa-pane.dm-listing #gpa-chat-rec, .gpa-pane.dm-listing .gpa-chat-filerow { display: none !important; }
-      .gpa-pane.dm-listing .gpa-dm { flex: 1; }
+      .gpa-pane.dm-listing .gpa-dm { flex: 1 0 auto; }
+      .gpa-dm-form, .gpa-dn-chip { flex: none; }
       .gpa-pane.is-dm:not(.dm-listing) .gpa-dm-list, .gpa-pane.is-dm:not(.dm-listing) .gpa-dm-actions, .gpa-pane.is-dm:not(.dm-listing) .gpa-dm-safety { display: none; }
       .gpa-pane.dm-monitor .gpx-composer-dock, .gpa-pane.dm-monitor .gpa-chat-filerow { display: none !important; }
       .gpa-chat-body .at-all, .gpa-chat-msg .at-all { font-weight: 700; }
@@ -7228,9 +7265,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         if (typeof chatNavPicked === 'function') chatNavPicked(item.dataset.tab);
         if (typeof startChatPolling === 'function') startChatPolling();
         if (typeof clearChatUnread === 'function') clearChatUnread();
-        if (window.Notification && Notification.permission === 'default') {
-          try { Notification.requestPermission(); } catch (e) { /* optional */ }
-        }
+        // Pop-up notifications are turned on with a button (Settings →
+        // Account, or the bell strip in Chat), never by a surprise prompt.
+        if (typeof renderDeskChip === 'function') renderDeskChip();
       }
       if (item.dataset.tab === 'saved') renderSavedInsights();
       if (item.dataset.tab === 'study') renderDeck();
@@ -10874,6 +10911,27 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       play.appendChild(art); play.appendChild(text); play.appendChild(badge); play.appendChild(icon);
       play.addEventListener('click', () => playTrack(tracks, i));
       li.appendChild(play);
+      // Download (saved under the song's file name) and Edit: name, artist, file name.
+      if (opts.downloadable && t.stream) {
+        const dl = document.createElement('a');
+        dl.className = 'gpa-btn gpx-icon-btn gpx-btn-ghost gpa-track-dl';
+        dl.innerHTML = GPS_ICONS.download;
+        dl.href = musicBase() + withUser(t.stream + '?dl=' + encodeURIComponent(t.file || (t.title + '.mp3')));
+        dl.rel = 'noopener';
+        dl.title = 'Download “' + (t.file || t.title) + '”';
+        dl.setAttribute('aria-label', 'Download ' + t.title);
+        li.appendChild(dl);
+      }
+      if (opts.editable) {
+        const ed = document.createElement('button');
+        ed.type = 'button';
+        ed.className = 'gpa-btn gpx-icon-btn gpx-btn-ghost gpa-track-editbtn';
+        ed.innerHTML = GPS_ICONS.pen;
+        ed.title = 'Rename: song name, artist, file name';
+        ed.setAttribute('aria-label', 'Edit the name, artist and file name of ' + t.title);
+        ed.addEventListener('click', () => openTrackEdit(li, t, opts.onEdit));
+        li.appendChild(ed);
+      }
       if (opts.deletable) {
         const del = document.createElement('button');
         del.type = 'button';
@@ -10889,6 +10947,68 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     });
     container.appendChild(list);
     markPlaying();
+  }
+
+  // The rename form under a song: song name, artist, file name. onEdit
+  // saves (and throws with a message if the Worker says no).
+  function openTrackEdit(li, t, onEdit, note) {
+    const open = li.querySelector('.gpa-track-edit');
+    if (open) { open.remove(); return; }
+    const form = document.createElement('form');
+    form.className = 'gpa-track-edit';
+    form.noValidate = true;
+    const field = (label, value, max, name) => {
+      const l = document.createElement('label');
+      l.textContent = label;
+      const i = document.createElement('input');
+      i.className = 'gpa-input';
+      i.name = name;
+      i.value = value || '';
+      i.maxLength = max;
+      i.autocomplete = 'off';
+      i.spellcheck = false;
+      l.appendChild(i);
+      form.appendChild(l);
+      return i;
+    };
+    const title = field('Song name', t.title, 140, 'title');
+    const artist = field('Artist', t.artist === 'Unknown artist' ? '' : t.artist, 80, 'artist');
+    const file = field('File name', t.file || '', 120, 'file');
+    const row = document.createElement('div');
+    row.className = 'row';
+    const save = document.createElement('button');
+    save.type = 'submit'; save.className = 'gpa-btn primary'; save.textContent = 'Save';
+    const cancel = document.createElement('button');
+    cancel.type = 'button'; cancel.className = 'gpa-btn'; cancel.textContent = 'Cancel';
+    const msg = document.createElement('span');
+    msg.className = note ? 'note' : 'err';
+    msg.setAttribute('role', 'status');
+    msg.textContent = note || '';
+    row.appendChild(save); row.appendChild(cancel); row.appendChild(msg);
+    form.appendChild(row);
+    cancel.addEventListener('click', () => form.remove());
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!title.value.trim()) { msg.className = 'err'; msg.textContent = 'The song needs a name.'; title.focus(); return; }
+      if (!file.value.trim()) { msg.className = 'err'; msg.textContent = 'The file needs a name.'; file.focus(); return; }
+      save.disabled = true;
+      msg.className = 'note'; msg.textContent = 'Saving…';
+      try { await onEdit(t, { title: title.value, artist: artist.value, file: file.value }); }
+      catch (err) { msg.className = 'err'; msg.textContent = err.message || 'Couldn’t save that.'; save.disabled = false; }
+    });
+    li.appendChild(form);
+    title.focus({ preventScroll: true });
+    try { form.scrollIntoView({ block: 'nearest' }); } catch (e) { /* ignore */ }
+  }
+  async function saveTrackEdit(path, t, fields) {
+    const r = await fetch(musicBase() + (path === '/music/edit' ? path : withUser(path)), { method: 'POST', headers: { 'Content-Type': 'application/json', ...musicStaffHeaders() }, body: JSON.stringify({ id: t.id, ...fields }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) throw new Error(d.error || 'Couldn’t save that.');
+    // The bar at the top follows if this song is playing.
+    np.queue.forEach((q) => { if (q && q.id === t.id) Object.assign(q, { title: d.track.title, artist: d.track.artist, file: d.track.file }); });
+    const playing = np.queue[np.index];
+    if (playing && playing.id === t.id) { np.title.textContent = d.track.title; np.artist.textContent = d.track.artist; }
+    return d.track;
   }
 
   // ---- Search ----
@@ -10955,7 +11075,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         return;
       }
       sharedStatus.textContent = d.tracks.length + (d.tracks.length === 1 ? ' song' : ' songs');
-      renderTracks(sharedList, d.tracks, { deletable: sharedCanUpload, onDelete: async (t) => {
+      renderTracks(sharedList, d.tracks, { deletable: sharedCanUpload, editable: sharedCanUpload, downloadable: true,
+        onEdit: async (t, fields) => { await saveTrackEdit('/music/edit', t, fields); sharedStatus.textContent = 'Saved.'; loadShared(); },
+        onDelete: async (t) => {
         if (!confirm('Remove “' + t.title + '” from the shared library for everyone?')) return;
         const r = await fetch(musicBase() + '/music/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', ...musicStaffHeaders() }, body: JSON.stringify({ id: t.id }) });
         if (r.ok) loadShared(); else sharedStatus.textContent = 'Couldn’t remove that song.';
@@ -11027,7 +11149,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         return;
       }
       mineStatus.textContent = '';
-      renderTracks(mineList, d.tracks, { deletable: true, deleteWhere: 'your music', onDelete: async (t) => {
+      renderTracks(mineList, d.tracks, { deletable: true, editable: true, downloadable: true, deleteWhere: 'your music',
+        onEdit: async (t, fields) => { await saveTrackEdit('/music/mine/edit', t, fields); mineStatus.textContent = 'Saved “' + fields.title.trim() + '”.'; await loadMine(); },
+        onDelete: async (t) => {
         if (!confirm('Delete “' + t.title + '” from your music? Anyone it was shared with won’t be able to play it anymore.')) return;
         try {
           const r = await fetch(musicBase() + withUser('/music/mine/delete'), { method: 'POST', headers: { 'Content-Type': 'application/json', ...musicStaffHeaders() }, body: JSON.stringify({ id: t.id }) });
@@ -11044,7 +11168,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   mineFile.addEventListener('change', async () => {
     const files = [...mineFile.files];
     mineFile.value = '';
-    let ok = 0, failed = '';
+    let ok = 0, failed = '', lastUploaded = null;
     mineAdd.disabled = true;
     for (let i = 0; i < files.length; i++) {
       mineStatus.textContent = `Uploading ${i + 1} of ${files.length}: ${files[i].name}…`;
@@ -11055,13 +11179,19 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       try {
         const r = await fetch(musicBase() + withUser('/music/mine/upload'), { method: 'POST', headers: musicStaffHeaders(), body: fd });
         const d = await r.json().catch(() => ({}));
-        if (r.ok && d.ok) ok++;
+        if (r.ok && d.ok) { ok++; lastUploaded = d.track; }
         else { failed = files[i].name + ': ' + (d.error || 'upload failed'); if (r.status === 409 || r.status === 429) break; }
       } catch (e) { failed = files[i].name + ': upload failed'; }
     }
     mineAdd.disabled = false;
     await loadMine();
     mineStatus.textContent = [ok ? `Added ${ok} ${ok === 1 ? 'song' : 'songs'}.` : '', failed].filter(Boolean).join(' ') || mineStatus.textContent;
+    // One song: open its rename form, filled in from the file name.
+    if (ok === 1 && files.length === 1 && lastUploaded) {
+      const li = mineList.querySelector(`.gpa-track[data-key="mine:${lastUploaded.id}"]`);
+      const edit = li && li.querySelector('.gpa-track-editbtn');
+      if (edit) { edit.click(); const n = li.querySelector('.gpa-track-edit .row span'); if (n) { n.className = 'note'; n.textContent = 'Check the song name, artist and file name, then Save.'; } }
+    }
   });
   panel.querySelectorAll('.gpx-src[data-src="mine"]').forEach((b) => b.addEventListener('click', loadMine));
 
@@ -13302,12 +13432,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     return new RegExp('(^|\\s)@' + escaped + '(?![\\w-])', 'i').test(text);
   }
   function notifyMention(m) {
-    try { showToast(`${m.u} mentioned you: ${String(m.t || '').slice(0, 80)}`); } catch (e) { /* toasts are best-effort */ }
-    try {
-      if (!window.Notification || Notification.permission !== 'granted') return;
-      const n = new Notification(`${m.u} mentioned you in #${chatRoom}`, { body: String(m.t || '').slice(0, 140) });
-      n.onclick = () => { try { window.focus(); } catch (e) {} };
-    } catch (e) { /* optional */ }
+    try { showToast(`${m.u} ${m.ev ? 'to @everyone' : 'mentioned you'}: ${String(m.t || '').slice(0, 80)}`); } catch (e) { /* toasts are best-effort */ }
   }
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && chatIsOpenAndVisible()) clearChatUnread();
@@ -13336,6 +13461,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   let dmReview = false;   // owner/admin: listing every conversation
   let dmCanReview = false;
   let dmNavItem = null;
+  // Pop-up notifications (see "Pop-up notifications" below).
+  const deskN = { queue: [], timer: 0, dmSeen: null, staffTs: 0, pubTs: 0 };
 
   // A deterministic color per username (same idea as Discord/Slack's
   // per-user avatar tint) so people are visually distinguishable at a
@@ -13527,6 +13654,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           // A conversation's unread count is on the Messages badge instead.
           if (!isConvId(chatRoom)) chatUnread++;
           if (currentUser && (mentionsUser(m.t, currentUser) || m.ev)) notifyMention(m);
+          if (!m.sys && !m.unsent) deskFromChat(m, chatRoom);
         }
       });
       const empty = chatLog.querySelector('.gpa-chat-empty');
@@ -14219,12 +14347,19 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       toggle.classList.toggle('primary', !dev);
       actions.hidden = !dev;
       toggle.disabled = !supported || !APP_MODE || !sessionToken();
+      // On a website (not the app): a button that opens the app, where alerts are turned on.
+      card.querySelector('#gpa-mpush-open').hidden = APP_MODE || !supported || isIOS;
       hint.textContent = !supported ? (isIOS ? 'Add Saints Service to your Home Screen (Share → Add to Home Screen), open it from there, then turn this on.' : 'This browser can’t receive notifications.')
-        : !APP_MODE ? 'Open the Saints Service app (/console/ on the Worker) to turn on mention alerts for this device.'
+        : !APP_MODE ? 'Alerts even when no Saints Service tab is open (Chrome must be running). They’re turned on in the Saints Service app: open it, sign in, then turn this on there.'
           : !sessionToken() ? 'Sign in with your PIN to turn on mention alerts.'
-            : dev ? 'This device gets a notification when someone @mentions you in #public or staff chat.'
-              : 'A notification on this device when someone @mentions you in #public or staff chat.';
+            : dev ? 'This device gets a notification when someone messages you, @mentions you or uses @everyone, even when Saints Service isn’t open.'
+              : 'A notification on this device when someone messages you, @mentions you or uses @everyone, even when Saints Service isn’t open.';
+      // The Worker learns which browser this is, so pop-ups here don't repeat these alerts.
+      if (dev && APP_MODE && !render.told) { render.told = true; post('/push/me/status', { id: dev.id, key: dev.key }).catch(() => null); }
     }
+    card.querySelector('#gpa-mpush-openapp').addEventListener('click', () => {
+      try { window.open(telemetryEndpoint() + '/console/#tab=theme&sec=account&focus=mpush', '_blank', 'noopener'); } catch (e) { /* popup blocked */ }
+    });
     toggle.addEventListener('click', async () => {
       const dev = load();
       say('');
@@ -14237,7 +14372,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         return;
       }
       const perm = await Notification.requestPermission();
-      if (perm !== 'granted') { say('Notifications are blocked. Turn them on in your phone’s Settings → Notifications → Saints Service.'); return; }
+      if (perm !== 'granted') { say(isIOS ? 'Notifications are blocked. Turn them on in your phone’s Settings → Notifications → Saints Service.' : 'Notifications are blocked for this app. In Chrome, click the icon left of the address bar → Notifications → Allow, then try again.'); return; }
       toggle.disabled = true;
       say('Turning on…');
       try {
@@ -14245,7 +14380,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         const reg = await navigator.serviceWorker.ready;
         let sub = await reg.pushManager.getSubscription();
         if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(info.publicKey) });
-        const r = await post('/push/me/subscribe', { subscription: sub.toJSON(), name: isIOS ? 'iPhone' : 'Browser' });
+        const r = await post('/push/me/subscribe', { subscription: sub.toJSON(), name: isIOS ? 'iPhone' : /CrOS/.test(navigator.userAgent) ? 'Chromebook' : 'Browser' });
         if (!r.ok) { say(r.data.error || 'Couldn’t turn on mention alerts.'); return; }
         save({ u: currentUser, id: r.data.subscription.id, key: r.data.subscription.manageKey });
         say('Mention alerts are on. Send a test to check.');
@@ -14560,6 +14695,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       if (!d.ok) { if (d.error === 'no such room') { staffAllowed = false; refreshStaffNav(); } return; }
       staffUnread = (d.messages || []).filter((m) => m.u !== currentUser).length;
       updateStaffBadge();
+      // Pop-ups for staff messages that came in since the last look.
+      const newest = (d.messages || []).reduce((a, m) => Math.max(a, m.ts || 0), 0);
+      if (deskN.staffTs) (d.messages || []).filter((m) => m.ts > deskN.staffTs && m.u !== currentUser && !m.sys && !m.unsent).forEach((m) => deskFromChat(m, 'staff'));
+      deskN.staffTs = Math.max(deskN.staffTs || Date.now(), newest);
     } catch (e) { /* offline: try again next time */ }
   }
   function refreshStaffNav() {
@@ -14896,6 +15035,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         const r = await dmFetch('/dm/list');
         if (!r.ok) { if (dmMode && !dmConv) chatNote.textContent = r.error || 'Messages are unavailable.'; return; }
         dmList = r.convs || [];
+        deskFromDmList(dmList);
         if (dmCanReview !== !!r.monitor) { dmCanReview = !!r.monitor; renderDmReviewBtn(); }
         if (dmMode && !dmConv) chatNote.textContent = '';
       }
@@ -15129,11 +15269,225 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   dmReviewBtn.addEventListener('click', () => { dmReview = !dmReview; dmList = []; renderDmReviewBtn(); showDmListView(); });
   setTimeout(() => {
     try {
-      onSessionChange(() => { dmReview = false; dmList = []; dmConv = dmConv && dmMode ? dmConv : null; loadDmList(); });
+      onSessionChange(() => { dmReview = false; dmList = []; deskN.dmSeen = null; deskN.staffTs = 0; dmConv = dmConv && dmMode ? dmConv : null; loadDmList(); renderDeskChip(); });
     } catch (e) { /* not ready */ }
     loadDmList();
     scheduleDmList();
   }, 0);
+
+  // ---- Pop-up notifications (Chrome, Chromebooks) ---------------------------
+  // A desktop notification (on a Chromebook it shows in the system tray) when
+  // a direct message, group message, mention or @everyone arrives, or any
+  // chat message if the person picked that, while Saints Service is open in
+  // a tab: on the website it was opened on or in the app, even in the
+  // background. Nothing pops up for what's already on screen. Turned on with
+  // a button (Settings → Account → Pop-up notifications, or the bell strip in
+  // Chat and Messages), never by a surprise prompt; Chrome asks once per
+  // website. Several tabs (or websites) with Saints Service open show each
+  // message once: the Worker hands each message out once per browser
+  // (/notify/claim), and skips messages this browser already gets as push
+  // alerts from the app.
+  const DESK_KEY = 'gpa_desk_notify';            // 'dm' (default) | 'all' | 'off'
+  const DESK_CHIP_KEY = 'gpa_desk_chip_dismissed';
+  function deskLevel() { try { const v = localStorage.getItem(DESK_KEY); return v === 'off' || v === 'all' ? v : 'dm'; } catch (e) { return 'dm'; } }
+  function setDeskLevel(v) { try { localStorage.setItem(DESK_KEY, v); } catch (e) { /* storage blocked */ } }
+  // Phones can't show these from a web page (iPhone and Android need the
+  // app's push alerts: Mention alerts), so pop-ups are for computers.
+  const deskPhone = /iP(hone|od|ad)|Android/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  function deskSupported() { return !deskPhone && typeof window.Notification === 'function' && window.isSecureContext !== false; }
+  // Chrome's answer: what it said when asked, or its live permission status
+  // (Notification.permission can stay stale on a page that was open while
+  // the person changed it in Site settings).
+  function deskPermission() {
+    if (!deskSupported()) return 'unsupported';
+    if (deskN.perm) return deskN.perm;
+    try { return Notification.permission; } catch (e) { return 'unsupported'; }
+  }
+  function deskReady() { return deskPermission() === 'granted' && deskLevel() !== 'off'; }
+  const deskIcon = () => { try { return telemetryEndpoint() + '/console/icon-192.png'; } catch (e) { return ''; } };
+  const isMeName = (u) => { try { return !!currentUser && String(u || '').toLowerCase() === String(currentUser).toLowerCase(); } catch (e) { return false; } };
+  function deskRoomLabel(room) {
+    if (room === 'public') return '#public';
+    if (room === 'staff') return 'staff chat';
+    const j = joinedRooms()[room];
+    return '#' + ((j && j.name) || room);
+  }
+  // One chat or conversation message that came in while it wasn't on screen.
+  function deskFromChat(m, room) {
+    if (!m || isMeName(m.u)) return;
+    const conv = isConvId(room);
+    const mention = !!currentUser && mentionsUser(m.t, currentUser);
+    const body = String(m.t || '') || (m.media ? (/^audio\//.test(m.media.type || '') ? 'Sent a voice message' : 'Sent a photo') : m.poll ? 'Sent a poll' : m.track ? 'Shared a song' : '');
+    const hit = conv ? dmList.find((c) => c.id === room) : null;
+    const where = conv ? (hit && hit.kind === 'group' ? ' in ' + hit.title : '') : ' in ' + deskRoomLabel(room);
+    deskNotify({
+      key: 'msg:' + room + ':' + m.ts,
+      kind: conv ? 'dm' : m.ev ? 'everyone' : mention ? 'mention' : 'chat',
+      title: conv ? m.u + where : m.ev ? m.u + ' → @everyone' + where : mention ? m.u + ' mentioned you' + where : m.u + where,
+      body,
+      open: () => openTabFromUrl(conv ? '#tab=dms&room=' + room : room === 'staff' ? '#tab=staffchat' : '#tab=chat&room=' + room)
+    });
+  }
+  // New messages in your conversations (the Messages list is checked every
+  // 20 seconds, whichever tab you're on).
+  function deskFromDmList(list) {
+    const prev = deskN.dmSeen;
+    const next = {};
+    const listOnScreen = dmMode && !dmConv && chatPaneShown();
+    for (const c of list) {
+      const ts = c.last ? Number(c.last.ts) || 0 : 0;
+      next[c.id] = ts;
+      if (!prev || !c.last || ts <= (prev[c.id] || 0) || !(c.n > 0) || isMeName(c.last.u)) continue;
+      if (listOnScreen || (dmMode && dmConv && dmConv.id === c.id && chatIsOpenAndVisible())) continue;
+      deskNotify({ key: 'msg:' + c.id + ':' + ts, kind: 'dm', title: c.kind === 'group' ? c.last.u + ' in ' + c.title : c.last.u, body: c.last.t || 'New message',
+        open: () => openTabFromUrl('#tab=dms&room=' + c.id) });
+    }
+    deskN.dmSeen = next;
+  }
+  function chatPaneShown() {
+    if (isMin || (typeof document !== 'undefined' && document.hidden)) return false;
+    const pane = panel.querySelector('.gpa-pane[data-pane="chat"]');
+    return !!pane && pane.classList.contains('active');
+  }
+  function deskNotify(item) {
+    if (!deskReady()) return;
+    if (item.kind === 'chat' && deskLevel() !== 'all') return;
+    if (deskN.queue.some((q) => q.key === item.key)) return;
+    deskN.queue.push(item);
+    clearTimeout(deskN.timer);
+    deskN.timer = setTimeout(deskFlush, 400);
+  }
+  async function deskFlush() {
+    const items = deskN.queue.splice(0, 20);
+    if (!items.length) return;
+    let fresh = items.map((i) => i.key);
+    let push = {};
+    if (sessionToken() && telemetryOn()) {
+      try {
+        const r = await fetch(telemetryEndpoint() + '/notify/claim', { method: 'POST', headers: { 'Content-Type': 'text/plain', 'X-GPA-Session': sessionToken() }, body: JSON.stringify({ keys: fresh }) });
+        const d = await r.json().catch(() => ({}));
+        if (d && d.ok) { fresh = Array.isArray(d.fresh) ? d.fresh : []; push = d.push || {}; }
+      } catch (e) { /* offline: show them anyway */ }
+    }
+    // Messages and mentions this browser already gets as push alerts (the
+    // app's Mention alerts) aren't shown twice.
+    const show = items.filter((i) => fresh.includes(i.key) && !(push.mention && (i.kind === 'dm' || i.kind === 'mention')) && !(push.chat && i.kind === 'chat'));
+    show.slice(0, 3).forEach(deskShow);
+    if (show.length > 3) deskShow({ key: 'more:' + show[3].key, title: 'Saints Service', body: (show.length - 3) + ' more new message' + (show.length - 3 === 1 ? '' : 's'), open: show[show.length - 1].open });
+  }
+  function deskShow(item) {
+    try {
+      const n = new Notification(item.title, { body: String(item.body || '').slice(0, 180), tag: item.key, icon: deskIcon() || undefined });
+      n.onclick = (e) => {
+        try { e.preventDefault(); } catch (err) { /* ignore */ }
+        try { window.focus(); } catch (err) { /* ignore */ }
+        try { n.close(); } catch (err) { /* ignore */ }
+        try { if (isMin) setMinimized(false); } catch (err) { /* ignore */ }
+        try { if (item.open) item.open(); } catch (err) { /* ignore */ }
+      };
+      deskN.shown = (deskN.shown || 0) + 1;
+      return true;
+    } catch (e) { return false; }   // e.g. Chrome on Android (needs the app)
+  }
+  // #public is also watched (every 20 s) while the chat on screen is another
+  // room or a conversation, so a mention or @everyone there still pops up.
+  async function deskWatchPublic() {
+    try {
+      // While #public is the room on screen, its own poll covers it; carry on from where it got to.
+      if (chatRoom === 'public') { deskN.pubTs = Math.max(deskN.pubTs || 0, chatSince || 0); return; }
+      if (!deskReady() || !telemetryOn() || !currentUser) return;
+      const q = new URLSearchParams({ room: 'public', since: String(deskN.pubTs || 0), user: currentUser });
+      if (sessionToken()) q.set('s', sessionToken());
+      const r = await fetch(telemetryEndpoint() + '/chat/poll?' + q.toString(), { cache: 'no-store', headers: { ...ownerProofHeader() } });
+      const d = await r.json().catch(() => ({}));
+      if (!d.ok) return;
+      const msgs = (d.messages || []).filter((m) => m && m.ts > (deskN.pubTs || 0));
+      const newest = msgs.reduce((a, m) => Math.max(a, m.ts), deskN.pubTs || 0);
+      if (deskN.pubTs) msgs.forEach((m) => { if (!m.sys && !m.unsent) deskFromChat(m, 'public'); });
+      deskN.pubTs = Math.max(newest, deskN.pubTs || (typeof d.now === 'number' ? d.now : Date.now()));
+    } catch (e) { /* offline: try next time */ }
+  }
+  setInterval(deskWatchPublic, 20000);
+
+  // Settings → Account → Pop-up notifications.
+  const dnToggle = panel.querySelector('#gpa-dn-toggle');
+  const dnHint = panel.querySelector('#gpa-dn-hint');
+  const dnMsg = panel.querySelector('#gpa-dn-msg');
+  const dnOpts = panel.querySelector('#gpa-dn-opts');
+  const dnLevel = panel.querySelector('#gpa-dn-level');
+  const dnChip = panel.querySelector('#gpa-dn-chip');
+  const isChromeOS = /CrOS/.test(navigator.userAgent);
+  const blockedHelp = () => 'Pop-ups are blocked for ' + location.hostname + '. In Chrome, click the icon left of the address bar → Site settings → Notifications → Allow, then reload the page.'
+    + (isChromeOS ? ' On a Chromebook also check that Do Not Disturb is off (click the clock).' : '');
+  function renderDeskSettings() {
+    const perm = deskPermission();
+    const on = perm === 'granted' && deskLevel() !== 'off';
+    dnToggle.textContent = on ? 'Turn off' : 'Turn on';
+    dnToggle.classList.toggle('primary', !on);
+    dnToggle.disabled = perm === 'unsupported';
+    dnOpts.hidden = !on;
+    dnLevel.value = deskLevel() === 'all' ? 'all' : 'dm';
+    dnHint.textContent = perm === 'unsupported'
+      ? (deskPhone ? 'For computers (Chrome, Chromebook). On a phone, use Mention alerts below.' : window.isSecureContext === false ? 'This page isn’t secure (http), so it can’t show notifications. Open Saints Service on an https website or in the app.' : 'This browser can’t show notifications here. Use Mention alerts in the Saints Service app.')
+      : perm === 'denied' ? blockedHelp()
+        : on ? 'On for this website' + (APP_MODE ? '' : ' (' + location.hostname + ')') + '. Pop-ups show while Saints Service is open in a tab, even in the background; Chrome may hold them back up to a minute in a tab that’s been in the background a while.'
+          : 'A notification on this computer (Chrome, Chromebook) when someone messages you, mentions you or uses @everyone, while Saints Service is open in a tab.' + (APP_MODE ? '' : ' Chrome asks once for each website you open it on.');
+    renderDeskChip();
+  }
+  function renderDeskChip() {
+    if (!dnChip) return;
+    let dismissed = false;
+    try { dismissed = !!localStorage.getItem(DESK_CHIP_KEY); } catch (e) { /* ignore */ }
+    let signedIn = false;
+    try { signedIn = !!currentUser; } catch (e) { signedIn = false; }
+    dnChip.hidden = !(signedIn && deskPermission() === 'default' && deskLevel() !== 'off' && !dismissed);
+  }
+  async function deskTurnOn(fromChip) {
+    let perm = deskPermission();
+    if (perm === 'unsupported') return false;
+    // Always ask Chrome: it shows its prompt the first time, and answers at
+    // once (no prompt) once the person has allowed or blocked this website.
+    try {
+      perm = await new Promise((resolve) => {
+        const p = Notification.requestPermission(resolve);   // older Chrome: callback
+        if (p && typeof p.then === 'function') p.then(resolve, () => resolve(deskPermission()));
+      });
+    } catch (e) { perm = deskPermission(); }
+    if (perm === 'granted' || perm === 'denied') deskN.perm = perm;
+    if (perm !== 'granted') {
+      const t = perm === 'denied' ? blockedHelp() : 'Chrome didn’t turn on pop-ups. Click Turn on again and choose Allow.';
+      dnMsg.textContent = t;
+      if (fromChip) showToast(t);
+      renderDeskSettings();
+      return false;
+    }
+    if (deskLevel() === 'off') setDeskLevel('dm');
+    deskShow({ key: 'test:' + Date.now(), title: 'Saints Service', body: 'Pop-up notifications are on. You’ll get one when someone messages or mentions you.', open: () => {} });
+    dnMsg.textContent = 'On. A test notification was sent.';
+    renderDeskSettings();
+    return true;
+  }
+  dnToggle.addEventListener('click', async () => {
+    dnMsg.textContent = '';
+    if (deskReady()) { setDeskLevel('off'); dnMsg.textContent = 'Pop-up notifications are off on this website.'; renderDeskSettings(); return; }
+    await deskTurnOn(false);
+  });
+  dnLevel.addEventListener('change', () => { setDeskLevel(dnLevel.value === 'all' ? 'all' : 'dm'); dnMsg.textContent = dnLevel.value === 'all' ? 'You’ll get a pop-up for every chat message too.' : 'Messages, mentions and @everyone only.'; });
+  panel.querySelector('#gpa-dn-test').addEventListener('click', () => {
+    const ok = deskShow({ key: 'test:' + Date.now(), title: 'Saints Service', body: 'This is a test. Pop-ups are working on this computer.', open: () => {} });
+    dnMsg.textContent = ok ? 'Test sent. If nothing showed up, check that Do Not Disturb is off' + (isChromeOS ? ' (click the clock on your Chromebook).' : '.') : blockedHelp();
+  });
+  panel.querySelector('#gpa-dn-chip-on').addEventListener('click', () => deskTurnOn(true).then((ok) => { if (ok) showToast('Pop-up notifications are on.'); renderDeskChip(); }));
+  panel.querySelector('#gpa-dn-chip-x').addEventListener('click', () => { try { localStorage.setItem(DESK_CHIP_KEY, '1'); } catch (e) { /* ignore */ } renderDeskChip(); });
+  // Permission changed in Chrome's site settings while the page is open.
+  try {
+    if (navigator.permissions && navigator.permissions.query) navigator.permissions.query({ name: 'notifications' }).then((st) => {
+      const take = () => { deskN.perm = st.state === 'granted' ? 'granted' : st.state === 'denied' ? 'denied' : 'default'; renderDeskSettings(); };
+      take();
+      st.onchange = take;
+    }).catch(() => {});
+  } catch (e) { /* older browsers */ }
+  setTimeout(() => { try { renderDeskSettings(); } catch (e) { /* not ready */ } }, 0);
 
   // ---- Extended tools -------------------------------------------------------
   // Voice input, read-aloud, text-selection assistant, table extractor, page
@@ -22260,6 +22614,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     if (p.tab === 'chat' && p.room) openChatRoomFromLink(p.room);
     if (p.tab === 'dms' && p.room && typeof openDmFromLink === 'function') openDmFromLink(p.room);
     if (/^[a-z]+$/.test(p.sec || '')) setTimeout(() => { const t = panel.querySelector(`.gps-tab[data-sec="${p.sec}"]`); if (t && !t.hidden) t.click(); }, 300);
+    if (p.focus === 'mpush') whenEl(() => { const c = panel.querySelector('#gpa-mention-push'); return c && c.offsetParent ? c : null; }).then(flashEl);
     if (p.focus === 'push') whenEl(() => { const c = panel.querySelector('#gpa-push-card'); return c && c.offsetParent ? c : null; }).then(flashEl);
   }
   if (APP_MODE) {

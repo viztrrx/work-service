@@ -13,6 +13,44 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **Rename songs; owner upload fix; Chromebook pop-ups** (owner: "rename the
+  music file and change the artist and name… everyone"; owner's upload said
+  "Sign in to keep your own music"; "dm and chat notifications for chrome
+  … chromebook… make no mistakes"). Upload bug: the owner with Admin
+  connected sends `Authorization: Bearer <admin token>`; `resolvePrincipal()`
+  returns the TOKEN principal first, so `effectiveUser()` saw no session →
+  unverified → 401 on /music/mine. Fix: session checking split into
+  `resolveSession()` (own memo `sessionMemo`); `effectiveUser` uses the
+  session even when a token is the principal, and treats the owner token or
+  a valid owner code (X-GPA-Owner) as the verified owner for OWNER's own
+  name. Songs: web/music.js `cleanFileName` (no / \ : * ? " < > |, ext from
+  the audio type), tracks get `file` (default "Artist - Title.ext"),
+  `editMine` / `editLibrary` (`applyEdit`: title required, artist, file),
+  routes POST `/music/mine/edit` (own) and `/music/edit` (staff, audited);
+  `serveLibraryFile` `?dl=<name>` → Content-Disposition attachment. Client:
+  `renderTracks` opts `editable`/`downloadable`/`onEdit`, `openTrackEdit()`
+  form (opens by itself after a single upload), `saveTrackEdit()`.
+  Pop-ups: `deskN` state (next to the Messages state), module "Pop-up
+  notifications (Chrome, Chromebooks)" after Messages: `gpa_desk_notify`
+  dm|all|off (default dm, needs Chrome permission), sources = DM list diff
+  (`deskFromDmList`, 20 s), `chatPoll` messages while not on screen and
+  `staffBackgroundPoll` (`deskFromChat`), plus `deskWatchPublic` (#public
+  every 20 s when another room/conversation is the current one). Keys
+  `msg:<room>:<ts>`; `deskFlush` → POST `/notify/claim` (inbox DO action
+  `inbox_claim`, per browser = uaH + ipH prefix, 1 day) returns the fresh
+  keys and `push:{mention,chat}` (`pushOnDevice`: this browser's UA hash on
+  the user's Mention-alert subscription or the owner's) → dm/mention skipped
+  where push covers them. Permission: only from a click (bell strip
+  `#gpa-dn-chip`, Settings card `#gpa-desk-notify`); `deskPermission()`
+  prefers Chrome's answer / navigator.permissions state (Notification.
+  permission can stay stale). Push subscriptions now store `ua` (set on
+  subscribe; `/push/me/status` fills it in for older ones). sw.js
+  `renotify: !!m.tag`. Tests: music.test.mjs (+2), messages.test.mjs (+1),
+  browser my-music-edit.mjs (11), chromebook-notify.mjs (17, real Chrome
+  Notification API with a Chromebook user agent, injected on 2 sites).
+  NOT testable here: a real Chromebook / ChromeOS tray, Chrome's own
+  permission prompt (headless dismisses it), push delivery to Chrome.
+  Before that:
   **Messages (DMs + group chats), @everyone, Welcome stats** (owner: "add a
   direct message between people feature tab like the chat tab in the same
   area make it labeled NEW… allow me and the admins to view the chats
@@ -903,7 +941,8 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 
 | Commit | What |
 |---|---|
-| (this) | Messages (DMs + group chats, safety review), @everyone, Welcome stats |
+| (this) | Rename songs; owner upload fix (admin token hid the session); Chromebook pop-ups |
+| `ec28acb` | Messages (DMs + group chats, safety review), @everyone, Welcome stats |
 | `bfd4068` | Proxy: several approved sites (allowlist, /status/, isolation) |
 | `31214c0` | Proxy tab on the Saints proxy Worker (proxy-worker/) |
 | `28202ba` | Countdown + Renew + Telnyx texting; self-unlock with school email |
@@ -951,7 +990,7 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 ## 6. Testing
 
 ```bash
-npm test                                   # node --test tests/*.test.mjs (142 tests)
+npm test                                   # node --test tests/*.test.mjs (151 tests)
 npx wrangler deploy --dry-run --outdir /tmp/x   # bundle/config check, deploys nothing
 # Browser suites (Playwright vs local workerd), each takes an output dir for screenshots:
 node tests/browser/eaglercraft.e2e.mjs     # 83
@@ -972,6 +1011,8 @@ node tests/browser/chat-live.mjs           # 23
 node tests/browser/chat-replies.mjs        # 20
 node tests/browser/chat-round2.mjs         # 26 (fake microphone)
 node tests/browser/messages.mjs            # 35 (DMs, groups, safety review, @everyone, Welcome stats)
+node tests/browser/my-music-edit.mjs       # 11 (rename songs; owner upload with Admin connected)
+node tests/browser/chromebook-notify.mjs   # 17 (pop-ups, Chromebook UA, injected on 2 sites; ~4 min)
 node tests/browser/fun.mjs                 # 18
 node tests/browser/music.mjs               # 15
 node tests/browser/my-music.mjs            # 15

@@ -91,7 +91,7 @@ export async function audiusStream(env, id, req) {
 export async function readLibrary(kv) {
   try { return (await kv.get(LIB_KEY, 'json')) || []; } catch (e) { return []; }
 }
-const publicTrack = (t) => ({ source: 'shared', id: t.id, title: t.title, artist: t.artist, duration: t.duration || 0, size: t.size, type: t.type, uploader: t.uploader, ts: t.ts, stream: '/music/file/' + t.id });
+const publicTrack = (t) => ({ source: 'shared', id: t.id, title: t.title, artist: t.artist, file: t.file || defaultFileName(t), duration: t.duration || 0, size: t.size, type: t.type, uploader: t.uploader, ts: t.ts, stream: '/music/file/' + t.id });
 
 export async function listLibrary(kv, query) {
   const lib = await readLibrary(kv);
@@ -119,6 +119,25 @@ export function audioKind(bytes) {
   return null;
 }
 const clean = (s, n) => String(s || '').replace(/[\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
+// File names (what a download is saved as): no slashes, quotes or control
+// characters, and the right extension for the audio inside.
+const EXT = { 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'audio/aac': 'aac', 'audio/ogg': 'ogg', 'audio/wav': 'wav', 'audio/flac': 'flac', 'audio/webm': 'webm' };
+export function cleanFileName(name, type) {
+  const ext = EXT[type] || 'mp3';
+  let base = clean(String(name || '').replace(/[\\/:*?"<>|]+/g, ' '), 120).replace(/\.[a-z0-9]{2,5}$/i, '').replace(/^\.+/, '').trim();
+  if (!base) return '';
+  return base.slice(0, 110) + '.' + ext;
+}
+const defaultFileName = (t) => cleanFileName((t.artist && t.artist !== 'Unknown artist' ? t.artist + ' - ' : '') + (t.title || 'Untitled'), t.type) || 'song.mp3';
+// New title / artist / file name for a song (the audio itself never changes).
+function applyEdit(t, fields) {
+  const f = fields || {};
+  if ('title' in f) { const v = clean(f.title, 140); if (!v) throw Object.assign(new Error('The song needs a name.'), { status: 400 }); t.title = v; }
+  if ('artist' in f) t.artist = clean(f.artist, 80) || 'Unknown artist';
+  if ('file' in f) { const v = cleanFileName(f.file, t.type); if (!v) throw Object.assign(new Error('The file needs a name.'), { status: 400 }); t.file = v; }
+  t.edited = Date.now();
+  return t;
+}
 // "Artist - Title.mp3" → { artist, title }
 export function nameFromFile(name) {
   const base = clean(String(name || '').replace(/\.[a-z0-9]{2,5}$/i, '').replace(/_/g, ' '), 200);
@@ -147,6 +166,7 @@ export async function addToLibrary(env, form, uploader) {
     duration: Math.max(0, Math.min(24 * 3600, Math.round(Number(form.get('duration')) || 0))),
     size: bytes.length, type, uploader: clean(uploader, 40) || 'owner', ts: Date.now()
   };
+  track.file = cleanFileName(form.get('fileName') || file.name, type) || defaultFileName(track);
   await bucket.put('music/' + track.id, bytes, { httpMetadata: { contentType: type }, customMetadata: { title: track.title, artist: track.artist, uploader: track.uploader } });
   // Re-read before writing so two uploads at once both land.
   const fresh = await readLibrary(kv);
@@ -180,7 +200,7 @@ const MINE_TOTAL = 'mylib:total';
 export async function readMine(kv, user) {
   try { return (await kv.get(mineKey(user), 'json')) || []; } catch (e) { return []; }
 }
-const publicMine = (t) => ({ source: 'mine', id: t.id, title: t.title, artist: t.artist, duration: t.duration || 0, size: t.size, type: t.type, owner: t.owner, ts: t.ts, stream: '/music/file/' + t.id });
+const publicMine = (t) => ({ source: 'mine', id: t.id, title: t.title, artist: t.artist, file: t.file || defaultFileName(t), duration: t.duration || 0, size: t.size, type: t.type, owner: t.owner, ts: t.ts, stream: '/music/file/' + t.id });
 export async function listMine(kv, user) {
   return (await readMine(kv, user)).sort((a, b) => b.ts - a.ts).map(publicMine);
 }
@@ -212,12 +232,33 @@ export async function addToMine(env, form, owner) {
     duration: Math.max(0, Math.min(24 * 3600, Math.round(Number(form.get('duration')) || 0))),
     size: bytes.length, type, owner: clean(owner, 40), ts: Date.now()
   };
+  track.file = cleanFileName(form.get('fileName') || file.name, type) || defaultFileName(track);
   await bucket.put('music/' + track.id, bytes, { httpMetadata: { contentType: type }, customMetadata: { title: track.title, artist: track.artist, owner: track.owner.toLowerCase() } });
   const fresh = await readMine(kv, owner);
   fresh.push(track);
   await kv.put(mineKey(owner), JSON.stringify(fresh));
   await kv.put(MINE_TOTAL, String(total + bytes.length));
   return publicMine(track);
+}
+// Renames one of a person's own songs: title, artist, file name.
+export async function editMine(env, owner, id, fields) {
+  const kv = env.TELEMETRY;
+  const list = await readMine(kv, owner);
+  const t = list.find((x) => x.id === id);
+  if (!t) return null;
+  applyEdit(t, fields);
+  await kv.put(mineKey(owner), JSON.stringify(list));
+  return publicMine(t);
+}
+// The same for a song in the shared library (owner and admins).
+export async function editLibrary(env, id, fields) {
+  const kv = env.TELEMETRY;
+  const lib = await readLibrary(kv);
+  const t = lib.find((x) => x.id === id);
+  if (!t) return null;
+  applyEdit(t, fields);
+  await kv.put(LIB_KEY, JSON.stringify(lib));
+  return publicTrack(t);
 }
 // Removes one of a person's songs (theirs; staff may pass anyone's id).
 export async function removeFromMine(env, owner, id) {
@@ -254,6 +295,9 @@ export async function serveLibraryFile(env, id, req) {
     const obj = await bucket.get('music/' + id, { range: { offset: start, length: end - start + 1 } });
     return new Response(req.method === 'HEAD' ? null : obj.body, { status: 206, headers: { ...base, 'Content-Length': String(end - start + 1), 'Content-Range': `bytes ${start}-${end}/${size}` } });
   }
+  // ?dl=<name>: save as a file with that name (Download in My music).
+  const dl = cleanFileName(new URL(req.url).searchParams.get('dl') || '', base['Content-Type']);
+  if (dl) base['Content-Disposition'] = 'attachment; filename="' + dl.replace(/[^\x20-\x7e]/g, '_') + '"; filename*=UTF-8\'\'' + encodeURIComponent(dl);
   const obj = req.method === 'HEAD' ? null : await bucket.get('music/' + id);
   return new Response(obj ? obj.body : null, { status: 200, headers: { ...base, 'Content-Length': String(size) } });
 }

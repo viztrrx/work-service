@@ -226,3 +226,24 @@ test('private rooms can’t take a conversation-shaped name', async () => {
   const r = await t.call('/admin/rooms', { method: 'POST', headers: ownerTok, body: { action: 'create', name: 'dm-aaaaaaaaaaaaaaaaaaaaaaaa' } });
   assert.equal(r.status, 400);
 });
+
+test('pop-up notifications: each message once per browser; skipped where the app already alerts', async () => {
+  const t = setup();
+  const maya = await t.reg('maya');
+  const CROS = 'Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+  const claim = (keys, ua = CROS, s = maya) => t.call('/notify/claim', { method: 'POST', s, headers: { 'User-Agent': ua }, body: { keys } });
+  assert.equal((await t.call('/notify/claim', { method: 'POST', body: { keys: ['msg:public:1'] } })).status, 401, 'signed in only');
+  const a = (await claim(['msg:dm-aaaaaaaaaaaaaaaaaaaaaaaa:5', 'msg:public:7'])).data;
+  assert.deepEqual(a.fresh, ['msg:dm-aaaaaaaaaaaaaaaaaaaaaaaa:5', 'msg:public:7']);
+  assert.deepEqual(a.push, { mention: false, chat: false });
+  // A second tab (or website) in the same browser asks for the same message: no.
+  assert.deepEqual((await claim(['msg:public:7', 'msg:public:8'])).data.fresh, ['msg:public:8']);
+  // Another computer still gets its own.
+  assert.deepEqual((await claim(['msg:public:7'], 'Mozilla/5.0 (iPhone)')).data.fresh, ['msg:public:7']);
+  // Odd keys are dropped.
+  assert.deepEqual((await claim(['<script>', 'ok:key:1'])).data.fresh, ['ok:key:1']);
+  // Push alerts turned on in the app in this same browser: the page skips messages and mentions.
+  await t.call('/push/me/subscribe', { method: 'POST', s: maya, headers: { 'User-Agent': CROS }, body: { subscription: await makeDevice(), name: 'Chromebook' } });
+  assert.equal((await claim(['msg:public:9'])).data.push.mention, true);
+  assert.equal((await claim(['msg:public:10'], 'Mozilla/5.0 (Windows NT 10.0) Chrome/130')).data.push.mention, false, 'a different browser');
+});

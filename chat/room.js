@@ -185,6 +185,24 @@ export class ChatRoom {
       if (e && e.n && (!e.last || Number(body.ts) >= e.last.ts)) { e.n = 0; await this.storage.put('inbox', box); }
       return reply({ ok: true });
     }
+    if (action === 'inbox_claim') {
+      // Pop-up notifications: each key once per browser ("dev"), for a day.
+      const now = Date.now();
+      const dev = String(body.dev || '').slice(0, 48);
+      let claims = (await this.storage.get('claims')) || {};
+      const fresh = [];
+      for (const k of (Array.isArray(body.keys) ? body.keys : []).slice(0, 20)) {
+        const id = dev + '|' + String(k).slice(0, 80);
+        if (claims[id]) continue;
+        claims[id] = now;
+        fresh.push(k);
+      }
+      if (fresh.length) {
+        claims = Object.fromEntries(Object.entries(claims).filter(([, at]) => now - at < 864e5).sort((a, b) => b[1] - a[1]).slice(0, 1000));
+        await this.storage.put('claims', claims);
+      }
+      return reply({ ok: true, fresh });
+    }
     if (action === 'inbox_remove') {
       if (box[cid]) { delete box[cid]; await this.storage.put('inbox', box); }
       return reply({ ok: true });
