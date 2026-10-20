@@ -1,0 +1,14 @@
+// Standalone Worker. This file does not change the root donnajbe Worker.
+// In Cloudflare Builds, use this exact deploy command from the repo root:
+// npx wrangler deploy --config proxy-worker/wrangler.jsonc
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "saints-proxy-test",
+  "main": "./index.js",
+  "compatibility_date": "2026-10-19",
+  "workers_dev": true,
+  "vars": {
+    // Only HTTPS requests to this single destination are allowed.
+    "TARGET_ORIGIN": "https://example.com"
+  }
+}
