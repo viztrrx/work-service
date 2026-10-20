@@ -14,6 +14,7 @@ new subscriber and then the owner would see things.
 | [3-playlists](#3-playlists-everyone-signed-in) | Spotify / Apple Music playlist → YouTube links, for everyone; **new:** 10 new songs a day each, your limit card |
 | [4-youtube-to-mp3](#4-youtube-to-mp3-owner) | The MP3 converter in Music → My music |
 | [5-subscribe-page](#5-subscribe-page) | The payment page, the $6 contribution box, and **new:** your $1 test (owner only) |
+| [12-proxy-tab](#12-proxy-tab-saints-proxy-worker) | **New:** the Proxy tab on the Saints proxy Worker: connected, the approved site, other sites explained, Worker down, blocked by a website, light theme |
 | [11-countdown-renew-texting](#11-countdown-renew-and-texting) | **New:** time left at the top for everyone, the Renew box (link, text me the link, paying cash), your Cash & texting card |
 | [10-security-review](#10-security-review-brute-force-proof-and-fix) | **New:** proof that PINs and student numbers could be brute-forced, and the fix |
 | [9-fold-top-card](#9-fold-the-top-card) | **New:** the Ask AI card (and every tab's top card) folds to a thin bar |
@@ -335,3 +336,36 @@ Admins (and you) see **No expiry**:
 takes cash (empty = you and the admins automatically), and who texted CASH.
 
 <img src="11-countdown-renew-texting/5-owner-cash-texting.png" width="640" alt="Cash & texting card">
+
+---
+
+## 12. Proxy tab (Saints proxy Worker)
+
+Taken in the automated test with the **real** proxy Worker code running on
+the test computer. That computer has no internet, so where the approved site
+would show, you see the Worker's own "Couldn't reach the destination" page. On
+your real deployment it shows example.com.
+
+**Connected:** the Worker's connection test inside the tab.
+
+<img src="12-proxy-tab/1-connected.png" width="640" alt="Proxy tab: Connected, connection test">
+
+**The approved site** (example.com) through the Worker's `/site/`:
+
+<img src="12-proxy-tab/2-approved-site.png" width="640" alt="example.com address loaded through /site/">
+
+**Any other site is explained**, and the page stays:
+
+<img src="12-proxy-tab/3-other-site-explained.png" width="640" alt="google.com isn't supported">
+
+**The Worker can't be reached:** Retry / Open in a new tab.
+
+<img src="12-proxy-tab/4-worker-down.png" width="420" alt="Can't reach the proxy Worker">
+
+**A website that forbids embedded pages:** Open in a new tab.
+
+<img src="12-proxy-tab/5-blocked-by-website.png" width="640" alt="Blocked by this website">
+
+**Light theme:**
+
+<img src="12-proxy-tab/6-light-theme.png" width="640" alt="Proxy tab in the white theme">

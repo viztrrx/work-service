@@ -23,6 +23,10 @@ function upstreamOrigin(env) {
   return origin;
 }
 
+// Pages this Worker writes itself have no scripts, so they get a CSP that
+// allows none. Framing is allowed: the Saints Service Proxy tab shows them.
+const OWN_PAGE_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'";
+
 function page(html, status = 200) {
   return new Response(html, {
     status,
@@ -31,8 +35,38 @@ function page(html, status = 200) {
       "cache-control": "no-store",
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
+      "content-security-policy": OWN_PAGE_CSP,
     },
   });
+}
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
+// A readable error page, since these show up inside the Proxy tab's frame.
+function errorPage(status, title, detail) {
+  return page(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Saints Proxy — ${esc(title)}</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui,-apple-system,sans-serif; }
+    body { margin:0; min-height:100vh; display:grid; place-items:center; background:#10131b; color:#f4f6ff; }
+    main { box-sizing:border-box; width:min(90vw,480px); border:1px solid #5a3440; border-radius:18px; padding:28px; background:#1d1720; }
+    .bad { color:#ff9a9a; font-weight:700; }
+    p { color:#bdc9dc; line-height:1.6; }
+    a { color:#a9c4ff; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="bad">● ${esc(title)}</div>
+    <p>${esc(detail)}</p>
+    <p><a href="/preview">Back to the connection test</a></p>
+  </main>
+</body>
+</html>`, status);
 }
 
 function preview() {
@@ -101,29 +135,36 @@ export default {
     const path = url.pathname;
 
     if (path === "/health") {
-      return Response.json({ status: "ok", service: "saints-proxy-test" }, {
-        headers: { "cache-control": "no-store" },
+      // Readable from any page (no credentials, nothing private), so the
+      // Saints Service Proxy tab can check the connection and learn which
+      // destination is allowed.
+      let target = null;
+      try { target = upstreamOrigin(env).origin; } catch { /* misconfigured: reported below */ }
+      return Response.json({ status: target ? "ok" : "misconfigured", service: "saints-proxy-test", target }, {
+        status: target ? 200 : 500,
+        headers: { "cache-control": "no-store", "access-control-allow-origin": "*" },
       });
     }
     if (path === "/" || path === "/preview") return preview();
+    if (path === "/site") return Response.redirect(url.origin + "/site/" + url.search, 302);
     if (!path.startsWith("/site/")) {
-      return new Response("Not found", { status: 404 });
+      return errorPage(404, "Not found", "This proxy only has a connection test (/preview) and the approved destination (/site/).");
     }
     if (request.method !== "GET" && request.method !== "HEAD") {
-      return new Response("Only GET and HEAD are supported", { status: 405 });
+      return errorPage(405, "Not supported", "Only opening pages (GET and HEAD) is supported. Forms and sign-ins don't work through this test proxy.");
     }
 
     let origin;
     try {
       origin = upstreamOrigin(env);
     } catch (err) {
-      return new Response(err.message, { status: 500 });
+      return errorPage(500, "Proxy misconfigured", err.message);
     }
 
     const requestedPath = path.slice("/site".length) + url.search;
     const target = new URL(requestedPath, origin);
     if (target.origin !== origin.origin) {
-      return new Response("Destination not permitted", { status: 403 });
+      return errorPage(403, "Destination not permitted", "This restricted proxy only opens " + origin.origin + ".");
     }
 
     try {
@@ -137,12 +178,14 @@ export default {
         method: request.method, headers, redirect: "manual",
       });
       const status = response.status;
-      if (status >= 300 && status < 400) {
+      // Only real redirects are followed; 300/304/305 and friends pass
+      // through as-is (Response.redirect throws on them).
+      if ([301, 302, 303, 307, 308].includes(status)) {
         const location = response.headers.get("location");
         if (!location) return new Response(null, { status });
         const destination = new URL(location, target);
         if (destination.origin !== origin.origin) {
-          return new Response("External redirect not permitted", { status: 403 });
+          return errorPage(403, "Redirect not permitted", "That page redirects to a different website, which this restricted proxy doesn't open.");
         }
         return Response.redirect(
           url.origin + "/site" + destination.pathname + destination.search + destination.hash,
@@ -163,7 +206,7 @@ export default {
       }
       return reply;
     } catch {
-      return new Response("Upstream request failed", { status: 502 });
+      return errorPage(502, "Couldn't reach the destination", "The proxy Worker is running, but " + origin.origin + " didn't answer. Try again in a moment.");
     }
   },
 };

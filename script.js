@@ -26,13 +26,11 @@
  *         embed/iframe involved.
  *    Playback keeps running in the background while you switch tabs (the
  *    player element stays in the DOM, just visually hidden).
- *  - A "Proxy" section: loads pages through Scramjet (a separate proxy
- *    project the user runs on their own device — github.com/MercuryWorkshop
- *    /scramjet), so sites that block plain iframe embedding can still be
- *    reached. The proxy server address is user-configurable and defaults to
- *    this device's own localhost; it is never a shared/public default, so
- *    it does nothing unless the person using this script is also running
- *    their own proxy server, and it never routes anyone else's traffic.
+ *  - A "Proxy" section: browses through the Saints proxy Worker
+ *    (proxy-worker/ in this repo, deployed separately as saints-proxy-test
+ *    on Cloudflare). It is a restricted test proxy: one approved HTTPS
+ *    destination (example.com), GET/HEAD only; anything else is refused
+ *    with an explanation. The Worker address is configurable in the tab.
  *  - A "Theme" section to change the panel's color scheme, plus optional
  *    ambient background particles (several styles, adjustable play area)
  *    and typing-speed/response-font controls.
@@ -829,7 +827,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       admin: ['feature', 'Security → Sign-in help → Locked accounts: see who was being guessed and unlock it'] } },
     { at: '2026-10-19T16:00:00-04:00', commit: '', title: 'Time left, Renew, texting; unlock with your school email', parts: {
       console: ['feature', 'At the top for everyone: days and hours left (or “Renews in”, or “No expiry” for staff) and a Renew button: the subscribe link, “Text me the link”, and who to give cash to; a locked account can be unlocked with its school email (once a day)'],
-      admin: ['feature', 'Security → Cash & texting (owner): texting status, who takes cash (you and the admins automatically, or your own list), and who texted CASH'] } }
+      admin: ['feature', 'Security → Cash & texting (owner): texting status, who takes cash (you and the admins automatically, or your own list), and who texted CASH'] } },
+    { at: '2026-10-20T10:00:00-04:00', commit: '', title: 'Proxy uses the Saints proxy on Cloudflare', parts: {
+      browser: ['redesign', 'The Proxy tab now connects to the Saints proxy Worker (saints-proxy-test on Cloudflare) instead of a localhost Scramjet server: a connection test first, then the approved test site (example.com); other sites are explained, not silently broken; clear loading, timeout, blocked-by-this-website and retry states'] } }
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -1365,6 +1365,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpx-room[data-proxy="error"] .gpx-dot { background: var(--gpx-err); }
       #gpa-proxy-status { color: var(--gpa-text) !important; }
       .gpx-browser .gpx-inline-error { margin: 8px; }
+      .gpx-proxy-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+      .gpx-proxy-actions .gpa-btn { min-height: 30px; font-size: 12.5px; }
+      .gpx-field-hint { margin: 6px 0 0; font-size: 12px; }
       .gpx-browser-view { position: relative; flex: 1; min-height: 280px; display: flex; }
       .gpx-browser-view .gpa-iframe { flex: 1; border: none; border-radius: 0; min-height: 280px; height: auto; background: var(--gpa-bg); }
       .gpx-browser .gpx-details { border: none; border-top: 1px solid var(--gpa-border); border-radius: 0; background: transparent; }
@@ -3783,7 +3786,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       <div class="gpa-pane" data-pane="browser">
         <div class="gpx-room">
           ${gpxHero({ room: 'browser', title: 'Proxy', status: 'Not connected',
-            desc: 'Browse through a Scramjet proxy server that you run yourself. It defaults to this device’s localhost and never routes anyone else’s traffic.' })}
+            desc: 'Browse through the Saints proxy on Cloudflare. It’s a restricted test for now: it opens one approved site (example.com) and nothing else.' })}
           <section class="gpx-browser">
             <div class="gpx-browser-bar">
               <div class="gpx-browser-nav">
@@ -3795,18 +3798,19 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
                 <input id="gpa-proxy-url" class="gpa-input" placeholder="Enter a website or URL…" autocomplete="off" aria-label="Address" />
               </div>
               <button id="gpa-proxy-go" class="gpa-btn primary">Go</button>
-              <button id="gpa-proxy-popout" class="gpa-btn gpx-icon-btn" title="Open the proxy in a new window" aria-label="Pop out">${GPS_ICONS.external}</button>
+              <button id="gpa-proxy-popout" class="gpa-btn gpx-icon-btn" title="Open this page in a new tab" aria-label="Open in a new tab">${GPS_ICONS.external}</button>
             </div>
             <div class="gpx-loadbar" aria-hidden="true"></div>
             <div class="gpx-browser-status"><span class="gpx-dot"></span><span id="gpa-proxy-status" class="gpa-sub">Not connected</span></div>
             <div id="gpa-proxy-error" class="gpx-inline-error" style="display:none;"></div>
             <div class="gpx-browser-view">
-              <iframe id="gpa-proxy-frame" class="gpa-iframe" allow="fullscreen; clipboard-read; clipboard-write; autoplay; camera; microphone; geolocation" referrerpolicy="no-referrer"></iframe>
+              <iframe id="gpa-proxy-frame" class="gpa-iframe" title="Saints proxy" allow="fullscreen; clipboard-write" referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"></iframe>
             </div>
             <details class="gpx-details">
               <summary>${gpxLbl('settings', 'Connection settings')}</summary>
-              <label class="gpx-field-label" for="gpa-proxy-server">Proxy server address</label>
-              <input id="gpa-proxy-server" class="gpa-input" placeholder="Proxy server URL (defaults to your own localhost)" autocomplete="off" />
+              <label class="gpx-field-label" for="gpa-proxy-server">Proxy Worker address</label>
+              <input id="gpa-proxy-server" class="gpa-input" placeholder="https://saints-proxy-test.viztrrx.workers.dev" autocomplete="off" spellcheck="false" />
+              <p id="gpa-proxy-server-hint" class="gpa-sub gpx-field-hint">Leave it empty for the Saints proxy (saints-proxy-test). Only change it to a Saints proxy Worker you run.</p>
             </details>
           </section>
           <section class="gpa-card gpx-card">
@@ -11852,35 +11856,30 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   });
   localVolume.addEventListener('input', () => { localAudio.volume = parseFloat(localVolume.value) / 100; });
 
-  // ---- Proxy tab (Scramjet-powered) ---------------------------------------
-  // Loads pages through Scramjet (github.com/MercuryWorkshop/scramjet), a
-  // proxy engine the user runs on their own device — the internal data-tab/
-  // data-pane key stays "browser" (other code keys off it), only the
-  // user-facing label changed to "Proxy".
+  // ---- Proxy tab (Saints proxy Worker on Cloudflare) -----------------------
+  // The tab browses through the separate saints-proxy-test Worker
+  // (proxy-worker/ in this repo, its own Cloudflare deployment). The internal
+  // data-tab/data-pane key stays "browser" (other code keys off it).
   //
-  // The iframe always loads the proxy SERVER's own frontend first; a
-  // destination is never written straight into the iframe's src (that would
-  // bypass the proxy entirely). Instead it's handed to the frontend's real,
-  // already-existing navigation entrypoint — its own demo app reads a
-  // "?goto=" query param on load and passes it to its controller's
-  // frame.go() internally (see packages/demo/src/pages/BrowserView.tsx in
-  // the scramjet repo) — so this always uses Scramjet's actual supported
-  // mechanism, never an invented one.
-  //
-  // The proxy server address is a small, user-editable setting that
-  // defaults to this device's OWN localhost — never a shared or public
-  // default. Whatever the user types there is saved only in their own
-  // browser's storage; it is not baked into this script for anyone else,
-  // and by default (nothing configured, nothing running) the tab simply
-  // shows the same honest "couldn't load" state as a broken address, same
-  // as the rest of this app does when something isn't reachable.
+  // That Worker is a RESTRICTED proxy, not a general one: it serves
+  //   /health  JSON {status, target} (CORS-readable), the allowed origin
+  //   /preview its own connection-test page
+  //   /site/…  the one allowed HTTPS origin (TARGET_ORIGIN), GET/HEAD only
+  // So the address bar only maps URLs on that origin to /site/…; anything
+  // else gets an honest "not supported" instead of a silent failure. A
+  // destination is never written straight into the frame (that would skip
+  // the proxy), and the frame never gets the console's tokens or session:
+  // only Worker URLs go in its src, with no referrer, sandboxed without
+  // top-navigation so the page inside can't take over the host page.
   const PROXY_SERVER_KEY = 'gpa_proxy_server_url';
   const PROXY_LAST_DEST_KEY = 'gpa_proxy_last_destination';
-  // https, not http: pages with a strict Content-Security-Policy
-  // (default-src 'self' https:, no frame-src set) refuse to frame a plain
-  // http: origin outright, no matter what this script does — the proxy
-  // server itself has to actually serve HTTPS for embedding to work there.
-  const DEFAULT_PROXY_SERVER = 'https://localhost:4141';
+  const DEFAULT_PROXY_SERVER = 'https://saints-proxy-test.viztrrx.workers.dev';
+  // Saved by the old Scramjet tab; treated as "not set" so it moves to the Worker.
+  const LEGACY_PROXY_SERVERS = ['https://localhost:4141', 'http://localhost:4141'];
+  // What the Worker allows until /health says otherwise (it can't be read
+  // on pages whose CSP blocks connections to it).
+  const DEFAULT_PROXY_TARGET = 'https://example.com';
+  const PROXY_LOAD_TIMEOUT_MS = 15000;
 
   const proxyUrlInput = panel.querySelector('#gpa-proxy-url');
   const proxyGoBtn = panel.querySelector('#gpa-proxy-go');
@@ -11890,89 +11889,244 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   const proxyPopoutBtn = panel.querySelector('#gpa-proxy-popout');
   const proxyStatusEl = panel.querySelector('#gpa-proxy-status');
   const proxyServerInput = panel.querySelector('#gpa-proxy-server');
+  const proxyServerHint = panel.querySelector('#gpa-proxy-server-hint');
   const proxyErrorEl = panel.querySelector('#gpa-proxy-error');
 
+  // An https:// origin, or http:// on this computer (local testing only).
+  function cleanProxyServer(v) {
+    let u;
+    try { u = new URL(String(v || '').trim()); } catch (e) { return ''; }
+    const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(u.hostname);
+    if (!(u.protocol === 'https:' || (u.protocol === 'http:' && local)) || u.username || u.password || (u.pathname !== '/' && u.pathname !== '') || u.search || u.hash) return '';
+    return u.origin;
+  }
   function proxyServerUrl() {
     let v = '';
     try { v = localStorage.getItem(PROXY_SERVER_KEY) || ''; } catch (e) { /* storage unavailable */ }
-    return (v || DEFAULT_PROXY_SERVER).replace(/\/+$/, '');
+    if (LEGACY_PROXY_SERVERS.includes(v.replace(/\/+$/, ''))) v = '';
+    return cleanProxyServer(v) || DEFAULT_PROXY_SERVER;
   }
-  try { proxyServerInput.value = proxyServerUrl(); } catch (e) { /* ignore */ }
-  proxyServerInput.addEventListener('change', () => {
-    const v = proxyServerInput.value.trim();
-    try { localStorage.setItem(PROXY_SERVER_KEY, v || DEFAULT_PROXY_SERVER); } catch (e) { /* best-effort */ }
-  });
+  const proxyOrigin = () => proxyServerUrl();
+  const proxy = { target: DEFAULT_PROXY_TARGET, current: '', pending: null, timer: 0, cspTimer: 0, blocked: false };
 
   function setProxyStatus(text, isError) {
     proxyStatusEl.textContent = text;
     proxyStatusEl.style.color = isError ? '#e5453a' : '';
   }
-  function normalizeDestination(raw) {
-    let url = (raw || '').trim();
-    if (!url) return '';
-    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
-    return url;
-  }
-  function proxyGoto(destination) {
-    const base = proxyServerUrl();
-    proxyErrorEl.style.display = 'none';
-    setProxyStatus('Connecting…');
-    if (destination) {
-      try { localStorage.setItem(PROXY_LAST_DEST_KEY, destination); } catch (e) { /* best-effort */ }
-      proxyFrame.src = `${base}/?goto=${encodeURIComponent(destination)}`;
-    } else {
-      proxyFrame.src = `${base}/`;
+  // The inline message under the bar, with optional actions (built with
+  // textContent: nothing here is ever parsed as markup).
+  function showProxyError(text, actions) {
+    proxyErrorEl.textContent = '';
+    proxyErrorEl.appendChild(document.createTextNode(text));
+    if (actions && actions.length) {
+      const row = document.createElement('div');
+      row.className = 'gpx-proxy-actions';
+      actions.forEach(([label, fn]) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'gpa-btn'; b.textContent = label;
+        b.addEventListener('click', fn);
+        row.appendChild(b);
+      });
+      proxyErrorEl.appendChild(row);
     }
+    proxyErrorEl.style.display = '';
+  }
+  const hideProxyError = () => { proxyErrorEl.style.display = 'none'; proxyErrorEl.textContent = ''; };
+  const openProxyTab = () => { window.open(proxy.current || (proxyServerUrl() + '/preview'), '_blank', 'noopener,noreferrer'); };
+  const retryProxy = () => proxyLoad(proxy.current || (proxyServerUrl() + '/preview'), { force: true });
+
+  // Is the Worker up, and which destination does it allow? (Its /health is
+  // CORS-readable.) A page whose CSP blocks the connection just keeps the
+  // default destination; that alone is not an error.
+  async function proxyHealth() {
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    const t = setTimeout(() => { if (ctl) ctl.abort(); }, 8000);
+    // A failed check because THIS page's CSP forbids the connection says
+    // nothing about the Worker, so it's told apart from "unreachable".
+    let csp = false;
+    const onCsp = (e) => { if (/^(connect-src|default-src)/.test(String(e.effectiveDirective || e.violatedDirective || '')) && String(e.blockedURI || '').startsWith(proxyOrigin())) csp = true; };
+    document.addEventListener('securitypolicyviolation', onCsp, true);
+    try {
+      const r = await fetch(proxyServerUrl() + '/health', { cache: 'no-store', credentials: 'omit', signal: ctl ? ctl.signal : undefined });
+      const d = await r.json().catch(() => ({}));
+      if (d && typeof d.target === 'string' && /^https:\/\/[^/]+$/.test(d.target)) proxy.target = d.target;
+      return { reached: true, ok: r.ok && d.status === 'ok', status: r.status };
+    } catch (e) {
+      await new Promise((res) => setTimeout(res, 50));   // the CSP report can arrive just after the rejection
+      return { reached: false, csp, timedOut: !!(e && e.name === 'AbortError') };
+    } finally { clearTimeout(t); document.removeEventListener('securitypolicyviolation', onCsp, true); }
+  }
+
+  // A page whose Content-Security-Policy forbids framing the Worker: the
+  // browser refuses the frame and reports it on the document. Chromium fires
+  // the frame's load event FIRST and reports a moment later (with just the
+  // origin), so this listens from each load until a few seconds after it.
+  function onProxyCsp(e) {
+    const blocked = String(e.blockedURI || '');
+    if (!proxy.current || !/^(frame-src|child-src)/.test(String(e.effectiveDirective || e.violatedDirective || ''))) return;
+    if (blocked && !proxy.current.startsWith(blocked.replace(/\/+$/, ''))) return;
+    proxy.blocked = true;
+    finishProxyLoad();
+    stopProxyCsp();
+    setProxyStatus('Blocked by this website', true);
+    showProxyError('This website’s security settings don’t allow Saints Service to show the proxy inside it. Open it in a new tab instead.', [['Open in a new tab', openProxyTab]]);
+  }
+  function stopProxyCsp() { clearTimeout(proxy.cspTimer); document.removeEventListener('securitypolicyviolation', onProxyCsp, true); }
+  function finishProxyLoad() {
+    clearTimeout(proxy.timer);
+    proxy.pending = null;
+    // Keep listening a little longer for a late "blocked" report, then stop.
+    clearTimeout(proxy.cspTimer);
+    proxy.cspTimer = setTimeout(stopProxyCsp, 4000);
+  }
+
+  // Loads a Worker URL in the frame (the same frame every time). Skips the
+  // reload when it's already showing that URL, unless forced.
+  function proxyLoad(frameUrl, opts) {
+    const force = !!(opts && opts.force);
+    if (!force && frameUrl === proxy.current && !proxy.pending && !proxy.blocked && proxyErrorEl.style.display === 'none') return;
+    finishProxyLoad();
+    stopProxyCsp();
+    hideProxyError();
+    proxy.blocked = false;
+    proxy.current = frameUrl;
+    proxy.pending = { url: frameUrl, at: Date.now() };
+    setProxyStatus('Connecting…');
+    document.addEventListener('securitypolicyviolation', onProxyCsp, true);
+    proxy.timer = setTimeout(() => {
+      if (!proxy.pending) return;
+      finishProxyLoad();
+      setProxyStatus('Load failed', true);
+      showProxyError('The proxy didn’t respond in ' + Math.round(PROXY_LOAD_TIMEOUT_MS / 1000) + ' seconds. Check your connection and try again.', [['Retry', retryProxy], ['Open in a new tab', openProxyTab]]);
+    }, PROXY_LOAD_TIMEOUT_MS);
+    if (force && proxyFrame.getAttribute('src') === frameUrl) {
+      // Same URL: blank it first so the browser really loads it again.
+      proxyFrame.src = 'about:blank';
+      requestAnimationFrame(() => { if (proxy.current === frameUrl) proxyFrame.src = frameUrl; });
+    } else {
+      proxyFrame.src = frameUrl;
+    }
+    // In parallel: is the Worker itself answering? (The frame's load event
+    // can't tell a real page from the browser's own error page.)
+    proxyHealth().then((h) => {
+      if (proxy.current !== frameUrl || proxy.blocked) return;
+      if (h.reached && !h.ok) {
+        finishProxyLoad();
+        setProxyStatus('Proxy error', true);
+        showProxyError('The proxy Worker answered with an error' + (h.status ? ' (HTTP ' + h.status + ')' : '') + '. It may be misconfigured or redeploying. Try again in a minute.', [['Retry', retryProxy]]);
+      } else if (!h.reached && navigator.onLine === false) {
+        finishProxyLoad();
+        setProxyStatus('Load failed', true);
+        showProxyError('You’re offline. Reconnect, then try again.', [['Retry', retryProxy]]);
+      } else if (!h.reached && !h.csp) {
+        // The Worker didn't answer at all (down, wrong address, or blocked
+        // on this network). The frame may still "load" the browser's own
+        // error page, so this decides.
+        finishProxyLoad();
+        setProxyStatus('Load failed', true);
+        showProxyError('Can’t reach the proxy Worker' + (h.timedOut ? ' (no answer in 8 seconds)' : '') + '. It may be down, the address in Connection settings may be wrong, or this network may block it.', [['Retry', retryProxy], ['Open in a new tab', openProxyTab]]);
+      }
+      updateProxyPlaceholder();
+    });
+  }
+  proxyFrame.addEventListener('load', () => {
+    // Fires for about:blank too (Reload), and for the browser's own error
+    // page; only a load of the URL we asked for counts, and "Loaded" means
+    // only that the frame finished loading (it's another site's page, which
+    // this page can't look inside).
+    if (!proxy.pending || proxy.blocked || proxyFrame.getAttribute('src') !== proxy.pending.url) return;
+    finishProxyLoad();
+    setProxyStatus(/\/site\//.test(proxy.current) ? 'Loaded · ' + proxyDisplay(proxy.current) : 'Connected · connection test');
+  });
+  proxyFrame.addEventListener('error', () => {
+    if (!proxy.pending) return;
+    finishProxyLoad();
+    setProxyStatus('Load failed', true);
+    showProxyError('Unable to load the proxy. Check the proxy Worker address in Connection settings, then try again.', [['Retry', retryProxy], ['Open in a new tab', openProxyTab]]);
+  });
+
+  // Address bar ⇄ Worker URL. Only the allowed origin maps to /site/…
+  const proxyPreviewUrl = () => proxyServerUrl() + '/preview';
+  function proxyDisplay(frameUrl) {
+    try {
+      const u = new URL(frameUrl);
+      if (u.pathname.startsWith('/site/')) return proxy.target + u.pathname.slice(5) + u.search + u.hash;
+    } catch (e) { /* not a URL */ }
+    return '';
+  }
+  function proxyRoute(raw) {
+    let input = String(raw || '').trim();
+    if (!input) return { frameUrl: proxyPreviewUrl() };
+    const base = proxyServerUrl();
+    let target;
+    try { target = new URL(proxy.target); } catch (e) { target = new URL(DEFAULT_PROXY_TARGET); }
+    if (input.startsWith('/')) input = target.origin + input;
+    if (!/^[a-z][a-z0-9+.-]*:/i.test(input)) input = 'https://' + input;
+    let u;
+    try { u = new URL(input); } catch (e) { return { error: '“' + raw + '” isn’t a web address.' }; }
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return { error: 'Only web addresses (https://…) can be opened here.' };
+    // A link to the Worker itself (its /preview or /site/ pages).
+    if (u.origin === base && (u.pathname === '/preview' || u.pathname === '/' || u.pathname.startsWith('/site/'))) return { frameUrl: base + u.pathname + u.search + u.hash };
+    // http://example.com → https (the Worker only fetches https).
+    if (u.protocol === 'http:' && u.hostname === target.hostname && !u.port) u = new URL('https://' + u.host + u.pathname + u.search + u.hash);
+    if (u.origin !== target.origin) {
+      return { error: 'This proxy only opens ' + target.host + ' for now (the approved test destination), so “' + u.host + '” isn’t supported. Other websites need a full proxy, which isn’t set up.' };
+    }
+    return { frameUrl: base + '/site' + (u.pathname || '/') + u.search + u.hash, display: u.href };
+  }
+  function updateProxyPlaceholder() {
+    try { proxyUrlInput.placeholder = 'Try ' + new URL(proxy.target).host + ' (the approved test site)…'; } catch (e) { /* keep */ }
   }
   function loadProxyUrl() {
-    const dest = normalizeDestination(proxyUrlInput.value);
-    if (!dest) return;
-    proxyUrlInput.value = dest; // .value, never innerHTML — nothing here is ever parsed as markup
-    proxyGoto(dest);
+    const r = proxyRoute(proxyUrlInput.value);
+    if (r.error) {
+      // The frame keeps what it was showing.
+      showProxyError(r.error, [['Open the approved site', () => { proxyUrlInput.value = proxy.target + '/'; loadProxyUrl(); }]]);
+      return;
+    }
+    proxyUrlInput.value = r.display || '';   // .value, never innerHTML
+    try { localStorage.setItem(PROXY_LAST_DEST_KEY, r.display || ''); } catch (e) { /* best-effort */ }
+    proxyLoad(r.frameUrl, { force: true });
   }
   proxyGoBtn.addEventListener('click', loadProxyUrl);
   proxyUrlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadProxyUrl(); });
-
-  proxyReloadBtn.addEventListener('click', () => {
-    // The frame is cross-origin to this page (it points at whatever proxy
-    // server is configured), so contentWindow.location.reload() would throw
-    // a SecurityError. Re-assigning the same src is the reliable
-    // cross-origin-safe way to force a reload.
-    const current = proxyFrame.src || `${proxyServerUrl()}/`;
-    setProxyStatus('Connecting…');
-    proxyFrame.src = 'about:blank';
-    requestAnimationFrame(() => { proxyFrame.src = current; });
-  });
+  proxyReloadBtn.addEventListener('click', retryProxy);
   proxyHomeBtn.addEventListener('click', () => {
     proxyUrlInput.value = '';
-    proxyGoto('');
+    try { localStorage.setItem(PROXY_LAST_DEST_KEY, ''); } catch (e) { /* best-effort */ }
+    proxyLoad(proxyPreviewUrl(), { force: true });
   });
-  proxyPopoutBtn.addEventListener('click', () => {
-    window.open(proxyServerUrl() + '/', '_blank', 'noopener,noreferrer');
-  });
-  proxyFrame.addEventListener('load', () => {
-    // This only confirms the proxy server's OWN frontend reached this
-    // browser — the destination site loaded inside it is a separate,
-    // cross-origin document this iframe can't inspect, so "Connected" means
-    // "the proxy responded," not "the destination site is healthy."
-    // Cross-origin, so this can't tell a real page from the browser's own
-    // error page — say only what is known.
-    setProxyStatus('Loaded');
-  });
-  proxyFrame.addEventListener('error', () => {
-    setProxyStatus('Load failed', true);
-    proxyErrorEl.textContent = 'Unable to load the proxy. Check that the proxy server address above is correct and running, then try Reload.';
-    proxyErrorEl.style.display = '';
+  proxyPopoutBtn.addEventListener('click', openProxyTab);
+
+  // Connection settings: the Worker address (default: the Saints proxy).
+  try { proxyServerInput.value = proxyServerUrl(); proxyServerInput.placeholder = DEFAULT_PROXY_SERVER; } catch (e) { /* ignore */ }
+  proxyServerInput.addEventListener('change', () => {
+    const raw = proxyServerInput.value.trim();
+    const v = raw ? cleanProxyServer(raw) : DEFAULT_PROXY_SERVER;
+    if (!v) {
+      if (proxyServerHint) { proxyServerHint.textContent = 'Use the Worker’s address only, like ' + DEFAULT_PROXY_SERVER + ' (https).'; proxyServerHint.style.color = '#e5453a'; }
+      return;
+    }
+    if (proxyServerHint) { proxyServerHint.textContent = 'Saved. Default: ' + DEFAULT_PROXY_SERVER; proxyServerHint.style.color = ''; }
+    try { localStorage.setItem(PROXY_SERVER_KEY, v === DEFAULT_PROXY_SERVER ? '' : v); } catch (e) { /* best-effort */ }
+    proxyServerInput.value = v;
+    proxy.target = DEFAULT_PROXY_TARGET;
+    proxyUrlInput.value = '';
+    proxyLoad(proxyPreviewUrl(), { force: true });
   });
 
+  // First visit to the tab: the connection test (or the last page opened on
+  // the allowed site). Coming back later keeps whatever is showing.
   let proxyPaneInitialized = false;
   function activateProxyPane() {
     if (proxyPaneInitialized) return;
     proxyPaneInitialized = true;
+    updateProxyPlaceholder();
     let lastDest = '';
     try { lastDest = localStorage.getItem(PROXY_LAST_DEST_KEY) || ''; } catch (e) { /* ignore */ }
-    if (lastDest) proxyUrlInput.value = lastDest;
-    proxyGoto(lastDest);
+    const r = lastDest ? proxyRoute(lastDest) : null;
+    if (r && r.frameUrl && !r.error) { proxyUrlInput.value = r.display || ''; proxyLoad(r.frameUrl); }
+    else proxyLoad(proxyPreviewUrl());
   }
 
   // ---- Eaglercraft tab --------------------------------------------------------
@@ -25546,7 +25700,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const proxyRoom = q('.gpa-pane[data-pane="browser"] .gpx-room');
     function syncProxy() {
       const txt = ((q('#gpa-proxy-status') || {}).textContent || '').toLowerCase();
-      const st = /fail|error|unable/.test(txt) ? 'error' : /connecting/.test(txt) ? 'connecting' : /loaded|connected/.test(txt) ? 'connected' : 'idle';
+      const st = /fail|error|unable|blocked/.test(txt) ? 'error' : /connecting/.test(txt) ? 'connecting' : /loaded|connected/.test(txt) ? 'connected' : 'idle';
       setData('browser', 'proxy', st);
       if (proxyRoom) proxyRoom.dataset.proxy = st;
       if (busy.browser > 0) return;

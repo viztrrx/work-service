@@ -13,6 +13,31 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **Proxy tab → the Saints proxy Worker** (owner: integrate
+  `https://saints-proxy-test.viztrrx.workers.dev` into the Proxy tab; keep the
+  UI; restricted to its one origin; don't touch the root Worker). Two Workers
+  in this repo: `donnajbe` (root wrangler.jsonc/worker.js, `npx wrangler
+  deploy`, UNCHANGED) and `saints-proxy-test` (proxy-worker/, `npx wrangler
+  deploy --config proxy-worker/wrangler.jsonc`, its own Cloudflare Build).
+  script.js Proxy block (search "Proxy tab (Saints proxy Worker"):
+  `DEFAULT_PROXY_SERVER` = the Worker; old `https://localhost:4141` setting
+  is ignored (migrates); `proxyRoute()` maps only `proxy.target` (from
+  `/health`, default https://example.com) to `<worker>/site/…`, else an
+  explanation; `proxyLoad()` reuses the one iframe, 15 s timeout, parallel
+  `proxyHealth()` (unreachable vs HTTP error vs CSP-blocked connect),
+  `securitypolicyviolation` listener from each load until 4 s after it
+  (Chromium fires load BEFORE the frame-src report, origin only) →
+  "Blocked by this website" + Open in a new tab. Frame: sandbox without
+  allow-top-navigation, allow="fullscreen; clipboard-write", no referrer.
+  proxy-worker/index.js: `/health` CORS + `target`; only 301/302/303/307/308
+  followed (304/300 used to throw → 502); readable HTML error pages with a
+  no-scripts CSP; `/site` → `/site/`. Tests: tests/proxy-worker.test.mjs
+  (Node, stubbed upstream; FakeRewriter stands in for HTMLRewriter) and
+  tests/browser/proxy.mjs (the REAL proxy Worker via unstable_dev with
+  compatibilityDate 2026-10-01: its wrangler.jsonc 2026-10-19 is newer than
+  local workerd 2026-10-13). This container can't reach workers.dev or
+  example.com (egress 403), so the live deployment wasn't checked from here.
+  Before that:
   **Countdown, Renew, Telnyx texting; self-unlock by school email**
   (owner: "shows how much longer until their subscription expires… enter
   their phone number… text message with the subscribe link… paying cash…
@@ -811,7 +836,8 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 
 | Commit | What |
 |---|---|
-| (this) | Countdown + Renew + Telnyx texting; self-unlock with school email |
+| (this) | Proxy tab on the Saints proxy Worker (proxy-worker/) |
+| `28202ba` | Countdown + Renew + Telnyx texting; self-unlock with school email |
 | `0203341` | Security: per-account brute-force lock (PIN, reset code, student number) |
 | `697270e` | Playlists: 10 new songs a day per person (admins too), owner-set |
 | `f11590c` | Owner-only $1 test contribution on the subscribe page |
@@ -885,6 +911,7 @@ node tests/browser/mp3.mjs                 # 51 (+1 NOT RUN: real YouTube downlo
 node tests/browser/subscribe.mjs           # 65
 node tests/browser/signin-help.mjs         # 52
 node tests/browser/renew.mjs               # 22
+node tests/browser/proxy.mjs               # 35 (real proxy Worker, run locally)
 node tests/browser/usage-meter.mjs         # 16
 node tests/browser/usage-meter-sizes.mjs   # 25
 node tests/browser/ask-photo-size.mjs      # 6
