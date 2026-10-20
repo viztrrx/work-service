@@ -70,3 +70,21 @@ test('owner PIN reset: older sign-ins stop working', async () => {
   await t.call('/auth/owner-pin', { headers: { Authorization: 'Bearer ' + ADMIN }, body: { user: 'boss', verifier: V2 } });
   assert.equal((await t.call('/auth/me', { method: 'GET', headers: { 'X-GPA-Session': first.data.token } })).status, 401);
 });
+
+test('owner name on an unconfirmed account: the app says how to set it up, and the reset confirms it', async () => {
+  const t = setup();
+  // "boss" registered as an ordinary account before it became the owner name.
+  t.env.OWNER = 'someoneelse';
+  assert.equal((await t.call('/auth/register', { body: { user: 'boss', verifier: V1 } })).data.ok, true);
+  t.env.OWNER = 'boss';
+  const app = { Origin: 'https://w.test' };
+  const r = await t.call('/auth/login', { headers: app, body: { user: 'boss', verifier: V1 } });
+  assert.equal(r.status, 403);
+  assert.equal(r.data.ownerSetup, true);
+  assert.match(r.data.error, /Set up your owner PIN/);
+  // The reset (admin token) confirms it; then the app lets the owner in.
+  const reset = await t.call('/auth/owner-pin', { headers: { Authorization: 'Bearer ' + ADMIN, ...app }, body: { user: 'boss', verifier: V1 } });
+  assert.equal(reset.data.account.role, 'owner');
+  const again = await t.call('/auth/login', { headers: app, body: { user: 'boss', verifier: V1 } });
+  assert.notEqual(again.status, 403, JSON.stringify(again.data));
+});

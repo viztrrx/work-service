@@ -17724,6 +17724,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     try {
       const r = await fetch(AUTH_BASE() + '/auth/me', { headers: { 'X-GPA-Session': t } });
       const d = await r.json().catch(() => ({}));
+      // The owner name not yet confirmed as the owner: stay signed in here so
+      // Settings → Memory → "Set up your owner PIN" can fix it.
+      if (r.status === 403 && d.ownerSetup) { serverSessionStatus = 'failed'; serverSessionError = d.error; emitSession(); return; }
       if (r.status === 403 && d.appStaffOnly) { signOutWith(d.error || 'The Saints Service app is only for the owner and admins.', true); return; }
       if (r.ok && d.ok) {
         serverSession.role = d.account.role;
@@ -26323,7 +26326,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           // The owner (Admin connected or owner code on this device) can reset their own PIN here.
           const ownerProof = !!(admGet(ADMIN_KEYS.TELE_TOKEN) || admGet(ADMIN_KEYS.OWNER_CODE));
           memEl('gmem-reset-row').hidden = !gate.pin || !ownerProof || !memEl('gmem-reset').hidden;
-          memEl('gmem-reset-open').textContent = /reserved/.test(serverSessionError || '') ? 'Set up your owner PIN' : 'Forgot your PIN? Reset it';
+          memEl('gmem-reset-open').textContent = /reserved|confirmed as the owner/.test(serverSessionError || '') ? 'Set up your owner PIN' : 'Forgot your PIN? Reset it';
           memEl('gmem-forgot-hint').hidden = !gate.pin || ownerProof;
           if (!gate.pin) memEl('gmem-reset').hidden = true;
         }

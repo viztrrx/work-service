@@ -1088,6 +1088,9 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     // switch config.appStaffOnly, on unless turned off). The app runs on the
     // Worker's own origin; the injected console runs on other websites.
     const APP_STAFF_ONLY_MSG = 'The Saints Service app is only for the owner and admins. You can still use the console on a computer.';
+    // The owner's name on an account that was never confirmed as the owner
+    // (made before it became the owner name, or without proof).
+    const OWNER_SETUP_MSG = 'This is the owner name, but its account isn’t confirmed as the owner yet. Connect Admin (Admin tab → your admin token), then Settings → Memory → “Set up your owner PIN”.';
     const appGateOn = (cfg) => !!cfg && cfg.appStaffOnly !== false && !!sessionKey();
     const fromApp = () => (req.headers.get('Origin') || '') === url.origin || (req.headers.get('Referer') || '').startsWith(url.origin + '/console/');
     const appStaffRole = (role) => role === 'owner' || role === 'admin';
@@ -2651,6 +2654,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         // whether the name is in use.
         // The phone app: owner and admins only.
         if (appGateOn(await getConfig(kv)) && fromApp() && !appStaffRole(roleOf(acct))) {
+          if (String(acct.user).toLowerCase() === OWNER && !acct.ownerVerified) return json({ ok: false, error: OWNER_SETUP_MSG, ownerSetup: true, appStaffOnly: true }, 403);
           await noteSec('app_not_staff', { user: acct.user, note: 'login' });
           return json({ ok: false, error: APP_STAFF_ONLY_MSG, appStaffOnly: true }, 403);
         }
@@ -2703,7 +2707,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         return json({ ok: true, email });
       }
       if (url.pathname === '/auth/me' && req.method === 'GET') {
-        if (appGateOn(await getConfig(kv)) && fromApp() && !appStaffRole(p.role)) return json({ ok: false, error: APP_STAFF_ONLY_MSG, appStaffOnly: true }, 403);
+        if (appGateOn(await getConfig(kv)) && fromApp() && !appStaffRole(p.role)) return json({ ok: false, error: String(p.user).toLowerCase() === OWNER ? OWNER_SETUP_MSG : APP_STAFF_ONLY_MSG, appStaffOnly: true, ...(String(p.user).toLowerCase() === OWNER ? { ownerSetup: true } : {}) }, 403);
         // Sliding renewal: past half its life, a fresh token comes back.
         let renewed = null;
         if (p.payload.exp - Date.now() < SESSION_MS / 2) {
