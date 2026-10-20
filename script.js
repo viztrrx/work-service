@@ -14666,6 +14666,15 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   }
   function staffProofHeaders(room) {
     const h = {};
+    // A conversation (Messages) with no server sign-in on this device: the
+    // owner's admin token or code says who it is.
+    if (isConvId(room) && !sessionToken()) {
+      const t = admGet(ADMIN_KEYS.TELE_TOKEN);
+      if (t) h.Authorization = 'Bearer ' + t;
+      const c = admGet(ADMIN_KEYS.OWNER_CODE);
+      if (c) h['X-GPA-Owner'] = c;
+      return h;
+    }
     if (room !== 'staff') return h;
     const code = admGet(ADMIN_KEYS.OWNER_CODE);
     if (code) h['X-GPA-Owner'] = code;
@@ -14951,6 +14960,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
 
   async function dmFetch(path, body) {
     const h = { ...ownerProofHeader() };
+    // No server sign-in here (the owner's devices often have none): the admin token proves the owner.
+    if (!sessionToken() && admGet(ADMIN_KEYS.TELE_TOKEN)) h.Authorization = 'Bearer ' + admGet(ADMIN_KEYS.TELE_TOKEN);
     let url = telemetryEndpoint() + path;
     if (sessionToken()) {
       if (body) h['X-GPA-Session'] = sessionToken();
@@ -14961,7 +14972,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     if (!data.ok && !data.error) data.error = 'HTTP ' + res.status;
     return data;
   }
-  const dmSignedIn = () => { try { return !!(currentUser && sessionToken()); } catch (e) { return false; } };
+  // Signed in on the server, or the owner with Admin connected / the owner code.
+  const dmSignedIn = () => { try { return !!(currentUser && (sessionToken() || admGet(ADMIN_KEYS.OWNER_CODE) || admGet(ADMIN_KEYS.TELE_TOKEN))); } catch (e) { return false; } };
   function dmPane() { return panel.querySelector('.gpa-pane[data-pane="chat"]'); }
   function dmSetPaneMode() {
     const pane = dmPane();

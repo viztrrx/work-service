@@ -90,10 +90,9 @@ try {
   await ana.page.waitForTimeout(1500);
   const opened = await R(ana.page, (r) => ({ title: r.querySelector('.gpa-pane[data-pane="chat"] .gpx-title').textContent, list: !r.querySelector('#gpa-dm').hidden,
     pill: r.querySelector('#gpa-dm-newpill').hidden, logHidden: getComputedStyle(r.querySelector('#gpa-chat-log')).display === 'none',
-    active: r.querySelector('.gpa-dropdown-item.active') && r.querySelector('.gpa-dropdown-item.active').dataset.tab, safety: r.querySelector('.gpa-dm-safety').textContent }));
+    active: r.querySelector('.gpa-dropdown-item.active') && r.querySelector('.gpa-dropdown-item.active').dataset.tab }));
   check('Messages opens: titled “Messages”, the conversation list, no room log', opened.title === 'Messages' && opened.list && opened.logHidden && opened.active === 'dms', JSON.stringify(opened));
   check('…the NEW label goes once you’ve opened it', opened.pill === true);
-  check('…and it says the owner and admins can read messages', /owner and admins can read messages/.test(opened.safety));
   await shot(ana.page, '02-messages-empty.png');
 
   // 2: a direct message.

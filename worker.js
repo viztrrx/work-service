@@ -3796,8 +3796,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       if (CONV_RE.test(id)) {
         const conv = await getConv(kv, id);
         if (!conv) return { ok: false, error: 'no such room' };
-        const p = await resolvePrincipal();
-        const me = p && p.kind === 'session' ? String(p.user).toLowerCase() : '';
+        const who = await chatIdentity();
+        const me = who ? String(who.user).toLowerCase() : '';
         if (me && conv.members.includes(me)) return { ok: true, id, conv, room: { name: convLabel(conv, me) } };
         if (await canMonitorChats()) return { ok: true, id, conv, monitor: true, room: { name: convLabel(conv, '') } };
         return { ok: false, error: 'no such room' };
@@ -3843,6 +3843,20 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       return !!(env && env.OWNER_CODE && code && (await timingSafeEqualStr(code, env.OWNER_CODE)));
     };
     // Room ids are cut at 40 characters, so a long name's inbox goes by a hash.
+    // Who is using Messages: the signed-in account, or the owner proven by the
+    // admin token or owner code (the owner's devices often have no server
+    // sign-in for the owner name: it needs OWNER_CODE to be created).
+    const chatIdentity = async () => {
+      const sess = await resolveSession();
+      if (sess) return { user: sess.user };
+      const p = await resolvePrincipal();
+      const code = req.headers.get('X-GPA-Owner') || '';
+      if ((p && p.kind === 'token' && p.role === 'owner') || (env && env.OWNER_CODE && code && (await timingSafeEqualStr(code, env.OWNER_CODE)))) {
+        const a = await getAcct(env && env.TELEMETRY, OWNER);
+        return { user: (a && a.user) || OWNER, owner: true };
+      }
+      return null;
+    };
     const inboxCall = async (who, action, body) => {
       const k = String(who).toLowerCase();
       return chatRoomCall(env, 'inbox-' + (k.length <= 34 ? k : (await sha256hex('inbox|' + k)).slice(0, 34)), action, body);
@@ -5033,8 +5047,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     if (url.pathname.startsWith('/dm/')) {
       const kv = kvMain;
       if (!kv || !chatInRooms) return json({ ok: false, error: 'Messages aren’t available on this server.' }, 200);
-      const p = await resolvePrincipal();
-      if (!p || p.kind !== 'session') return json({ ok: false, error: 'Sign in to use Messages.', signin: true }, 401);
+      const p = await chatIdentity();
+      if (!p) return json({ ok: false, error: 'Sign in to use Messages.', signin: true }, 401);
       const me = String(p.user);
       const meLower = me.toLowerCase();
       const cfg = await getConfig(kv);
@@ -5199,7 +5213,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     if (url.pathname === '/notify/claim' && req.method === 'POST') {
       const kv = kvMain;
       if (!kv || !chatInRooms) return json({ ok: false, fresh: [] }, 200);
-      const p = await resolveSession();
+      const p = await chatIdentity();
       if (!p) return json({ ok: false, error: 'Sign in first.', fresh: [] }, 401);
       const body = await readJson();
       const keys = [...new Set((Array.isArray(body.keys) ? body.keys : []).map((k) => String(k || '').slice(0, 80)).filter((k) => /^[a-z0-9:|@._-]{3,80}$/i.test(k)))].slice(0, 20);

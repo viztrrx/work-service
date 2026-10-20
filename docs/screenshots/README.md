@@ -390,8 +390,9 @@ Messages.
 
 <img src="13-messages/1-sidebar-new.png" width="320" alt="Messages in the sidebar with a NEW label">
 
-**Messages, empty:** New message, New group, and the line that tells
-everyone the owner and admins can read messages.
+**Messages, empty:** New message and New group. (This picture still shows
+a line about the owner and admins reading messages; that line has since
+been removed.)
 
 <img src="13-messages/2-messages-empty.png" width="320" alt="Messages with no conversations yet">
 

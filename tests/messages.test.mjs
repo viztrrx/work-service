@@ -247,3 +247,27 @@ test('pop-up notifications: each message once per browser; skipped where the app
   assert.equal((await claim(['msg:public:9'])).data.push.mention, true);
   assert.equal((await claim(['msg:public:10'], 'Mozilla/5.0 (Windows NT 10.0) Chrome/130')).data.push.mention, false, 'a different browser');
 });
+
+test('the owner with no server sign-in (Admin connected, or the owner code) can use Messages', async () => {
+  const t = setup();
+  const maya = await t.reg('maya');
+  // No session for the owner name at all: only the admin token.
+  const r = await t.call('/dm/start', { method: 'POST', headers: ownerTok, body: { to: 'maya' } });
+  assert.equal(r.data.ok, true, JSON.stringify(r.data));
+  const id = r.data.conv.id;
+  assert.equal(r.data.conv.title, 'maya');
+  assert.equal((await t.call('/chat/send', { method: 'POST', headers: ownerTok, body: { user: 'boss', room: id, text: 'hi from the owner' } })).data.ok, true);
+  await t.settle();
+  assert.equal((await poll(t, maya, id)).data.messages[0].t, 'hi from the owner');
+  assert.equal((await t.call('/dm/list', { headers: ownerTok })).data.convs.length, 1);
+  // Maya answers; the owner reads it with the owner code instead.
+  await send(t, maya, id, 'hi boss');
+  const code = { 'X-GPA-Owner': 'owner-code-9' };
+  const seen = (await t.call(`/chat/poll?room=${id}&since=0&user=boss`, { headers: code })).data;
+  assert.equal(seen.ok, true);
+  assert.equal(seen.monitor, undefined, 'a member, not a reviewer');
+  assert.deepEqual(seen.messages.map((m) => m.t), ['hi from the owner', 'hi boss']);
+  assert.equal((await t.call('/chat/send', { method: 'POST', headers: code, body: { user: 'boss', room: id, text: 'got it' } })).data.ok, true);
+  // A wrong code is nobody.
+  assert.equal((await t.call('/dm/list', { headers: { 'X-GPA-Owner': 'nope' } })).status, 401);
+});

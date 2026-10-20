@@ -13,6 +13,18 @@ list (rounds 1–3) was finished and pushed.
 ### Status right now
 - **Nothing is half-done.** All work from this session is on `main` and
   deployed (pushing to `main` deploys; see below). The last commit:
+  **Messages for the owner without a server sign-in** (owner's iPhone said
+  "Sign in to send and get messages"): the owner name only gets a server
+  session when OWNER_CODE is proven at account creation, so the owner's
+  devices usually have none. `chatIdentity()` (worker.js, next to
+  `inboxCall`) = session user, else the owner via the owner admin token or
+  a valid X-GPA-Owner; used by the conversation branch of
+  `checkRoomAccess`, `/dm/*` and `/notify/claim`. Client: `dmSignedIn()`
+  also accepts an owner code / admin token in memory; `dmFetch` and
+  `staffProofHeaders(convRoom)` send the admin token (and code) when there
+  is no session. Tests: messages.test.mjs (+1), browser
+  owner-messages.mjs (9).
+  Before that:
   **Rename songs; owner upload fix; Chromebook pop-ups** (owner: "rename the
   music file and change the artist and name… everyone"; owner's upload said
   "Sign in to keep your own music"; "dm and chat notifications for chrome
@@ -941,7 +953,8 @@ real client build is separate, see `eaglercraft/README.md`), Saints Command.
 
 | Commit | What |
 |---|---|
-| (this) | Rename songs; owner upload fix (admin token hid the session); Chromebook pop-ups |
+| (this) | Messages for the owner with no server sign-in (admin token / owner code = owner: `chatIdentity()`) |
+| `bac7267` | Rename songs; owner upload fix (admin token hid the session); Chromebook pop-ups |
 | `ec28acb` | Messages (DMs + group chats, safety review), @everyone, Welcome stats |
 | `bfd4068` | Proxy: several approved sites (allowlist, /status/, isolation) |
 | `31214c0` | Proxy tab on the Saints proxy Worker (proxy-worker/) |
@@ -1011,6 +1024,7 @@ node tests/browser/chat-live.mjs           # 23
 node tests/browser/chat-replies.mjs        # 20
 node tests/browser/chat-round2.mjs         # 26 (fake microphone)
 node tests/browser/messages.mjs            # 35 (DMs, groups, safety review, @everyone, Welcome stats)
+node tests/browser/owner-messages.mjs      # 9 (owner with no server sign-in, Admin connected)
 node tests/browser/my-music-edit.mjs       # 11 (rename songs; owner upload with Admin connected)
 node tests/browser/chromebook-notify.mjs   # 17 (pop-ups, Chromebook UA, injected on 2 sites; ~4 min)
 node tests/browser/fun.mjs                 # 18
