@@ -58,8 +58,11 @@ transparent compatibility view **before** attempting to fetch the YouTube SPA:
   Saints Service tab does not report a failed upstream HEAD request for a
   page which the Worker itself is serving.
 
+The Saints Service client gives only these Worker-generated, validated video
+pages a separate iframe sandbox policy allowing YouTube's official player to
+use its origin. All other proxied pages retain their original opaque sandbox.
 The official embed can still be blocked by YouTube's embedding rules, iOS
-Safari's inherited iframe sandbox, or the host website's CSP. A direct-open
+Safari's browser policies, or the host website's CSP. A direct-open
 link is always present. This does not circumvent embedding restrictions or
 provide a full YouTube proxy. The Worker-generated video page uses
 `strict-origin-when-cross-origin` to satisfy YouTube's documented embed

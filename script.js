@@ -12007,6 +12007,34 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     proxy.cspTimer = setTimeout(stopProxyCsp, 4000);
   }
 
+  // The Worker renders a script-free first-party page for a validated YouTube
+  // video. Only that page can host an official embedded player with a normal
+  // origin; all other proxied pages retain their original opaque sandbox.
+  function isSaintsYoutubeVideoPage(frameUrl) {
+    try {
+      const u = new URL(frameUrl);
+      if (u.origin !== DEFAULT_PROXY_SERVER) return false;
+      const m = new RegExp('^/site/(youtube[.]com|www[.]youtube[.]com|m[.]youtube[.]com|youtu[.]be)(/.*)$').exec(u.pathname);
+      if (!m || !proxy.targets.includes(m[1])) return false;
+      const path = m[2];
+      const id = m[1] === 'youtu.be' ? path.split('/')[1] :
+        path === '/watch' ? u.searchParams.get('v') :
+        (new RegExp('^/(?:shorts|live|embed)/([^/]+)').exec(path) || [])[1];
+      return /^[A-Za-z0-9_-]{11}$/.test(id || '');
+    } catch (e) { return false; }
+  }
+  function setProxyFramePermissions(frameUrl) {
+    const officialPlayer = isSaintsYoutubeVideoPage(frameUrl);
+    proxyFrame.setAttribute('sandbox', officialPlayer
+      ? 'allow-scripts allow-same-origin allow-presentation allow-popups'
+      : 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox');
+    proxyFrame.setAttribute('referrerpolicy', officialPlayer
+      ? 'strict-origin-when-cross-origin' : 'no-referrer');
+    proxyFrame.setAttribute('allow', officialPlayer
+      ? 'autoplay; encrypted-media; fullscreen; picture-in-picture'
+      : 'fullscreen; clipboard-write');
+  }
+
   // Loads a Worker URL in the frame (the same frame every time). Skips the
   // reload when it's already showing that URL, unless forced.
   function proxyLoad(frameUrl, opts) {
@@ -12017,6 +12045,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     hideProxyError();
     proxy.blocked = false;
     proxy.current = frameUrl;
+    setProxyFramePermissions(frameUrl);
     proxy.pending = { url: frameUrl, at: Date.now() };
     setProxyStatus('Connecting…');
     document.addEventListener('securitypolicyviolation', onProxyCsp, true);
