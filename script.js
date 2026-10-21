@@ -4828,6 +4828,11 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           <div><div class="gps-label">Admin Command Center</div><p class="gps-hint">Users, AI usage, memory, security, moderation, system health and the audit log.</p></div>
           <button id="gpa-open-gac" class="gps-btn gps-btn-primary">Open</button>
         </div>
+        <div class="gps-item gps-item-row" id="gpa-extension-user-card" hidden data-k="account chrome extension download">
+          <div><div class="gps-label">Saints Service for Chrome</div>
+            <p class="gps-hint">Your server account has been approved to download the Chrome extension.</p></div>
+          <button id="gpa-extension-user-download" class="gps-btn gps-btn-primary" type="button">Download extension</button>
+        </div>
         <!-- Admin console: hidden until unlocked by the secret gesture on the
              "Account & sync" heading (click it 5x) + PIN. Rendered here but
              display:none, and re-hidden on every load. -->
@@ -22928,6 +22933,58 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     document.body.appendChild(toast);
     setTimeout(() => { if (toast.parentNode) toast.remove(); }, 15000);
   }
+
+  // Chrome extension downloads go through the Worker's verified session/role
+  // checks. Never put an admin token or session token into a download URL.
+  async function downloadSaintsExtension(headers, button) {
+    if (!headers) { showToast('Sign in first.', { type: 'danger' }); return; }
+    if (button) button.disabled = true;
+    try {
+      const response = await fetch(telemetryEndpoint() + '/extension/download', {
+        headers, cache: 'no-store'
+      });
+      if (!response.ok) {
+        const d = await response.json().catch(() => ({}));
+        throw new Error(d.error || ('Download failed (HTTP ' + response.status + ')'));
+      }
+      const data = await response.blob();
+      if (!data.size || data.type !== 'application/zip') throw new Error('The server did not return a ZIP.');
+      const url = URL.createObjectURL(data);
+      try {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'saints-service-extension.zip';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } finally { setTimeout(() => URL.revokeObjectURL(url), 30000); }
+      showToast('Extension ZIP downloaded. Extract it, then open chrome://extensions on desktop Chrome to install.');
+    } catch (e) {
+      showToast('Chrome extension: ' + (e.message || e), { type: 'danger' });
+    } finally { if (button) button.disabled = false; }
+  }
+  (function approvedExtensionDownload() {
+    const card = panel.querySelector('#gpa-extension-user-card');
+    const button = panel.querySelector('#gpa-extension-user-download');
+    if (!card || !button) return;
+    const refresh = async () => {
+      card.hidden = true;
+      const token = sessionToken();
+      if (!token) return;
+      try {
+        const r = await fetch(telemetryEndpoint() + '/extension/access', {
+          headers: { 'X-GPA-Session': token }, cache: 'no-store'
+        });
+        const d = await r.json();
+        // Only reveal this card after the Worker verifies this session.
+        if (r.ok && d.allowed && sessionToken() === token) card.hidden = false;
+      } catch (_) { card.hidden = true; }
+    };
+    button.addEventListener('click', () =>
+      downloadSaintsExtension({ 'X-GPA-Session': sessionToken() }, button));
+    onSessionChange(refresh);
+    if (sessionToken()) refresh();
+  })();
 
   // ---- Admin console --------------------------------------------------------
   (function adminConsole() {
