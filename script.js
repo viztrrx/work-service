@@ -23103,6 +23103,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       { id: 'security', label: 'Security', icon: 'advanced', perm: 'security.view', desc: 'Sign-in failures, lockouts, spoofing attempts, rate limits and session policy.' },
       { id: 'moderation', label: 'Moderation', icon: 'eye', perm: 'moderation.view', desc: 'Reported chat messages, live users and chat policy.' },
       { id: 'content', label: 'Content & Data', icon: 'folder', perm: 'moderation.view', desc: 'Broadcasts, announcements, backups and this browser\'s stored data.' },
+      { id: 'extension', label: 'Extension & Access', icon: 'settings', perm: 'system.view', desc: 'Download Saints Service for Chrome and manage approved usernames.' },
       { id: 'system', label: 'System', icon: 'panel', perm: 'system.view', desc: 'Worker health, configuration, feature switches and client updates.' },
       { id: 'automation', label: 'Automation', icon: 'timer', perm: 'automation.run', desc: 'Scheduled jobs: last run, next run, and manual runs.' },
       { id: 'developer', label: 'Developer', icon: 'lab', perm: 'system.view', desc: 'Diagnostics that never reveal secret values, plus raw worker details.' },
@@ -23118,6 +23119,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       security: '<div class="gv gv-shield"><i></i><b></b></div>',
       moderation: '<div class="gv gv-lens"><i></i><i></i><b></b></div>',
       content: GPX_SCENES.saved,
+      extension: GPX_SCENES.saved,
       system: '<div class="gv gv-stack"><i><s></s><s></s></i><i><s></s><s></s></i><i><s></s><s></s></i></div>',
       automation: '<div class="gv gv-flow"><i></i><i></i><i></i><i></i><b></b><b></b><b></b></div>',
       developer: '<div class="gv gv-term"><i><s></s><s></s><s></s><em></em></i></div>',
@@ -23910,6 +23912,56 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         if (!b.querySelector('#gac-legacy-content')) b.innerHTML = '<div id="gac-legacy-content"></div>';
         placeLegacy('content');
       },
+      async extension() {
+        const d = await api('/extension/access');
+        setHero('extension', d.allowed ? 'Download available' : 'Not approved', d.allowed ? 'done' : 'error');
+        const b = body('extension');
+        b.innerHTML = card('Chrome extension',
+          '<p class="gps-hint">Download the current Saints Service interface as a Chrome extension. Click the toolbar icon on any regular website to show or hide the floating panel. It requests tab access only when clicked.</p>'
+          + '<button class="gps-btn gps-btn-primary" type="button" id="gac-ext-download">Download Chrome extension (.zip)</button>'
+          + '<p class="gps-hint">Install: extract the ZIP, visit chrome://extensions on desktop Chrome, enable Developer mode, select Load unpacked, and choose the folder. Download an updated ZIP to update. The extension never grants admin powers.</p>', 'settings')
+          + (d.canManage ? card('Approved usernames',
+            '<p class="gps-hint">The owner (ivan) and admins automatically have download access. Add a username to approve that account without granting admin privileges. Removing it blocks future downloads, not already installed copies.</p>'
+            + '<div class="gps-row"><input class="gpa-input" id="gac-ext-user" maxlength="40" placeholder="Username" autocomplete="off"><button class="gps-btn gps-btn-primary" id="gac-ext-allow" type="button">Allow</button></div>'
+            + '<p class="gps-hint" id="gac-ext-msg" aria-live="polite"></p><div class="gpa-admin-users">'
+            + ((d.users || []).length ? d.users.map((user) =>
+              '<div class="gpa-row" style="align-items:center;justify-content:space-between;margin:5px 0"><span>' + esc(user) + '</span>'
+              + '<button type="button" class="gps-btn" data-ext-revoke="' + esc(user) + '">Remove</button></div>'
+            ).join('') : '<p class="gps-hint">No extra usernames approved.</p>')
+            + '</div>', 'users') : '');
+        const download = b.querySelector('#gac-ext-download');
+        if (download) {
+          download.disabled = !d.allowed;
+          download.addEventListener('click', () => downloadSaintsExtension(creds(), download));
+        }
+        if (!d.canManage) return;
+        const input = b.querySelector('#gac-ext-user');
+        const msg = b.querySelector('#gac-ext-msg');
+        const change = async (user, allow, button) => {
+          if (button) button.disabled = true;
+          msg.textContent = '';
+          try {
+            await api('/extension/access', { method: 'POST', body: { user, allow } });
+            await RENDER.extension();
+            showToast((allow ? 'Approved ' : 'Removed ') + user + '.');
+          } catch (e) {
+            msg.textContent = e.message || String(e);
+            if (button) button.disabled = false;
+          }
+        };
+        const add = b.querySelector('#gac-ext-allow');
+        add.addEventListener('click', () => {
+          const user = input.value.trim();
+          if (!user) { msg.textContent = 'Enter a username.'; return; }
+          change(user, true, add);
+        });
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); add.click(); }
+        });
+        b.querySelectorAll('[data-ext-revoke]').forEach((btn) => {
+          btn.addEventListener('click', () => change(btn.dataset.extRevoke, false, btn));
+        });
+      },
       async system() {
         const d = await api('/admin/diagnostics', { method: 'POST', body: {} });
         const cfgView = await api('/admin/config/view').catch(() => null);
@@ -24485,7 +24537,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     function applyPerms() {
       SECTIONS.forEach((s) => {
         const t = nav.querySelector(`[data-asec="${s.id}"]`);
-        const allowed = s.id === 'content' ? !!state.who : can(s.perm);
+        const allowed = s.id === 'extension'
+          ? !!state.who && (state.who.role === 'owner' || state.who.role === 'admin')
+          : s.id === 'content' ? !!state.who : can(s.perm);
         t.hidden = !allowed;
       });
     }
