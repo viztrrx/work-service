@@ -12517,6 +12517,13 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     if (e.source !== proxyFrame.contentWindow) return;
     // The toolbar's Close and Fullscreen buttons (it replaced the console's bar).
     if (d.type === 'close') { closeProxy('The proxy was closed.'); return; }
+    // Saints Search blocked an AI site: close it and open Ask AI instead.
+    if (d.type === 'open-ai') {
+      closeProxy('AI sites can\u2019t be used in the proxy. Use Ask AI here instead.');
+      const ask = panel.querySelector('.gpa-dropdown-item[data-tab="ask"]');
+      if (ask) ask.click();
+      return;
+    }
     // Saints Search asking who is signed in (for its saved sessions).
     if (d.type === 'account?') { proxySendAccount(); return; }
     if (d.type === 'fullscreen') { if (px.toggleFs) px.toggleFs(); return; }
