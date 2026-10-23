@@ -856,7 +856,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     { at: '2026-10-23T11:00:00-04:00', commit: '', title: 'Proxy launcher redesigned; about:blank needs no fullscreen', parts: {
       browser: ['redesign', 'A clean launcher with two options: In this tab (Enter Fullscreen, then Launch) and In a new window (about:blank, opens right away with no fullscreen needed); it fits every panel size without scrolling']} },
     { at: '2026-10-23T14:00:00-04:00', commit: '', title: 'Admin: Proxy monitor', parts: {
-      admin: ['feature', 'A Proxy monitor section: who is on the Proxy right now and the site they proxied and are on, the day’s activity by user with the domains they proxied, and each person’s history for the day when you press their name; Proxy alerts open it'] } }
+      admin: ['feature', 'A Proxy monitor section: who is on the Proxy right now and the site they proxied and are on, the day’s activity by user with the domains they proxied, and each person’s history for the day when you press their name; Proxy alerts open it'] } },
+    { at: '2026-10-23T16:00:00-04:00', commit: '', title: 'Sign-in only through the server', parts: {
+      console: ['fix', 'Sign in, Create (planet), sync codes and remembered sign-ins all need the Worker to accept the account first; the sign-in screen stays locked until the Worker answers'] } },
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -6560,6 +6562,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpa-login-logo { background: #11161c; overflow: hidden; border: 1px solid var(--gpa-border); }
       .gpa-login-logo img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; -webkit-user-drag: none; }
       .gpa-login-logo:active { transform: scale(0.94); }
+      .gpa-login-logo:disabled, #gpa-login-btn:disabled, #gpa-login-restore:disabled { opacity: .5; cursor: not-allowed; }
+      .gpa-login-logo:disabled:active { transform: none; }
       .gpa-login-company { font-size: 15px; font-weight: 600; color: var(--gpa-text); line-height: 1.2; }
       .gpa-login-dept { font-size: 11px; color: var(--gpa-sub); margin-top: 2px; }
       .gpa-login-divider { height: 1px; background: var(--gpa-border); margin: 16px 0; }
@@ -17590,7 +17594,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   async function accessAllowed(user) {
     accessNeedsServer = false;
     accessDeniedMsg = ACCESS_DENIED_MSG;
-    if (typeof telemetryOn !== 'function' || !telemetryOn()) return true;
+    // No server configured is the same as no server: nobody signs in.
+    if (typeof telemetryOn !== 'function' || !telemetryOn()) { accessDeniedMsg = SERVER_UNREACHABLE_MSG; return false; }
     try {
       const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
       const timer = ctl ? setTimeout(() => ctl.abort(), 6000) : null;
@@ -17674,55 +17679,73 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     }
   });
 
+  // Every way in (Sign in, Create, a sync code, a remembered sign-in) is
+  // decided by the Worker: it checks the PIN against the server account, or
+  // creates that account, before the console opens. A profile in this
+  // browser's storage is only a cache of settings; it never signs anyone in,
+  // so a name can't be claimed here (the owner's included) while the server
+  // is unreachable, blocked, or says that account belongs to someone else.
   async function doSignIn() {
     hideAccessRequest();
+    if (!serverGateOpen()) return;
     const user = loginUserInput.value.trim();
     const pin = loginPinInput.value;
     if (!user || !pin) { showLoginMsg('Enter both a profile name and a PIN.', true); return; }
     showLoginMsg('Checking…');
     if (!(await accessAllowed(user))) { showLoginMsg(accessDeniedMsg, true); return; }
-    if (accessNeedsServer) { await serverFirstSignIn(user, pin, false); return; }
-    const profile = readProfile(user);
-    if (!profile) { showLoginMsg('No profile by that name here. Use Create, or restore a sync code.', true); return; }
-    showLoginMsg('Checking…');
-    const { ok, upgrade } = await verifyPin(user.toLowerCase(), pin, profile.pinHash);
-    if (!ok) { showLoginMsg('Wrong PIN.', true); return; }
-    // Re-hash a profile still carrying the old unsalted digest. This is the
-    // only moment the plaintext PIN exists, so it is the only chance to do it.
-    if (upgrade) {
-      try {
-        profile.pinHash = await makePinRecord(user.toLowerCase(), pin);
-        writeProfile(user, profile);
-      } catch (e) { /* signing in matters more than the re-hash */ }
-    }
-    applyState(profile.data || {});
-    showLoginMsg('');
-    enterApp(user);
-    linkServerAccount(user, pin);
+    await serverFirstSignIn(user, pin, false);
   }
 
   async function doSignUp() {
     hideAccessRequest();
+    if (!serverGateOpen()) return;
     const user = loginUserInput.value.trim();
     const pin = loginPinInput.value;
     if (!user || !pin) { showLoginMsg('Enter both a profile name and a PIN.', true); return; }
-    if (readProfile(user)) { showLoginMsg('That profile already exists here — sign in instead.', true); return; }
     if (String(pin).length < 4) { showLoginMsg('Use a PIN of at least 4 characters.', true); return; }
     showLoginMsg('Checking…');
     if (!(await accessAllowed(user))) { showLoginMsg(accessDeniedMsg, true); return; }
-    if (accessNeedsServer) { await serverFirstSignIn(user, pin, true); return; }
-    showLoginMsg('Securing your PIN…');
-    const pinHash = await makePinRecord(user.toLowerCase(), pin);
-    // A brand-new profile starts from whatever is currently set up, so you
-    // don't lose settings you'd already configured before making a profile.
-    // The one thing it must not inherit is a previous profile's answer to the
-    // language prompt — every new account picks its own.
-    localStorage.removeItem(LANG_ASKED_KEY);
-    writeProfile(user, { user, pinHash, data: collectState(), updatedAt: Date.now() });
-    showLoginMsg('');
-    enterApp(user);
-    linkServerAccount(user, pin);
+    await serverFirstSignIn(user, pin, true);
   }
+
+  // ---- Server connection gate ----------------------------------------------
+  // The sign-in screen stays locked (Sign in, the planet icon and Transfer
+  // access code disabled) until the Worker answers /health with accounts
+  // turned on. It keeps checking every few seconds while the screen is up,
+  // and every sign-in still asks the server again, so a dropped connection
+  // after the check refuses too.
+  let serverGate = 'checking';   // checking | ready | down
+  const GATE_CONNECTING_MSG = 'Connecting to the Saints Service server…';
+  const gateButtons = () => ['#gpa-login-btn', '#gpa-signup-btn', '#gpa-login-restore'].map((q) => panel.querySelector(q)).filter(Boolean);
+  function renderServerGate() {
+    const ready = serverGate === 'ready';
+    gateButtons().forEach((b) => { b.disabled = !ready; b.setAttribute('aria-disabled', String(!ready)); });
+    if (ready) {
+      if (loginMsg.textContent === GATE_CONNECTING_MSG || loginMsg.textContent === SERVER_UNREACHABLE_MSG) showLoginMsg('');
+    } else if (!loginMsg.textContent || loginMsg.textContent === GATE_CONNECTING_MSG || loginMsg.textContent === SERVER_UNREACHABLE_MSG) {
+      showLoginMsg(serverGate === 'down' ? SERVER_UNREACHABLE_MSG : GATE_CONNECTING_MSG, serverGate === 'down');
+    }
+  }
+  let gateBusy = false;
+  async function checkServerGate() {
+    if (gateBusy) return serverGate === 'ready';
+    gateBusy = true;
+    try {
+      const info = typeof telemetryOn === 'function' && telemetryOn() ? await workerHealth(true) : null;
+      serverGate = info && info.ok && info.sessions && workerSupports('sessions') ? 'ready' : 'down';
+    } catch (e) { serverGate = 'down'; }
+    gateBusy = false;
+    renderServerGate();
+    return serverGate === 'ready';
+  }
+  function serverGateOpen() {
+    if (serverGate === 'ready') return true;
+    renderServerGate();
+    checkServerGate();
+    return false;
+  }
+  setInterval(() => { if (loginOverlay.style.display !== 'none' && !currentUser) checkServerGate(); }, 4000);
+  renderServerGate();
 
   // "Already signed in on this computer" prompt (see serverFirstSignIn).
   const movePrompt = panel.querySelector('#gpa-login-move');
@@ -17743,17 +17766,17 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // username typed on someone else's device gets nothing without the PIN.
   // The server account is the source of truth here: a device without a local
   // profile gets one once the server accepts the PIN.
-  async function serverFirstSignIn(user, pin, creating, takeover) {
+  async function serverFirstSignIn(user, pin, creating, takeover, restoreData) {
     hideMovePrompt();
     let profile = readProfile(user);
     let localOk = false;
     if (profile) localOk = (await verifyPin(user.toLowerCase(), pin, profile.pinHash)).ok;
     showLoginMsg(takeover ? 'Signing in here…' : 'Checking your PIN with the server…');
-    // A brand-new name may be claimed from Create, or from Sign in when this
-    // device already proved the PIN against its own profile.
+    // Only Create claims a brand-new name. A local profile proves nothing to
+    // the server, so Sign in never registers one.
     const inviteWrap = panel.querySelector('#gpa-login-invite-wrap');
     const invite = inviteWrap && !inviteWrap.hidden ? panel.querySelector('#gpa-login-invite').value.trim() : '';
-    const r = await linkServerAccount(user, pin, { register: creating || localOk, takeover: !!takeover, invite });
+    const r = await linkServerAccount(user, pin, { register: !!creating, takeover: !!takeover, invite });
     if (!r.ok && r.deviceLocked) return;
     if (!r.ok && r.accountLocked) {
       if (r.selfUnlock) showAccountUnlock(user);
@@ -17774,7 +17797,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       // Signed in on this same computer, on another website: one sign-in per
       // name, so ask before moving it here (which signs the other one out).
       showLoginMsg('');
-      showMovePrompt(user, r.site, () => serverFirstSignIn(user, pin, creating, true));
+      showMovePrompt(user, r.site, () => serverFirstSignIn(user, pin, creating, true, restoreData));
       return;
     }
     if (!r.ok) {
@@ -17783,7 +17806,13 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           : serverSessionError || 'Couldn’t sign in. Try again.', true);
       return;
     }
-    if (!profile) {
+    if (restoreData) {
+      // A sync code from another device: its settings, under the PIN the
+      // server just accepted.
+      profile = { user, pinHash: await makePinRecord(user.toLowerCase(), pin), data: restoreData, updatedAt: Date.now() };
+      writeProfile(user, profile);
+      applyState(restoreData);
+    } else if (!profile) {
       localStorage.removeItem(LANG_ASKED_KEY);
       profile = { user, pinHash: await makePinRecord(user.toLowerCase(), pin), data: collectState(), updatedAt: Date.now() };
       writeProfile(user, profile);
@@ -18409,12 +18438,12 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         loginPinInput.focus();
         return;
       }
-      const pinHash = await makePinRecord(user.toLowerCase(), pin);
-      applyState(payload.data);
-      writeProfile(user, { user, pinHash, data: payload.data, updatedAt: Date.now() });
-      showLoginMsg('');
-      enterApp(user);
-      linkServerAccount(user, pin);
+      if (!serverGateOpen()) return;
+      showLoginMsg('Checking…');
+      if (!(await accessAllowed(user))) { showLoginMsg(accessDeniedMsg, true); return; }
+      // The code carries settings, not an account: the server still has to
+      // accept this name and PIN before anything opens.
+      await serverFirstSignIn(user, pin, false, false, payload.data);
     } catch (e) {
       showLoginMsg("That doesn't look like a valid sync code.", true);
     }
@@ -27802,7 +27831,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // If this browser already had someone signed in, skip straight back in.
   (function restoreSession() {
     const savedUser = localStorage.getItem(SESSION_KEY);
-    if (savedUser && readProfile(savedUser) && typeof telemetryOn === 'function' && telemetryOn()) {
+    if (savedUser && readProfile(savedUser)) {
       // Server-backed: a saved sign-in only comes back after the server says
       // this name is allowed and (when sessions are required) its session is
       // still valid, so faking browser storage or blocking the server can't
@@ -27811,24 +27840,23 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       setLockedChrome(true);
       refreshAccountUI();
       (async () => {
+        if (!(await checkServerGate())) return;
         if (!(await accessAllowed(savedUser))) { localStorage.removeItem(SESSION_KEY); showLoginMsg(accessDeniedMsg, true); return; }
-        if (accessNeedsServer) {
-          const t = serverSession && serverSession.token && String(serverSession.u).toLowerCase() === String(savedUser).toLowerCase() ? serverSession.token : '';
-          let ok = false;
-          if (t) { try { const r = await fetch(AUTH_BASE() + '/auth/me', { headers: { 'X-GPA-Session': t } }); const d = await r.json().catch(() => ({})); ok = r.ok && !!d.ok; } catch (e) { ok = false; } }
-          if (!ok) { showLoginMsg('Sign in again with your PIN.'); loginUserInput.value = savedUser; return; }
-        }
+        // Always a live server session for this exact name, whatever the
+        // Worker's sign-in settings: browser storage alone never reopens it.
+        const t = serverSession && serverSession.token && String(serverSession.u).toLowerCase() === String(savedUser).toLowerCase() ? serverSession.token : '';
+        let ok = false;
+        if (t) { try { const r = await fetch(AUTH_BASE() + '/auth/me', { headers: { 'X-GPA-Session': t } }); const d = await r.json().catch(() => ({})); ok = r.ok && !!d.ok && String((d.account && d.account.user) || savedUser).toLowerCase() === String(savedUser).toLowerCase(); } catch (e) { ok = false; } }
+        if (!ok) { showLoginMsg('Sign in again with your PIN.'); loginUserInput.value = savedUser; return; }
         enterApp(savedUser);
         refreshServerSession();
       })();
-    } else if (savedUser && readProfile(savedUser)) {
-      enterApp(savedUser);
-      refreshServerSession();
     } else {
       localStorage.removeItem(SESSION_KEY);
       loginOverlay.style.display = 'flex';
       setLockedChrome(true);
       refreshAccountUI();
+      checkServerGate();
     }
   })();
 
