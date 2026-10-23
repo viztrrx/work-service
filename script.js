@@ -859,6 +859,12 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       admin: ['feature', 'A Proxy monitor section: who is on the Proxy right now and the site they proxied and are on, the day’s activity by user with the domains they proxied, and each person’s history for the day when you press their name; Proxy alerts open it'] } },
     { at: '2026-10-23T16:00:00-04:00', commit: '', title: 'Sign-in only through the server', parts: {
       console: ['fix', 'Sign in, Create (planet), sync codes and remembered sign-ins all need the Worker to accept the account first; the sign-in screen stays locked until the Worker answers'] } },
+    { at: '2026-10-23T17:00:00-04:00', commit: '', title: 'Existing users and subscribers sign in through the server too', parts: {
+      console: ['fix', 'Anyone already signed in without a server session (older copies and extensions included) is signed out at the next check and signs in with their PIN'],
+      admin: ['fix', 'Require verified sessions shows as always on'] } },
+    { at: '2026-10-23T18:00:00-04:00', commit: '', title: 'More notification settings; Proxy frame allows protected video', parts: {
+      theme: ['feature', 'Account → Mention alerts: choose which alerts come (messages, mentions, @everyone; for staff also proxy launches, sites opened, security, PIN help, new subscribers, other staff alerts). Phone notifications: Proxy launches and Sites opened are separate, and PIN resets have their own toggle'],
+      browser: ['fix', 'The proxy frame allows encrypted media and picture-in-picture'] } },
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -1414,7 +1420,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
          either one fills the pane. */
       /* The launcher card fills the pane and never scrolls: it's a size
          container, and on shorter or narrower panes the extras step aside
-         (icon, then description and note, then the heading). */
+         (the icon shrinks, then it and the description go, then the heading). */
       .gpx-proxy-room > .gpx-proxy-launcher { container: pl / size; flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: center; padding: 16px; }
       .gpx-pl { width: 100%; max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
       .gpx-pl-head { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; }
@@ -1441,8 +1447,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpx-pl-note { margin: 0; display: flex; align-items: flex-start; justify-content: center; gap: 6px; text-align: center; font-size: 11px; line-height: 1.45; color: var(--gpa-sub); }
       .gpx-pl-note svg { flex: none; width: 13px; height: 13px; margin-top: 1px; }
       .gpx-pl .gpx-inline-error { margin: 0; }
-      @container pl (max-height: 520px) { .gpx-pl { gap: 12px; } .gpx-pl-icon { display: none; } .gpx-pl-title { font-size: 16px; } }
-      @container pl (max-height: 400px) { .gpx-pl-lede { display: none; } .gpx-pl-opt { padding: 10px 12px; } }
+      @container pl (max-height: 520px) { .gpx-pl { gap: 12px; } .gpx-pl-icon { width: 36px; height: 36px; margin-bottom: 4px; border-radius: 11px; } .gpx-pl-title { font-size: 16px; } }
+      @container pl (max-height: 400px) { .gpx-pl-icon, .gpx-pl-lede { display: none; } .gpx-pl-opt { padding: 10px 12px; } }
       @container pl (max-height: 330px) { .gpx-pl-head, .gpx-pl-note, .gpx-pl-tip { display: none; } }
       /* Narrow: each option's button goes under its text, still its own size. */
       @container pl (max-width: 360px) {
@@ -4063,7 +4069,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             <span id="gpa-proxy-status" class="gpa-sr-only" role="status">Not connected</span>
             <div id="gpa-proxy-error" class="gpx-inline-error" style="display:none;"></div>
             <div class="gpx-browser-view">
-              <iframe id="gpa-proxy-frame" class="gpa-iframe" title="Proxy" allow="fullscreen; clipboard-read; clipboard-write; autoplay; gamepad; cross-origin-isolated"></iframe>
+              <iframe id="gpa-proxy-frame" class="gpa-iframe" title="Proxy" allow="fullscreen; clipboard-read; clipboard-write; autoplay; gamepad; cross-origin-isolated; encrypted-media; picture-in-picture"></iframe>
             </div>
           </section>
         </div>
@@ -4914,6 +4920,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
                   </div>
                   <div class="gps-row" id="gpa-mpush-actions" hidden><button id="gpa-mpush-test" class="gps-btn" type="button">Send a test</button></div>
                   <div class="gps-row" id="gpa-mpush-open" hidden><button id="gpa-mpush-openapp" class="gps-btn" type="button">Open the Saints Service app</button></div>
+                  <div class="gpa-push-cats" id="gpa-mpush-cats" hidden></div>
                   <p class="gps-hint" id="gpa-mpush-msg" role="status" aria-live="polite"></p>
                 </div>
                 <div class="gps-item gps-item-row" data-k="account server session sign in connected memory devices">
@@ -14659,6 +14666,53 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
               : 'A notification on this device when someone messages you, @mentions you or uses @everyone, even when Saints Service isn’t open.';
       // The Worker learns which browser this is, so pop-ups here don't repeat these alerts.
       if (dev && APP_MODE && !render.told) { render.told = true; post('/push/me/status', { id: dev.id, key: dev.key }).catch(() => null); }
+      loadPrefs();
+    }
+    // Which alerts to get (all of this person's devices): the chat ones for
+    // everyone, plus proxy, security and other staff alerts for staff.
+    const catsEl = card.querySelector('#gpa-mpush-cats');
+    let prefsFor = '';
+    async function loadPrefs(force) {
+      const who = sessionToken() ? String(currentUser || '').toLowerCase() : '';
+      if (!who) { catsEl.hidden = true; prefsFor = ''; return; }
+      if (who === prefsFor && !force) return;
+      prefsFor = who;
+      const r = await post('/push/me/prefs', {}).catch(() => null);
+      if (r && r.ok && r.data.defs) renderPrefs(r.data.defs, r.data.categories || {});
+    }
+    function renderPrefs(defs, cats) {
+      catsEl.innerHTML = '';
+      let group = null;
+      Object.keys(defs).forEach((k) => {
+        const def = defs[k];
+        if (def.group !== group) {
+          group = def.group;
+          const h = document.createElement('div');
+          h.className = 'gpa-push-group';
+          h.textContent = group;
+          catsEl.appendChild(h);
+        }
+        const on = typeof cats[k] === 'boolean' ? cats[k] : def.on;
+        const row = document.createElement('div');
+        row.className = 'gpa-push-cat';
+        const name = document.createElement('span');
+        name.textContent = def.label;
+        const sw = document.createElement('button');
+        sw.type = 'button';
+        sw.className = 'gps-switch' + (on ? ' primary' : '');
+        sw.setAttribute('aria-pressed', on ? 'true' : 'false');
+        sw.setAttribute('aria-label', def.label);
+        sw.textContent = def.label;
+        sw.addEventListener('click', async () => {
+          sw.disabled = true;
+          const res = await post('/push/me/prefs', { categories: { [k]: !on } }).catch(() => null);
+          if (res && res.ok) renderPrefs(res.data.defs, res.data.categories || {});
+          else { sw.disabled = false; say('Couldn’t save that. Check your connection.'); }
+        });
+        row.appendChild(name); row.appendChild(sw);
+        catsEl.appendChild(row);
+      });
+      catsEl.hidden = false;
     }
     card.querySelector('#gpa-mpush-openapp').addEventListener('click', () => {
       try { window.open(telemetryEndpoint() + '/console/#tab=theme&sec=account&focus=mpush', '_blank', 'noopener'); } catch (e) { /* popup blocked */ }
@@ -23806,7 +23860,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             + `<li class="${d.config.legacyQueryToken ? 'bad' : 'ok'}"><i></i><span>Legacy ?token= URLs</span><em>${d.config.legacyQueryToken ? 'Allowed' : 'Refused'}</em></li>`
             + `<li class="ok"><i></i><span>Approval queue</span><em>${d.config.approvalMode ? 'On' : 'Off'}</em></li><li class="ok"><i></i><span>Private mode</span><em>${d.config.privateMode ? 'On' : 'Off'}</em></li>`
             + `<li class="ok"><i></i><span>Allowed users only</span><em>${d.config.allowlist && d.config.allowlist.on ? 'On (' + d.config.allowlist.users.length + ')' : 'Off'}</em></li></ul>`
-            + (isOwner() ? `<button class="gps-btn" id="gac-reqsess">${d.config.requireSessions ? 'Allow legacy identity again' : 'Require verified sessions'}</button><p class="gps-hint">When required, AI and chat refuse clients that only assert a username. Turn it on once everyone runs the updated console.</p>` : ''), 'controls')
+            + (isOwner() && !d.config.requireSessions ? `<button class="gps-btn" id="gac-reqsess">${d.config.requireSessions ? 'Allow legacy identity again' : 'Require verified sessions'}</button><p class="gps-hint">When required, AI and chat refuse clients that only assert a username. Turn it on once everyone runs the updated console.</p>` : ''), 'controls')
           + (isOwner() ? card('Phone app', `<div class="gac-allow-row"><span>Only you and admins can use the app</span><button class="gps-switch${d.config.appStaffOnly !== false ? ' primary' : ''}" id="gac-app-staff" type="button" aria-pressed="${d.config.appStaffOnly !== false}" aria-label="Only you and admins can use the app">Only you and admins can use the app</button></div>`
             + `<p class="gps-hint">The home-screen app (<code>/console/</code>) signs in with a name and PIN. With this on, only you and people with the <b>admin</b> role get in; everyone else is told to use the console on a computer. To make someone an admin: Users → their name → Role: admin → Change role (they sign in again once). Admins never need the admin token: the Admin panel opens from their role, and they can be signed in on their phone and a computer at the same time.</p>`, 'account', 'gac-app-card') : '')
           + (isOwner() ? card('Access requests', `<div id="gac-access-req"><p class="gps-hint">Loading…</p></div>`, 'key') : '')
