@@ -12351,7 +12351,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
 
   // ---- Proxy tab (Scramjet proxy on Cloudflare) ---------------------------
   // The tab browses through the Scramjet frontend Worker (viztrrx/frontend,
-  // deployed at frontend.viztrrx.workers.dev). Scramjet is a general,
+  // its Scramjet 2 beta build at frontend-beta.viztrrx.workers.dev). Scramjet is a general,
   // client-side proxy: its own page carries the address bar, search and
   // browsing frame, and its service worker rewrites and tunnels traffic
   // through the Wisp backend. This tab frames that page; the frontend reports
@@ -12360,7 +12360,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // the live status and the Proxy monitor -- the same message the old proxy
   // sent. The internal data-tab/data-pane key stays "browser".
   const PROXY_SERVER_KEY = 'gpa_proxy_server_url';
-  const DEFAULT_PROXY_SERVER = 'https://frontend.viztrrx.workers.dev';
+  const DEFAULT_PROXY_SERVER = 'https://frontend-beta.viztrrx.workers.dev';
   // Addresses saved by earlier versions (the Saints Worker, old dev servers):
   // treated as "not set" so everyone moves to the Scramjet frontend.
   const LEGACY_PROXY_SERVERS = ['https://saints-proxy-test.viztrrx.workers.dev', 'https://localhost:4141', 'http://localhost:4141'];
@@ -12377,10 +12377,17 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     if (!(u.protocol === 'https:' || (u.protocol === 'http:' && local)) || u.username || u.password || (u.pathname !== '/' && u.pathname !== '') || u.search || u.hash) return '';
     return u.origin;
   }
+  // Cloudflare quick tunnels (*.trycloudflare.com) get a new random address
+  // every time they start, so a saved one has always stopped working.
+  function isStaleProxyServer(v) {
+    v = String(v || '').trim().replace(/\/+$/, '');
+    if (LEGACY_PROXY_SERVERS.includes(v)) return true;
+    try { return /(^|\.)trycloudflare\.com$/i.test(new URL(v).hostname); } catch (e) { return false; }
+  }
   function proxyServerUrl() {
     let v = '';
     try { v = localStorage.getItem(PROXY_SERVER_KEY) || ''; } catch (e) { /* storage unavailable */ }
-    if (LEGACY_PROXY_SERVERS.includes(v.replace(/\/+$/, ''))) v = '';
+    if (isStaleProxyServer(v)) v = '';
     return cleanProxyServer(v) || DEFAULT_PROXY_SERVER;
   }
   // The Scramjet frontend's own page (it provides the browsing UI itself).
