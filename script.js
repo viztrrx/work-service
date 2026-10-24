@@ -12351,7 +12351,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
 
   // ---- Proxy tab (Scramjet proxy on Cloudflare) ---------------------------
   // The tab browses through the Scramjet frontend Worker (viztrrx/frontend,
-  // its Scramjet 2 beta build at frontend-beta.viztrrx.workers.dev). Scramjet is a general,
+  // at frontend.viztrrx.workers.dev). The Scramjet 2 beta
+  // (frontend-beta.viztrrx.workers.dev) is faster but its service worker can
+  // stop routing /~/sj/ requests after a restart (404s, upstream #218/#211),
+  // so the default is the stable build; switch via the server field to test. Scramjet is a general,
   // client-side proxy: its own page carries the address bar, search and
   // browsing frame, and its service worker rewrites and tunnels traffic
   // through the Wisp backend. This tab frames that page; the frontend reports
@@ -12360,7 +12363,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // the live status and the Proxy monitor -- the same message the old proxy
   // sent. The internal data-tab/data-pane key stays "browser".
   const PROXY_SERVER_KEY = 'gpa_proxy_server_url';
-  const DEFAULT_PROXY_SERVER = 'https://frontend-beta.viztrrx.workers.dev';
+  const DEFAULT_PROXY_SERVER = 'https://frontend.viztrrx.workers.dev';
   // Addresses saved by earlier versions (the Saints Worker, old dev servers):
   // treated as "not set" so everyone moves to the Scramjet frontend.
   const LEGACY_PROXY_SERVERS = ['https://saints-proxy-test.viztrrx.workers.dev', 'https://localhost:4141', 'http://localhost:4141'];
