@@ -907,6 +907,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     { at: '2026-10-27T21:00:00-04:00', commit: '', title: 'AI models: an auto-upgrade switch, and settings that stay', parts: {
       welcome: ['feature', 'AI models: opening a person shows whether auto-upgrade for harder tasks is really on for them (set here, or what their console reports) with a switch that saves right away; the model boxes are full width on phones'],
       ask: ['fix', 'Models the owner or an admin set for you apply from the first question after a reload or a fresh inject'] } },
+    { at: '2026-10-27T23:00:00-04:00', commit: '', title: 'Admins answer access requests and messages too', parts: {
+      admin: ['feature', 'Admins see Access requests and Messages from people not on your list in Admin → Security (and on Welcome → Security), can reply, and can approve or deny; requests show who decided them. Admins get the phone alerts and pop-ups for those messages'],
+      console: ['feature', 'The sign-in screen’s chat is “Message the owner or an admin”, and each reply says whether the owner or an admin wrote it'] } },
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -8184,9 +8187,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
 
   // ---- Welcome → Security (owner and admins only) -------------------------
   // What needs them right now: devices locked after unauthorized sign-in
-  // tries (Approve = unlock), locked accounts, Forgot-PIN requests, and for
-  // the owner access requests and unread messages from people not on the
-  // list; then the last security alerts. One request (/admin/security-
+  // tries (Approve = unlock), locked accounts, Forgot-PIN requests, access
+  // requests and unread messages from people not on the list; then the last
+  // security alerts. One request (/admin/security-
   // summary); each button uses the route Admin uses for the same thing.
   const wsecCard = panel.querySelector('#gpa-wsec');
   const wsecBody = panel.querySelector('#gpa-wsec-body');
@@ -18384,10 +18387,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   const achatEl = document.createElement('div');
   achatEl.className = 'gpa-achat';
   achatEl.hidden = true;
-  achatEl.innerHTML = `<div class="gpa-login-request-head">${GPS_ICONS.chat}<span>Message the owner</span></div>`
+  achatEl.innerHTML = `<div class="gpa-login-request-head">${GPS_ICONS.chat}<span>Message the owner or an admin</span></div>`
     + `<p class="gpa-login-request-text gpa-achat-hint"></p>`
     + `<div class="gpa-achat-log" role="log" aria-live="polite"></div>`
-    + `<form class="gpa-achat-form" autocomplete="off"><input class="gpa-login-input gpa-achat-input" maxlength="500" placeholder="Write to the owner…" aria-label="Message to the owner" autocomplete="off" /><button class="gpa-login-primary gpa-achat-send" type="submit">Send</button></form>`
+    + `<form class="gpa-achat-form" autocomplete="off"><input class="gpa-login-input gpa-achat-input" maxlength="500" placeholder="Write a message…" aria-label="Message to the owner or an admin" autocomplete="off" /><button class="gpa-login-primary gpa-achat-send" type="submit">Send</button></form>`
     + `<div class="gpa-achat-err" role="alert" hidden></div>`;
   reqBox.after(achatEl);
   const achatHint = achatEl.querySelector('.gpa-achat-hint');
@@ -18402,7 +18405,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const msgs = Array.isArray(d && d.msgs) ? d.msgs : [];
     achatHint.textContent = d && d.allowed
       ? 'You’re on the list now. Sign in as “' + achatFor + '”.'
-      : msgs.length ? 'Answers from the owner show up here.' : 'The owner can message you here, and you can write to them. Say who you are.';
+      : msgs.length ? 'Answers from the owner or an admin show up here.' : 'The owner or an admin can message you here, and you can write to them. Say who you are.';
     const sig = JSON.stringify(msgs.map((m) => [m.from, m.ts]));
     if (sig === achatShown) return;
     achatShown = sig;
@@ -18411,7 +18414,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       const el = document.createElement('div');
       el.className = 'gpa-achat-msg' + (m.from === 'them' ? ' is-me' : '');
       const who = document.createElement('small');
-      who.textContent = (m.from === 'them' ? 'You' : 'Owner') + ' · ' + new Date(m.ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      who.textContent = (m.from === 'them' ? 'You' : (m.who || 'Owner')) + ' · ' + new Date(m.ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       el.append(who, document.createTextNode(String(m.text || '')));
       return el;
     }));
@@ -24087,6 +24090,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const state = { who: null, section: 'overview', cache: {}, users: [], inspecting: null, pollTimer: 0 };
     const can = (perm) => !!state.who && (state.who.perms.includes('*') || state.who.perms.includes(perm));
     const isOwner = () => !!state.who && state.who.role === 'owner';
+    // Access requests and messages from people not on the list: the owner and admins.
+    const isOwnerOrAdmin = () => !!state.who && (state.who.role === 'owner' || state.who.role === 'admin');
     // Security → Messages: the conversation open there ('' = the list).
     let accessChatOpen = '';
     // Opens one of those conversations (set once Security is drawn).
@@ -24624,8 +24629,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             + (isOwner() && !d.config.requireSessions ? `<button class="gps-btn" id="gac-reqsess">${d.config.requireSessions ? 'Allow legacy identity again' : 'Require verified sessions'}</button><p class="gps-hint">When required, AI and chat refuse clients that only assert a username. Turn it on once everyone runs the updated console.</p>` : ''), 'controls')
           + (isOwner() ? card('Phone app', `<div class="gac-allow-row"><span>Only you and admins can use the app</span><button class="gps-switch${d.config.appStaffOnly !== false ? ' primary' : ''}" id="gac-app-staff" type="button" aria-pressed="${d.config.appStaffOnly !== false}" aria-label="Only you and admins can use the app">Only you and admins can use the app</button></div>`
             + `<p class="gps-hint">The home-screen app (<code>/console/</code>) signs in with a name and PIN. With this on, only you and people with the <b>admin</b> role get in; everyone else is told to use the console on a computer. To make someone an admin: Users → their name → Role: admin → Change role (they sign in again once). Admins never need the admin token: the Admin panel opens from their role, and they can be signed in on their phone and a computer at the same time.</p>`, 'account', 'gac-app-card') : '')
-          + (isOwner() ? card('Access requests', `<div id="gac-access-req"><p class="gps-hint">Loading…</p></div>`, 'key') : '')
-          + (isOwner() ? card('Messages from people not on your list', `<div id="gac-access-chat"><p class="gps-hint">Loading…</p></div>`, 'chat') : '')
+          + (isOwnerOrAdmin() ? card('Access requests', `<div id="gac-access-req"><p class="gps-hint">Loading…</p></div>`, 'key') : '')
+          + (isOwnerOrAdmin() ? card('Messages from people not on your list', `<div id="gac-access-chat"><p class="gps-hint">Loading…</p></div>`, 'chat') : '')
           + (can('users.manage') ? helpCard() : '')
           + (can('users.manage') ? emailsCard() : '')
           + freeCard()
@@ -24831,7 +24836,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             if (!r.requests.length) { reqEl.innerHTML = '<p class="gps-hint">No requests yet. People who aren’t on your list can ask to get in from the sign-in screen.</p>'; return; }
             reqEl.innerHTML = `<p class="gps-hint">${r.pending ? r.pending + ' waiting for you.' : 'Nothing waiting.'} Approving adds the name to Allowed users.</p><ul class="gac-req-list">`
               + r.requests.map((q) => `<li class="gac-req" data-user="${esc(q.user)}"><div class="gac-req-top"><span class="gac-req-name">${esc(q.user)}</span><span class="gac-req-badge ${esc(q.status)}">${esc(q.status)}</span></div>`
-                + `<div class="gac-req-meta">${ago(q.ts)}${q.region || q.country ? ' · ' + esc([q.region, q.country].filter(Boolean).join(', ')) : ''}${q.count > 1 ? ' · asked ' + q.count + ' times' : ''}</div>`
+                + `<div class="gac-req-meta">${ago(q.ts)}${q.region || q.country ? ' · ' + esc([q.region, q.country].filter(Boolean).join(', ')) : ''}${q.count > 1 ? ' · asked ' + q.count + ' times' : ''}${q.status !== 'pending' && q.decidedBy ? ' · ' + esc(q.status) + ' by ' + esc(q.decidedBy) : ''}</div>`
                 + (q.message ? `<p class="gac-req-msg">“${esc(q.message)}”</p>` : '')
                 + `<div class="gac-req-actions">${q.status === 'pending' ? '<button class="gps-btn primary" data-act="approve" type="button">Approve</button><button class="gps-btn" data-act="deny" type="button">Deny</button>' : ''}${q.chatId ? `<button class="gps-btn" data-act="message" data-chat-id="${esc(q.chatId)}" type="button">Message</button>` : ''}<button class="gps-btn" data-act="clear" type="button">Clear</button></div></li>`).join('')
               + `</ul>`;
@@ -24888,7 +24893,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             const el = document.createElement('div');
             el.className = 'gac-achat-msg' + (m.from === 'owner' ? ' is-me' : '');
             const who = document.createElement('small');
-            who.textContent = (m.from === 'owner' ? (m.by && m.by !== 'owner' ? m.by : 'You') : c.user) + ' · ' + chatTime(m.ts);
+            const mine = m.from === 'owner' && !!state.who && !!state.who.user && String(m.by || '').toLowerCase() === String(state.who.user).toLowerCase();
+            who.textContent = (m.from === 'owner' ? (mine ? 'You' : (m.by || 'Staff') + (m.role === 'admin' ? ' (admin)' : ' (owner)')) : c.user) + ' · ' + chatTime(m.ts);
             el.append(who, document.createTextNode(String(m.text || '')));
             return el;
           }));
