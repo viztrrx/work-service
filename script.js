@@ -94,13 +94,36 @@
   const OPENAI_MODEL = 'gpt-4.1-mini';
   const SMART_MODEL_DEFAULT = 'gpt-5';
   const REASON_KEY = 'gpa_reason';
+// OpenAI chat models the console offers (Settings → power tools, Welcome →
+// AI models). Keep in step with MODEL_CATALOG in worker.js, which decides
+// what each person may use. ★ = a big (premium) model: those count against
+// the owner's big-model limits.
+const OPENAI_MODEL_LIST = [
+  ['gpt-4.1-nano', 'gpt-4.1-nano — cheapest'],
+  ['gpt-4o-mini', 'gpt-4o-mini — fast & cheap'],
+  ['gpt-4.1-mini', 'gpt-4.1-mini — the default'],
+  ['gpt-4o', 'gpt-4o — multimodal'],
+  ['gpt-4.1', 'gpt-4.1 — strong'],
+  ['gpt-5-nano', 'gpt-5-nano — fast reasoning'],
+  ['gpt-5-mini', 'gpt-5-mini — balanced reasoning'],
+  ['gpt-5', 'gpt-5 — the default for hard tasks'],
+  ['gpt-5.1', 'gpt-5.1'],
+  ['gpt-5.2', 'gpt-5.2 — top general'],
+  ['o4-mini', 'o4-mini — reasoning (math)'],
+  ['o3', '★ o3 — deep reasoning'],
+  ['gpt-5.5-pro', '★ gpt-5.5-pro'],
+  ['gpt-5.6-sol', '★ gpt-5.6-sol'],
+  ['gpt-5.6-terra', '★ gpt-5.6-terra'],
+  ['gpt-5.6-luna', '★ gpt-5.6-luna'],
+  ['gpt-6-astra', '★ gpt-6-astra — strongest']
+];
 const REASONING_MODELS = new Set([
-  'gpt-5',
-  'gpt-6-astra',
-  'gpt-5.6-luna',
-  // add other reasoning-capable IDs you allow-list, e.g.:
-  // 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.5-pro',
+  'gpt-5', 'gpt-5-nano', 'gpt-5-mini', 'gpt-5.1', 'gpt-5.2', 'o4-mini', 'o3',
+  'gpt-5.5-pro', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-6-astra'
 ]);
+// The models the owner or an admin set for this person (from /status; null
+// = none, so the console's own settings apply). The Worker enforces them.
+let serverModels = null;
 let reasoningEffort = localStorage.getItem(REASON_KEY) || 'medium';
 function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').trim()); }
   // Browser→OpenAI calls can be blocked by ad blockers, antivirus shields or
@@ -874,6 +897,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       theme: ['feature', 'Settings → Account → Staff pop-ups (owner and admins): alerts pop up inside the console on computers, Discord-style, with a bar that runs down and then dismisses them. Choose which kinds (Proxy launches and sites opened can be turned off); your phone notifications aren’t changed'],
       console: ['feature', 'Security alerts, like someone not on the list trying to get in or a device being locked, pop up as urgent: red, glowing and on screen longer'],
       welcome: ['feature', 'Owner and admins: a Security card with what needs you (locked devices to approve, locked accounts, Forgot-PIN and access requests, unread messages) and the latest security events'] } },
+    { at: '2026-10-27T18:00:00-04:00', commit: '', title: 'More GPT models, per-person models and big-model limits', parts: {
+      ask: ['feature', 'More OpenAI models to pick from (gpt-4.1-nano, gpt-5-nano, gpt-5-mini, o3, gpt-5.5-pro, gpt-5.6-sol/terra/luna, gpt-6-astra…); ★ marks the big ones. When a big-model limit is reached, a standard model answers instead and the console says so'],
+      welcome: ['feature', 'Owner and admins: an AI models card to set a person’s base model, upgraded model and auto-upgrade for harder tasks, and their daily allowance of big models; the owner also sets big-model limits per person (hour and day) and for everyone each day'] } },
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -3601,6 +3627,12 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
               </div>
               <div id="gpa-wsec-body" class="gpa-wsec-body"><p class="gpa-sub">Loading…</p></div>
             </div>
+            <div class="gpa-card gpx-card gpx-span-2 gpa-wmod" id="gpa-wmod" hidden>
+              <div class="gpx-card-head">${GPS_ICONS.ai}<div class="gpa-card-title">AI models</div><span id="gpa-wmod-at" class="gpa-sub gpa-pubstats-at"></span>
+                <button id="gpa-wmod-refresh" class="gpa-btn gpx-btn-ghost">${gpxLbl('refresh', 'Refresh')}</button>
+              </div>
+              <div id="gpa-wmod-body"><p class="gpa-sub">Loading…</p></div>
+            </div>
             <div class="gpa-card gpx-card">
               <div class="gpx-card-head">${GPS_ICONS.sun}<div class="gpa-card-title">Right now</div></div>
               <div class="gpa-snapshot-grid">
@@ -5884,6 +5916,23 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpa-wsec-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
       .gpa-wsec-actions .gpa-btn { min-height: 30px; font-size: 12.5px; }
       .gpa-wsec-ev { cursor: pointer; }
+      /* Welcome → AI models (owner and admins) */
+      .gpa-wmod[hidden] { display: none; }
+      .gpa-wmod-meter { height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--gpa-text) 10%, transparent); overflow: hidden; margin: 6px 0 4px; }
+      .gpa-wmod-meter > i { display: block; height: 100%; background: var(--gpa-accent); border-radius: inherit; }
+      .gpa-wmod-meter.is-hot > i { background: var(--gpx-err, #e5453a); }
+      .gpa-wmod-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 12px; margin-top: 6px; }
+      .gpa-wmod-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--gpa-sub); min-width: 0; }
+      .gpa-wmod-grid .gpa-input { width: 100%; min-width: 0; box-sizing: border-box; }
+      .gpa-wmod-check { flex-direction: row !important; align-items: center; gap: 8px !important; color: var(--gpa-text) !important; }
+      .gpa-wmod-pick { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+      .gpa-wmod-pick .gpa-input { flex: 1 1 180px; min-width: 0; }
+      .gpa-wmod-form { margin-top: 10px; padding: 12px; border: 1px solid var(--gpa-border); border-radius: calc(10px * var(--gpa-rs, 1)); }
+      .gpa-wmod-form[hidden] { display: none; }
+      .gpa-wmod-who { font-weight: 650; font-size: 14px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+      .gpa-wmod-who small { font-weight: 400; color: var(--gpa-sub); font-size: 12px; }
+      .gpa-wmod-custom { width: 100%; margin-top: 4px; }
+      .gpa-wmod-custom[hidden] { display: none; }
       .gpa-wsec-ev:hover { border-color: color-mix(in srgb, var(--gpa-accent) 45%, var(--gpa-border)); }
       .gpa-pubstats-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 10px; margin-top: 10px; }
       .gpa-pubstats-lists:empty { display: none; }
@@ -8216,6 +8265,128 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     setTimeout(() => { try { onSessionChange(() => { if (wsecTabVisible() || !wsecStaff()) refreshWelcomeSecurity(); }); } catch (e) { /* accounts not ready */ } }, 0);
   }
 
+  // ---- Welcome → AI models (owner and admins only) -------------------------
+  // Pick a person and set their base model, their upgraded model for harder
+  // tasks and whether auto-upgrade is on, plus their own daily allowance of
+  // big (★) models. The owner also sets the big-model limits for everyone;
+  // over a limit a request still goes through on a standard model. The Worker
+  // enforces all of it (/admin/models, /admin/models/set).
+  const wmodCard = panel.querySelector('#gpa-wmod');
+  const wmodBody = panel.querySelector('#gpa-wmod-body');
+  const wmodAt = panel.querySelector('#gpa-wmod-at');
+  let wmodData = null, wmodUser = null, wmodBusy = false;
+  const wmodOptions = (catalog, dflt, value) => {
+    const known = catalog.some((m) => m.id === value);
+    return `<option value="">Default (${wsecEsc(dflt)})</option>`
+      + catalog.map((m) => `<option value="${wsecEsc(m.id)}"${m.id === value ? ' selected' : ''}>${wsecEsc((m.premium ? '★ ' : '') + m.label)}</option>`).join('')
+      + `<option value="__custom__"${value && !known ? ' selected' : ''}>Custom…</option>`;
+  };
+  const wmodLimit = (v) => (v === null ? 'no limit' : String(v));
+  function renderWelcomeModels() {
+    const d = wmodData;
+    if (!d) return;
+    const L = d.limits;
+    const pct = L.totalDay ? Math.min(100, Math.round(d.totalToday / L.totalDay * 100)) : 0;
+    let html = `<div class="gpa-wsec-h" style="margin-top:2px">Big models (★) today</div>`
+      + `<div class="gpa-wsec-meta"><b>${d.totalToday}</b> of ${wsecEsc(wmodLimit(L.totalDay))} big-model requests for everyone today${L.includeOwner ? '' : ' (not counting yours)'}. Over a limit, the request is answered by a standard model instead.</div>`
+      + (L.totalDay ? `<div class="gpa-wmod-meter${pct >= 80 ? ' is-hot' : ''}"><i style="width:${pct}%"></i></div>` : '')
+      + (d.topToday.length ? `<div class="gpa-wsec-chips">${d.topToday.map((x) => `<span class="gpa-wsec-chip">${wsecEsc(x.user)} · ${x.today}</span>`).join('')}</div>` : '');
+    html += `<div class="gpa-wsec-h">Big-model limits${d.owner ? '' : ' <span style="text-transform:none;font-weight:400">(the owner sets these)</span>'}</div>`
+      + `<div class="gpa-wmod-grid">`
+      + `<label>Per person, each hour<input class="gpa-input" id="gpa-wmod-lh" type="number" min="0" placeholder="no limit" value="${L.perUserHour === null ? '' : L.perUserHour}"${d.owner ? '' : ' disabled'}></label>`
+      + `<label>Per person, each day<input class="gpa-input" id="gpa-wmod-ld" type="number" min="0" placeholder="no limit" value="${L.perUserDay === null ? '' : L.perUserDay}"${d.owner ? '' : ' disabled'}></label>`
+      + `<label>Everyone together, each day<input class="gpa-input" id="gpa-wmod-lt" type="number" min="0" placeholder="no limit" value="${L.totalDay === null ? '' : L.totalDay}"${d.owner ? '' : ' disabled'}></label>`
+      + `</div>`
+      + (d.owner ? `<label class="gpa-wmod-check gpa-wsec-meta" style="display:flex;margin-top:8px"><input type="checkbox" id="gpa-wmod-lo"${L.includeOwner ? ' checked' : ''}> Limit my own requests too</label>`
+        + `<div class="gpa-wsec-actions"><button class="gpa-btn primary" type="button" data-wm="limits">Save limits</button></div><p class="gpa-sub" style="margin:4px 0 0">Empty = no limit, 0 = no big models.</p>` : '');
+    html += `<div class="gpa-wsec-h">Set someone’s models</div>`
+      + `<div class="gpa-wmod-pick"><input class="gpa-input" id="gpa-wmod-name" list="gpa-wmod-names" placeholder="Type a name" autocomplete="off" value="${wmodUser ? wsecEsc(wmodUser.user) : ''}"><datalist id="gpa-wmod-names">${d.users.map((u) => `<option value="${wsecEsc(u)}">`).join('')}</datalist><button class="gpa-btn" type="button" data-wm="load">Open</button></div>`
+      + `<div class="gpa-wmod-form" id="gpa-wmod-form" hidden></div>`;
+    html += `<div class="gpa-wsec-h">People with their own models</div>` + (d.custom.length
+      ? `<ul class="gpa-wsec-list">${d.custom.map((c) => `<li class="gpa-wsec-item" data-user="${wsecEsc(c.user)}"><div class="gpa-wsec-top"><span>${wsecEsc(c.user)}</span><small>${c.used.today} big today</small></div>`
+        + `<div class="gpa-wsec-meta">Base: ${wsecEsc(c.base || 'default')} · Upgraded: ${wsecEsc(c.smart || 'default')} · Auto-upgrade: ${wsecEsc(c.autoUpgrade || 'default')} · Big models a day: ${wsecEsc(c.premiumDay === null ? 'default' : String(c.premiumDay))}</div>`
+        + `<div class="gpa-wsec-actions"><button class="gpa-btn" type="button" data-wm="edit">Edit</button></div></li>`).join('')}</ul>`
+      : '<p class="gpa-sub">Nobody yet: everyone uses the default models.</p>');
+    wmodBody.innerHTML = html;
+    wmodAt.textContent = 'Updated ' + wsecTime(Date.now());
+    if (wmodUser) renderWmodForm();
+  }
+  function renderWmodForm() {
+    const f = wmodBody.querySelector('#gpa-wmod-form');
+    if (!f || !wmodUser) return;
+    const u = wmodUser, st = u.settings, d = wmodData;
+    const L = d.limits;
+    f.hidden = false;
+    const known = (v) => !v || d.catalog.some((m) => m.id === v);
+    f.innerHTML = `<div class="gpa-wmod-who">${wsecEsc(u.user)} <small>${wsecEsc(u.role)} · ${u.used.today} big-model request${u.used.today === 1 ? '' : 's'} today, ${u.used.hour} this hour</small></div>`
+      + (u.canEdit === false ? `<p class="gpa-sub">${u.role === 'owner' ? 'The owner’s models are set in Settings → power tools on their device.' : 'Only the owner can change an admin’s models.'}</p>` : '')
+      + `<div class="gpa-wmod-grid">`
+      + `<label>Base model<select class="gpa-input" data-f="base">${wmodOptions(d.catalog, d.defaults.base, st.base)}</select><input class="gpa-input gpa-wmod-custom" data-c="base" placeholder="Model id" value="${known(st.base) ? '' : wsecEsc(st.base)}"${known(st.base) ? ' hidden' : ''}></label>`
+      + `<label>Upgraded model (harder tasks)<select class="gpa-input" data-f="smart">${wmodOptions(d.catalog, d.defaults.smart, st.smart)}</select><input class="gpa-input gpa-wmod-custom" data-c="smart" placeholder="Model id" value="${known(st.smart) ? '' : wsecEsc(st.smart)}"${known(st.smart) ? ' hidden' : ''}></label>`
+      + `<label>Auto-upgrade for harder tasks<select class="gpa-input" data-f="auto"><option value=""${!st.autoUpgrade ? ' selected' : ''}>Default (their console’s setting)</option><option value="on"${st.autoUpgrade === 'on' ? ' selected' : ''}>On</option><option value="off"${st.autoUpgrade === 'off' ? ' selected' : ''}>Off: always the base model</option></select></label>`
+      + `<label>Big (★) models a day<input class="gpa-input" type="number" min="0" data-f="prem" placeholder="default (${wsecEsc(wmodLimit(L.perUserDay))})" value="${st.premiumDay === null ? '' : st.premiumDay}"></label>`
+      + `</div>`
+      + `<div class="gpa-wsec-actions"><button class="gpa-btn primary" type="button" data-wm="save">Save for ${wsecEsc(u.user)}</button><button class="gpa-btn" type="button" data-wm="reset">Back to defaults</button></div>`;
+    if (u.canEdit === false) f.querySelectorAll('select, input, button[data-wm]').forEach((el) => { el.disabled = true; });
+  }
+  async function wmodOpen(name) {
+    name = String(name || '').trim().toLowerCase();
+    if (!/^[a-z0-9_.-]{1,40}$/.test(name)) { showToast('Type a name first.', { type: 'danger' }); return; }
+    try {
+      const r = await wsecApi('/admin/models?user=' + encodeURIComponent(name));
+      wmodUser = { ...r.user, canEdit: r.canEdit };
+      renderWelcomeModels();
+      const f = wmodBody.querySelector('#gpa-wmod-form');
+      if (f) f.scrollIntoView({ block: 'nearest' });
+    } catch (e) { showToast(e.message, { type: 'danger' }); }
+  }
+  async function refreshWelcomeModels() {
+    if (!wmodCard) return;
+    const staff = wsecStaff() && typeof telemetryOn === 'function' && telemetryOn();
+    wmodCard.hidden = !staff;
+    if (!staff || wmodBusy) return;
+    wmodBusy = true;
+    try { wmodData = await wsecApi('/admin/models'); renderWelcomeModels(); }
+    catch (e) { if (!wmodData) wmodBody.innerHTML = '<p class="gpa-sub">Couldn’t load models: ' + wsecEsc(e.message) + '</p>'; }
+    finally { wmodBusy = false; }
+  }
+  if (wmodCard) {
+    panel.querySelector('#gpa-wmod-refresh').addEventListener('click', () => refreshWelcomeModels());
+    wmodBody.addEventListener('change', (e) => {
+      const sel = e.target.closest('select[data-f="base"], select[data-f="smart"]');
+      if (!sel) return;
+      const c = wmodBody.querySelector('input[data-c="' + sel.dataset.f + '"]');
+      if (c) { c.hidden = sel.value !== '__custom__'; if (!c.hidden) c.focus(); }
+    });
+    wmodBody.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.id === 'gpa-wmod-name') { e.preventDefault(); wmodOpen(e.target.value); } });
+    wmodBody.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-wm]');
+      if (!btn) return;
+      const act = btn.dataset.wm;
+      if (act === 'load') { wmodOpen(wmodBody.querySelector('#gpa-wmod-name').value); return; }
+      if (act === 'edit') { wmodOpen(btn.closest('.gpa-wsec-item').dataset.user); return; }
+      const num = (el) => { const v = String(el.value).trim(); return v === '' ? null : Math.max(0, parseInt(v, 10) || 0); };
+      btn.disabled = true;
+      try {
+        if (act === 'limits') {
+          const r = await wsecApi('/admin/models/set', { action: 'limits', perUserHour: num(wmodBody.querySelector('#gpa-wmod-lh')), perUserDay: num(wmodBody.querySelector('#gpa-wmod-ld')), totalDay: num(wmodBody.querySelector('#gpa-wmod-lt')), includeOwner: wmodBody.querySelector('#gpa-wmod-lo').checked });
+          wmodData.limits = r.limits;
+          showToast('Big-model limits saved.');
+        } else if (act === 'save' || act === 'reset') {
+          const f = wmodBody.querySelector('#gpa-wmod-form');
+          const model = (k) => { const sel = f.querySelector('select[data-f="' + k + '"]'); return sel.value === '__custom__' ? f.querySelector('input[data-c="' + k + '"]').value.trim() : sel.value; };
+          const body = act === 'reset' ? { action: 'user', u: wmodUser.user, base: '', smart: '', autoUpgrade: '', premiumDay: null }
+            : { action: 'user', u: wmodUser.user, base: model('base'), smart: model('smart'), autoUpgrade: f.querySelector('select[data-f="auto"]').value, premiumDay: num(f.querySelector('input[data-f="prem"]')) };
+          const r = await wsecApi('/admin/models/set', body);
+          wmodUser = { ...r.user, canEdit: true };
+          showToast(act === 'reset' ? wmodUser.user + ' is back on the default models.' : 'Saved. ' + wmodUser.user + '’s next request uses these models.');
+        }
+        await refreshWelcomeModels();
+      } catch (err) { btn.disabled = false; showToast(err.message, { type: 'danger' }); }
+    });
+    setTimeout(() => { try { onSessionChange(() => { if (wsecTabVisible() || !wsecStaff()) refreshWelcomeModels(); }); } catch (e) { /* accounts not ready */ } }, 0);
+  }
+
   function activateWelcomePane() {
     panel.querySelectorAll('.gpa-dropdown-item').forEach((b) => b.classList.remove('active'));
     panel.querySelectorAll('.gpa-pane').forEach((p) => p.classList.remove('active'));
@@ -8231,6 +8402,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     startNycClock();
     refreshWelcomeData();
     refreshWelcomeSecurity();
+    refreshWelcomeModels();
     startWelcomeAiStatusPolling();
     loadThreeJs();
   }
@@ -8916,8 +9088,12 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     return { ...(extra || {}), Authorization: 'Bearer ' + t };
   }
   // Auto-upgrade defaults to ON until the owner explicitly turns it off.
-  function autoUpgradeOn() { const v = admGet(ADMIN_KEYS.AUTO_UPGRADE); return v === null ? true : v === 'on'; }
-  function smartModel() { return (admGet(ADMIN_KEYS.SMART_MODEL) || '').trim() || SMART_MODEL_DEFAULT; }
+  // Models the owner or an admin set for this person win over this device's.
+  function autoUpgradeOn() {
+    if (serverModels && serverModels.autoUpgrade) return serverModels.autoUpgrade === 'on';
+    const v = admGet(ADMIN_KEYS.AUTO_UPGRADE); return v === null ? true : v === 'on';
+  }
+  function smartModel() { return (serverModels && serverModels.smart) || (admGet(ADMIN_KEYS.SMART_MODEL) || '').trim() || SMART_MODEL_DEFAULT; }
   // Writes the default base and smart models into storage. Runs once when the
   // script loads and again on every sign-in (see enterApp), so each session
   // starts on gpt-4.1-mini / gpt-5 no matter what was picked before.
@@ -8933,6 +9109,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // else the default base model.
   function effectiveModel(dflt, hard) {
     if (hard && autoUpgradeOn() && smartModel()) return smartModel();
+    if (serverModels && serverModels.base) return serverModels.base;
     const m = (admGet(ADMIN_KEYS.MODEL) || '').trim();
     return m || dflt;
   }
@@ -9201,6 +9378,15 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     }
     const data = await res.json();
     lastMemoryUsed = data && data._gpa_memory ? (data._gpa_memory.used || 0) : null;
+    // The Worker swapped the model (not one you're given, or a big-model limit).
+    if (data && data._gpa_model && data._gpa_model.used) {
+      lastAIModel = String(data._gpa_model.used);
+      lastAIUpgraded = false;
+      if (/^premium_/.test(data._gpa_model.why || '') && Date.now() - (callOpenAI.limitToastAt || 0) > 10 * 60000) {
+        callOpenAI.limitToastAt = Date.now();
+        showToast('Big-model limit reached' + (data._gpa_model.why === 'premium_total' ? ' for today' : '') + ', so ' + data._gpa_model.used + ' answered instead of ' + data._gpa_model.asked + '.', { duration: 7000 });
+      }
+    }
     return data?.choices?.[0]?.message?.content || '(no response)';
   }
 
@@ -23123,6 +23309,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     if ('usage' in s) renderUsageMeter(s.usage);
     if ('subscription' in s) renderSubStrip(s.subscription);
     if (s.assignedKeys && typeof s.assignedKeys === 'object') applyAssignedKeys(s.assignedKeys);
+    if ('models' in s) serverModels = s.models && typeof s.models === 'object' ? s.models : null;
     if (typeof s.brandName === 'string') applyBrandName(s.brandName);
     if (typeof s.defaultTheme === 'string') maybeApplyServerDefaultTheme(s.defaultTheme);
     if (typeof s.kickNonce === 'number') {
@@ -26484,20 +26671,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     // ---- Power tools ----
     // Known OpenAI chat model ids (Sept 2026). The Custom… option future-proofs
     // the list; an invalid id just returns a clear 404.
-    const MODEL_OPTIONS = [
-      ['', 'Default'],
-      ['gpt-4o-mini', 'gpt-4o-mini — fast & cheap'],
-      ['gpt-4o', 'gpt-4o — stronger, multimodal'],
-      ['gpt-4.1-mini', 'gpt-4.1-mini'],
-      ['gpt-4.1', 'gpt-4.1 — strong'],
-      ['gpt-5', 'gpt-5'],
-      ['gpt-5.1', 'gpt-5.1'],
-      ['gpt-5.2', 'gpt-5.2 — top general'],
-      ['o4-mini', 'o4-mini — reasoning (hard math)'],
-      ['gpt-5.6-luna', 'gpt-5.6-luna'],
-      ['gpt-6-astra', 'gpt-6-astra - strongest model (any subject)'],
-      ['__custom__', 'Custom…']
-    ];
+    const MODEL_OPTIONS = [['', 'Default'], ...OPENAI_MODEL_LIST, ['__custom__', 'Custom…']];
     function fillModelSelect(sel) {
       sel.innerHTML = MODEL_OPTIONS.map(([v, label]) => `<option value="${v}">${escapeHtml(label)}</option>`).join('');
     }

@@ -191,6 +191,56 @@ const fromUtf8 = (b) => new TextDecoder().decode(b);
 const hexOf = (buf) => [...new Uint8Array(buf)].map((x) => x.toString(16).padStart(2, '0')).join('');
 const randHex = (n) => { const a = new Uint8Array(n); crypto.getRandomValues(a); return hexOf(a); };
 const dayKey = (t) => new Date(t || Date.now()).toISOString().slice(0, 10);
+
+// ---- OpenAI models ------------------------------------------------------------
+// The console's model list (Settings → power tools, Welcome → AI models) is
+// served from here so the console and these rules agree. Premium models cost
+// far more per request, so they count against the big-model limits below; an
+// id that isn't listed is premium if it looks like one (gpt-6…, …-pro, o1).
+const DEFAULT_BASE_MODEL = 'gpt-4.1-mini';
+const DEFAULT_SMART_MODEL = 'gpt-5';
+const MODEL_CATALOG = [
+  { id: 'gpt-4.1-nano', label: 'gpt-4.1-nano — cheapest' },
+  { id: 'gpt-4o-mini', label: 'gpt-4o-mini — fast & cheap' },
+  { id: 'gpt-4.1-mini', label: 'gpt-4.1-mini — the default' },
+  { id: 'gpt-4o', label: 'gpt-4o — multimodal' },
+  { id: 'gpt-4.1', label: 'gpt-4.1 — strong' },
+  { id: 'gpt-5-nano', label: 'gpt-5-nano — fast reasoning', reasoning: true },
+  { id: 'gpt-5-mini', label: 'gpt-5-mini — balanced reasoning', reasoning: true },
+  { id: 'gpt-5', label: 'gpt-5 — the default for hard tasks', reasoning: true },
+  { id: 'gpt-5.1', label: 'gpt-5.1', reasoning: true },
+  { id: 'gpt-5.2', label: 'gpt-5.2 — top general', reasoning: true },
+  { id: 'o4-mini', label: 'o4-mini — reasoning (math)', reasoning: true },
+  { id: 'o3', label: 'o3 — deep reasoning', reasoning: true, premium: true },
+  { id: 'gpt-5.5-pro', label: 'gpt-5.5-pro', reasoning: true, premium: true },
+  { id: 'gpt-5.6-sol', label: 'gpt-5.6-sol', reasoning: true, premium: true },
+  { id: 'gpt-5.6-terra', label: 'gpt-5.6-terra', reasoning: true, premium: true },
+  { id: 'gpt-5.6-luna', label: 'gpt-5.6-luna', reasoning: true, premium: true },
+  { id: 'gpt-6-astra', label: 'gpt-6-astra — strongest', reasoning: true, premium: true }
+];
+const MODEL_ID_RE = /^[a-z0-9][a-z0-9._:-]{1,63}$/i;
+const catalogModel = (id) => MODEL_CATALOG.find((m) => m.id === id) || null;
+const isPremiumModel = (id) => { const m = catalogModel(id); return m ? !!m.premium : /^gpt-6|-pro$|^o1(-|$)|^o3-pro/i.test(String(id || '')); };
+const isReasoningModel = (id) => { const m = catalogModel(id); return m ? !!m.reasoning : /^(gpt-5|gpt-6|o\d)/i.test(String(id || '')); };
+// Big-model limits (Welcome → AI models; the owner sets them). Requests, not
+// tokens; null = no limit, 0 = none. Over a limit the request still goes
+// through, on a standard model instead of failing.
+const PREMIUM_DEFAULTS = { perUserHour: 4, perUserDay: 10, totalDay: 60, includeOwner: false };
+const premiumLimitsOf = (cfg) => {
+  const p = (cfg && cfg.premiumLimits) || {};
+  const num = (v, d) => (v === null ? null : Number.isInteger(v) && v >= 0 ? v : d);
+  return { perUserHour: num(p.perUserHour, PREMIUM_DEFAULTS.perUserHour), perUserDay: num(p.perUserDay, PREMIUM_DEFAULTS.perUserDay),
+    totalDay: num(p.totalDay, PREMIUM_DEFAULTS.totalDay), includeOwner: typeof p.includeOwner === 'boolean' ? p.includeOwner : PREMIUM_DEFAULTS.includeOwner };
+};
+// A person's model settings (set by the owner or an admin), stored on their
+// mod record: base and upgraded model, auto-upgrade on/off, and their own
+// daily big-model allowance. Unset fields follow the console's defaults.
+const userModelsOf = (mod) => {
+  const m = (mod && mod.models) || {};
+  return { base: m.base || '', smart: m.smart || '', autoUpgrade: m.autoUpgrade === 'on' || m.autoUpgrade === 'off' ? m.autoUpgrade : '',
+    premiumDay: Number.isInteger(m.premiumDay) && m.premiumDay >= 0 ? m.premiumDay : null };
+};
+const hourKey = (t) => new Date(t || Date.now()).toISOString().slice(0, 13);
 const monthKey = (t) => new Date(t || Date.now()).toISOString().slice(0, 7);
 
 // ---- Secret / sensitive-content detection -----------------------------------
@@ -1919,6 +1969,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       '/admin/access-requests/decide': { method: 'POST', perm: 'system.manage' },
       '/admin/access-chats':           { method: 'GET',  perm: 'system.manage' },
       '/admin/security-summary':       { method: 'GET',  perm: 'security.view' },
+      '/admin/models':                 { method: 'GET',  perm: 'ai.view' },
+      '/admin/models/set':             { method: 'POST', perm: 'ai.manage' },
       '/admin/access-chat':            { method: 'GET',  perm: 'system.manage' },
       '/admin/access-chat/send':       { method: 'POST', perm: 'system.manage' },
       '/admin/subscriptions':          { method: 'POST', perm: 'system.manage' },
@@ -2215,6 +2267,107 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         for (const t of await listPrefix(ACCESS_CHAT_PREFIX, 300)) unreadChats += (t.msgs || []).filter((m) => m.from === 'them' && m.ts > (t.ownerSeen || 0)).length;
       }
       return json({ ok: true, owner, events, locks, accountLocks, pinRequests, accessRequests, unreadChats });
+    }
+
+    // Welcome → AI models (owner and admins): the model list, the big-model
+    // limits and today's use, everyone who can be picked, the people with
+    // their own model settings, and (?user=) one person's settings and use.
+    // /admin/models/set: { action: 'user', u, base, smart, autoUpgrade:
+    // 'on'|'off'|'', premiumDay: n|null } or, owner only, { action: 'limits',
+    // perUserHour, perUserDay, totalDay, includeOwner }. Admins can't change
+    // the owner's, another admin's or their own settings.
+    if (url.pathname === '/admin/models' || url.pathname === '/admin/models/set') {
+      const kv = env.TELEMETRY;
+      const principal = await resolvePrincipal();
+      const owner = principal.role === 'owner';
+      const me = String(owner ? OWNER : principal.user || '').toLowerCase();
+      const cfg = await getConfig(kv);
+      const INDEX = 'models:index';
+      const index = new Set((await kv.get(INDEX, 'json')) || []);
+      const roleOfName = async (u) => { if (u === OWNER) return 'owner'; const a = await getAcct(kv, u); return a ? (ROLE_PERMS[a.role] ? a.role : 'user') : 'user'; };
+      const usageOf = async (u) => ({ hour: parseInt(await kv.get('prem:h:' + hourKey() + ':' + u), 10) || 0, today: parseInt(await kv.get('prem:d:' + dayKey() + ':' + u), 10) || 0 });
+      const detail = async (u) => {
+        const m = await getMod(kv, u);
+        return { user: (await getAcct(kv, u) || {}).user || u, role: await roleOfName(u), settings: userModelsOf(m), used: await usageOf(u) };
+      };
+      if (url.pathname === '/admin/models/set') {
+        let body = {};
+        try { body = JSON.parse(await req.text()) || {}; } catch (e) { return json({ error: 'invalid request' }, 400); }
+        if (body.action === 'limits') {
+          if (!owner) return json({ error: 'Only the owner can change the big-model limits.' }, 403);
+          const lim = (v) => (v === null || v === '' ? null : Number.isInteger(Number(v)) && Number(v) >= 0 && Number(v) <= 100000 ? Number(v) : undefined);
+          const next = { ...premiumLimitsOf(cfg) };
+          for (const k of ['perUserHour', 'perUserDay', 'totalDay']) if (k in body) { const v = lim(body[k]); if (v === undefined) return json({ error: k + ' must be a whole number or empty' }, 400); next[k] = v; }
+          if (typeof body.includeOwner === 'boolean') next.includeOwner = body.includeOwner;
+          cfg.premiumLimits = next;
+          await kv.put('config', JSON.stringify(cfg));
+          await logAudit(kv, { route: url.pathname, action: 'premium_limits', target: 'all', meta: next });
+          return json({ ok: true, limits: next });
+        }
+        if (body.action !== 'user') return json({ error: 'action must be user or limits' }, 400);
+        const u = String(body.u || '').trim().toLowerCase().slice(0, 40);
+        if (!/^[a-z0-9_.-]{1,40}$/.test(u)) return json({ error: 'Pick a user.' }, 400);
+        const theirRole = await roleOfName(u);
+        if (u === OWNER) return json({ error: 'The owner’s own requests aren’t limited this way. Use Settings → power tools on your device.' }, 400);
+        if (!owner && (theirRole === 'admin' || u === me)) return json({ error: 'Only the owner can change an admin’s models.' }, 403);
+        const pick = (v, name) => { const id = String(v == null ? '' : v).trim(); if (id && !MODEL_ID_RE.test(id)) throw new Error(name + ' isn’t a valid model id.'); return id; };
+        const key = 'mod:' + u;
+        const cur = (await kv.get(key, 'json')) || { state: 'active', reason: '', kickNonce: 0 };
+        const before = userModelsOf(cur);
+        const next = { ...before };
+        try {
+          if ('base' in body) next.base = pick(body.base, 'Base model');
+          if ('smart' in body) next.smart = pick(body.smart, 'Upgraded model');
+        } catch (e) { return json({ error: e.message }, 400); }
+        if ('autoUpgrade' in body) next.autoUpgrade = body.autoUpgrade === 'on' || body.autoUpgrade === 'off' ? body.autoUpgrade : '';
+        if ('premiumDay' in body) {
+          const v = body.premiumDay;
+          if (v === null || v === '') next.premiumDay = null;
+          else if (Number.isInteger(Number(v)) && Number(v) >= 0 && Number(v) <= 100000) next.premiumDay = Number(v);
+          else return json({ error: 'The big-model allowance must be a whole number or empty.' }, 400);
+        }
+        const any = next.base || next.smart || next.autoUpgrade || next.premiumDay !== null;
+        if (any) cur.models = next; else delete cur.models;
+        await kv.put(key, JSON.stringify(cur));
+        if (any) index.add(u); else index.delete(u);
+        await kv.put(INDEX, JSON.stringify([...index].slice(0, 1000)));
+        await logAudit(kv, { route: url.pathname, action: 'user_models', target: u, meta: { before, after: next } });
+        return json({ ok: true, user: await detail(u) });
+      }
+      const pickUser = String(url.searchParams.get('user') || '').trim().toLowerCase().slice(0, 40);
+      if (pickUser) {
+        if (!/^[a-z0-9_.-]{1,40}$/.test(pickUser)) return json({ error: 'invalid user' }, 400);
+        const d = await detail(pickUser);
+        return json({ ok: true, user: d, canEdit: pickUser !== OWNER && (owner || (d.role !== 'admin' && pickUser !== me)) });
+      }
+      // Everyone who can be picked: Allowed users and server accounts.
+      const names = new Set(((cfg.allowlist && cfg.allowlist.users) || []).map((x) => String(x).toLowerCase()));
+      let cursor;
+      for (let i = 0; i < 5 && names.size < 1000; i++) {
+        const page = await kv.list({ prefix: 'acct:', cursor });
+        for (const k of page.keys) names.add(k.name.slice(5));
+        if (page.list_complete || !page.cursor) break;
+        cursor = page.cursor;
+      }
+      names.delete(OWNER);
+      const custom = [];
+      for (const u of [...index].slice(0, 200)) {
+        const m = userModelsOf(await getMod(kv, u));
+        if (m.base || m.smart || m.autoUpgrade || m.premiumDay !== null) custom.push({ user: u, ...m, used: await usageOf(u) });
+      }
+      const top = [];
+      cursor = undefined;
+      for (let i = 0; i < 3; i++) {
+        const page = await kv.list({ prefix: 'prem:d:' + dayKey() + ':', cursor });
+        for (const k of page.keys) top.push({ user: k.name.split(':').slice(3).join(':'), today: parseInt(await kv.get(k.name), 10) || 0 });
+        if (page.list_complete || !page.cursor) break;
+        cursor = page.cursor;
+      }
+      top.sort((a, b) => b.today - a.today);
+      return json({ ok: true, owner, catalog: MODEL_CATALOG.map((m) => ({ id: m.id, label: m.label, premium: !!m.premium })),
+        defaults: { base: DEFAULT_BASE_MODEL, smart: DEFAULT_SMART_MODEL }, limits: premiumLimitsOf(cfg),
+        totalToday: parseInt(await kv.get('prem:t:' + dayKey()), 10) || 0, topToday: top.slice(0, 8),
+        users: [...names].sort().slice(0, 1000), custom });
     }
 
     if (url.pathname === '/admin/signin-help') {
@@ -3924,6 +4077,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         memoryEnabled: cfg.memoryEnabled !== false,
         usage: r.state === 'active' ? await usageMeter(kv, statusUser, mod, cfg) : null,
         subscription: mySubscription(cfg, statusUser),
+        // Their model settings, if the owner or an admin set any (the console uses them).
+        models: (() => { const um = userModelsOf(mod); return um.base || um.smart || um.autoUpgrade ? { base: um.base, smart: um.smart, autoUpgrade: um.autoUpgrade } : null; })(),
         // Only the browser tests turn this off (STUDENT_ID_OPTIONAL=1); production always asks.
         needsStudentId: statusId.verified && statusUser.toLowerCase() !== OWNER && !(env && env.STUDENT_ID_OPTIONAL === '1') ? !(((await getAcct(kv, statusUser)) || { studentId: 'x' }).studentId) : false,
         // What this account already dismissed (banner text hash, popup id), so
@@ -6943,8 +7098,10 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         return json({ error: { message: 'Requests from this origin are not allowed.', type: 'origin_blocked' } }, 403);
       }
     }
+    let ownerCaller = false;
     if (modUser && kv) {
       const r = await resolve(kv, modUser);   // owner resolves to active
+      ownerCaller = !!r.owner;
       if (r.state === 'blocked') {
         return json({ error: { message: 'Access to this tool has been blocked by the owner.' + (r.reason ? ' ' + r.reason : ''), type: 'blocked_by_owner' } }, 403);
       }
@@ -7025,7 +7182,57 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         } catch (e) { /* not JSON — forward untouched */ }
       }
     }
-    const requestedModel = parsedBody && typeof parsedBody === 'object' ? String(parsedBody.model || '') : '';
+    let requestedModel = parsedBody && typeof parsedBody === 'object' ? String(parsedBody.model || '') : '';
+    // Models: this person's settings (base / upgraded model, auto-upgrade)
+    // and the big-model limits. A model they aren't given is swapped for
+    // their base model, and a premium model over a limit for a standard
+    // one, so the request still works; the answer says which model ran.
+    let modelNote = null;
+    const chatPath = url.pathname === '/v1/chat/completions' || url.pathname === '/v1/responses';
+    if (chatPath && req.method === 'POST' && requestedModel && parsedBody) {
+      const asked = requestedModel;
+      let model = asked, why = '';
+      const um = userModelsOf(modRec);
+      if (!ownerCaller && (um.base || um.smart || um.autoUpgrade)) {
+        const base = um.base || DEFAULT_BASE_MODEL;
+        const permitted = new Set([base]);
+        if (um.autoUpgrade !== 'off') permitted.add(um.smart || DEFAULT_SMART_MODEL);
+        if (!permitted.has(model)) { model = base; why = 'not_given'; }
+      }
+      const limits = premiumLimitsOf(vCfg);
+      if (kv && isPremiumModel(model) && (!ownerCaller || limits.includeOwner)) {
+        const who = String(modUser || 'unknown').toLowerCase();
+        const keys = { h: 'prem:h:' + hourKey() + ':' + who, d: 'prem:d:' + dayKey() + ':' + who, t: 'prem:t:' + dayKey() };
+        const [h, d, t] = await Promise.all([keys.h, keys.d, keys.t].map(async (k) => parseInt(await kv.get(k), 10) || 0));
+        const perDay = um.premiumDay !== null ? um.premiumDay : limits.perUserDay;
+        const over = (perDay !== null && d >= perDay) ? 'day' : (limits.perUserHour !== null && h >= limits.perUserHour) ? 'hour' : (limits.totalDay !== null && t >= limits.totalDay) ? 'total' : '';
+        if (over) {
+          const fallback = um.base && !isPremiumModel(um.base) ? um.base : DEFAULT_BASE_MODEL;
+          why = 'premium_' + over;
+          await ownerAlert(env, { cat: 'limits', title: 'Big-model limit: ' + (modUser || 'someone'),
+            body: model + ' → ' + fallback + ' · ' + (over === 'hour' ? 'hourly limit (' + limits.perUserHour + ')' : over === 'day' ? 'daily limit (' + perDay + ')' : 'everyone’s daily limit (' + limits.totalDay + ')') + ' · ' + ownerTime(env),
+            url: adminLink('ai'), throttle: { key: 'premlimit:' + who + ':' + over + ':' + dayKey(), seconds: 3600 } }, url.origin);
+          model = fallback;
+        } else {
+          await Promise.all([[keys.h, h, 7200], [keys.d, d, 3 * 86400], [keys.t, t, 3 * 86400]].map(([k, n, ttl]) => kv.put(k, String(n + 1), { expirationTtl: ttl })));
+        }
+      }
+      if (model !== asked) {
+        parsedBody.model = model;
+        // Reasoning models refuse temperature and want max_completion_tokens;
+        // the others refuse reasoning_effort.
+        if (isReasoningModel(model)) {
+          delete parsedBody.temperature; delete parsedBody.top_p;
+          if (typeof parsedBody.max_tokens === 'number') { parsedBody.max_completion_tokens = parsedBody.max_tokens; delete parsedBody.max_tokens; }
+        } else {
+          delete parsedBody.reasoning_effort;
+          if (parsedBody.reasoning) delete parsedBody.reasoning;
+        }
+        bodyText = JSON.stringify(parsedBody);
+        requestedModel = model;
+        modelNote = { asked, used: model, why };
+      }
+    }
     if (vCfg && vCfg.allowedModels.length && requestedModel && !vCfg.allowedModels.includes(requestedModel)) {
       return json({ error: { message: `Model "${requestedModel}" is not allowed.`, type: 'model_not_allowed' } }, 400);
     }
@@ -7098,10 +7305,12 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     }
     // Opted-in memory calls get the count added to the JSON body, since some
     // of the client's fetch transports can't read response headers.
-    if (memOpt && res.ok) {
+    const streaming = /text\/event-stream/.test(res.headers.get('Content-Type') || '');
+    if ((memOpt || modelNote) && res.ok && !streaming) {
       try {
         const j = await res.json();
-        j._gpa_memory = { used: memoryUsed };
+        if (memOpt) j._gpa_memory = { used: memoryUsed };
+        if (modelNote) j._gpa_model = modelNote;
         return new Response(JSON.stringify(j), { status: res.status, headers: { ...CORS_HEADERS, ...SECURITY_HEADERS, 'Content-Type': 'application/json' } });
       } catch (e) { /* fall through with the original stream consumed — report it */
         return json({ error: { message: 'Unreadable upstream response.', type: 'upstream_parse' } }, 502);
