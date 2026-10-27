@@ -451,6 +451,57 @@ function appLink(tab, params) {
 }
 const adminLink = (sec, params) => appLink('admin', { sec, ...(params || {}) });
 
+// ---- Staff pop-ups in the console (owner and admins) ---------------------------
+// Every alert the owner's phone gets is also kept in a short feed (the
+// ChatRoom object "inbox-@alerts"), which the console of the owner and each
+// admin checks every few seconds and shows as a pop-up inside the console.
+// What pops up is each person's own choice (staffpopups:<name>), separate
+// from their phone notifications. Admins see the staff kinds only, and
+// nobody gets a pop-up for something they did themselves.
+const ALERT_FEED_ROOM = 'inbox-@alerts';
+const STAFF_FEED_CATS = new Set(['security', 'access', 'pinhelp', 'proxylaunch', 'proxysites', 'signin', 'newuser', 'approval', 'subs', 'reports']);
+// Chat alerts pop up through the console's own message pop-ups already.
+const FEED_SKIP = new Set(['chat', 'chatrooms', 'mentions', 'presence', 'test']);
+const STAFF_POPUP_DEFS = {
+  security: { label: 'Security alerts: unauthorized sign-ins, locked devices and accounts', group: 'Security', on: true, staff: true },
+  access: { label: 'Access requests and messages from people not on your list', group: 'Security', on: true, staff: true },
+  pinhelp: { label: 'PIN resets and account unlocks', group: 'Security', on: true, staff: true },
+  proxylaunch: { label: 'Who launched the Proxy', group: 'Proxy', on: true, staff: true },
+  proxysites: { label: 'Sites opened and searches in the Proxy', group: 'Proxy', on: true, staff: true },
+  newuser: { label: 'New users and accounts', group: 'People', on: true, staff: true },
+  approval: { label: 'Waiting for approval', group: 'People', on: true, staff: true },
+  signin: { label: 'Sign-ins', group: 'People', on: false, staff: true },
+  subs: { label: 'Subscriptions and payments', group: 'People', on: true, staff: true },
+  reports: { label: 'Chat reports', group: 'Chat', on: true, staff: true },
+  admin: { label: 'Actions by your admins', group: 'System', on: true },
+  error: { label: 'Worker errors', group: 'System', on: true },
+  jobs: { label: 'Failed scheduled jobs', group: 'System', on: true },
+  aierror: { label: 'AI request failures', group: 'System', on: false },
+  limits: { label: 'Rate limits and quotas reached', group: 'System', on: false },
+  summary: { label: 'Daily summary and weekly report', group: 'System', on: false },
+  other: { label: 'Other alerts', group: 'System', on: true }
+};
+const popupKey = (cat) => (cat === 'digest' || cat === 'weekly' ? 'summary' : STAFF_POPUP_DEFS[cat] ? cat : 'other');
+const popupDefs = (owner) => Object.fromEntries(Object.entries(STAFF_POPUP_DEFS).filter(([, d]) => owner || d.staff).map(([k, d]) => [k, { label: d.label, group: d.group, on: d.on }]));
+// Security, access requests and their messages pop up as urgent.
+const feedUrgent = (ev) => !!ev.urgent || ev.cat === 'security' || ev.cat === 'access';
+// Never throws: a pop-up must never break the request that caused it.
+async function feedAlert(env, ev) {
+  try {
+    if (!env || !env.CHAT_ROOMS || !ev || FEED_SKIP.has(ev.cat)) return;
+    const staff = ev.staff === true || (STAFF_FEED_CATS.has(ev.cat) && !ev.ownerOnly);
+    await chatRoomCall(env, ALERT_FEED_ROOM, 'alerts_push', {
+      alert: { cat: ev.cat, title: ev.title, body: ev.body, url: ev.url, urgent: feedUrgent(ev), staff, actor: ev.actor || '' },
+      throttle: ev.throttle
+    });
+  } catch (e) { /* best-effort */ }
+}
+// The owner's phone (and computer) push, plus the console pop-up feed.
+async function ownerAlert(env, ev, origin) {
+  const [r] = await Promise.all([notifyOwner(env, ev, origin), feedAlert(env, ev)]);
+  return r;
+}
+
 // ---- Subscribers ---------------------------------------------------------
 // The owner can register a name as a paying subscriber for a set time (a
 // month by default). While the allowed-users list is on, a subscriber gets
@@ -596,8 +647,8 @@ async function autoSubscribeListed(env, cfg, now = Date.now()) {
 // Several alerts at once become one ("5 subscriptions ended: …").
 async function notifySubs(env, items, one, many) {
   if (!items.length) return;
-  if (items.length <= 3) { for (const x of items) await notifyOwner(env, one(x)).catch(() => {}); return; }
-  await notifyOwner(env, many(items)).catch(() => {});
+  if (items.length <= 3) { for (const x of items) await ownerAlert(env, one(x)).catch(() => {}); return; }
+  await ownerAlert(env, many(items)).catch(() => {});
 }
 async function sweepSubscriptions(env, now = Date.now()) {
   const kv = env && env.TELEMETRY;
@@ -662,7 +713,7 @@ async function checkPresence(env, ownerName, origin, { force = false } = {}) {
   const left = last.filter((n) => !lower(now).includes(n.toLowerCase()));
   const list = now.length ? now.slice(0, 12).join(', ') + (now.length > 12 ? ` +${now.length - 12} more` : '') : 'Nobody is using the console right now.';
   const change = [joined.length ? 'Joined: ' + joined.join(', ') : '', left.length ? 'Left: ' + left.join(', ') : ''].filter(Boolean).join(' · ');
-  await notifyOwner(env, {
+  await ownerAlert(env, {
     cat: 'presence', tag: 'presence', badge: now.length, silent: true, url: adminLink('users', { filter: 'active' }),
     title: now.length === 1 ? '1 person online' : `${now.length} people online`,
     body: (change ? change + '\n' : '') + list
@@ -716,7 +767,7 @@ async function sendDailyDigest(env) {
   try { const sec = await kv.get('sec:' + day, 'json'); if (sec && sec.counts) secEvents = Object.values(sec.counts).reduce((a, b) => a + b, 0); } catch (e) { /* none */ }
   const parts = [`${active} ${active === 1 ? 'person' : 'people'} used the console`, `${fresh} new`, `${n} AI requests` + (fail ? ` (${fail} failed)` : ''),
     rl ? `${rl} hit a limit` : '', secEvents ? `${secEvents} security events` : ''].filter(Boolean);
-  return notifyOwner(env, { cat: 'digest', title: 'Daily summary', body: parts.join(' · ') + '.', url: adminLink('overview') });
+  return ownerAlert(env, { cat: 'digest', title: 'Daily summary', body: parts.join(' · ') + '.', url: adminLink('overview') });
 }
 
 // ---- Weekday streaks ---------------------------------------------------------
@@ -859,7 +910,7 @@ async function maybeSendWeeklyReport(env, ts) {
   await kv.put('push:weekly:last', clock.date, { expirationTtl: 10 * 24 * 3600 });   // marked first: one per week
   if (!(await anySubscriberWants(env, 'weekly'))) return null;
   const r = await weeklyReport(env, t);
-  return notifyOwner(env, { cat: 'weekly', title: 'Weekly report', body: r.text, url: adminLink('overview') });
+  return ownerAlert(env, { cat: 'weekly', title: 'Weekly report', body: r.text, url: adminLink('overview') });
 }
 
 // ---- Round 3: daily trivia, game leaderboards, system messages -------------
@@ -914,7 +965,7 @@ async function reportAiFailure(req, res, env, ctx) {
     message = String(e.message || message).replace(/sk-[A-Za-z0-9_-]{6,}/g, 'sk-…').slice(0, 180);
   } catch (e) { /* non-JSON upstream body */ }
   const isLimit = res.status === 429 || /rate_limit|quota/.test(type);
-  const p = notifyOwner(env, { cat: isLimit ? 'limits' : 'aierror', title: (isLimit ? 'Limit reached: ' : 'AI request failed: ') + user,
+  const p = ownerAlert(env, { cat: isLimit ? 'limits' : 'aierror', title: (isLimit ? 'Limit reached: ' : 'AI request failed: ') + user,
     // Their profile, opened on the card that fixes it: the API key for a
     // failure, the quota for a limit.
     body: `${type} (${res.status}) · ${message} · ${ownerTime(env)}`, url: adminLink('users', { user, focus: isLimit ? 'quota' : 'key' }),
@@ -943,7 +994,7 @@ export default {
       queueEvent(env,ctx,'backend',3);
       try {
         const path = new URL(req.url).pathname;
-        const p = notifyOwner(env, { cat: 'error', title: 'Worker error', urgent: true, url: adminLink('developer'),
+        const p = ownerAlert(env, { cat: 'error', title: 'Worker error', urgent: true, url: adminLink('developer'),
           body: `${req.method} ${path} · ${String((err && err.message) || err).slice(0, 160)} · ${ownerTime(env)}`,
           throttle: { key: 'err:' + path, seconds: 300 } }, new URL(req.url).origin);
         if (ctx && ctx.waitUntil) ctx.waitUntil(p);
@@ -985,7 +1036,7 @@ export default {
     // can show the schedule and compute the next run.
     ctx.waitUntil((async () => {
       try { await kv.put('job:cron', JSON.stringify({ cron: event.cron || null, ts: Date.now() })); } catch (e) { /* best-effort */ }
-      for(const id of ['chat-cleanup','memory-maintenance']) {const r=await runJob(kv,id,'cron',env);if(!r.ok){queueEvent(env,ctx,'jobs',3);await notifyOwner(env,{cat:'jobs',title:'Scheduled job failed',url:adminLink('automation',{job:id}),body:`${id} · ${String(r.detail||'no detail').slice(0,160)} · ${ownerTime(env)}`});}}
+      for(const id of ['chat-cleanup','memory-maintenance']) {const r=await runJob(kv,id,'cron',env);if(!r.ok){queueEvent(env,ctx,'jobs',3);await ownerAlert(env,{cat:'jobs',title:'Scheduled job failed',url:adminLink('automation',{job:id}),body:`${id} · ${String(r.detail||'no detail').slice(0,160)} · ${ownerTime(env)}`});}}
     })());
   }
 };
@@ -1315,7 +1366,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     };
     // Owner push notifications (web/console/push.js). Fire and forget.
     const notify = (ev) => {
-      const p = notifyOwner(env, ev, url.origin);
+      const p = ownerAlert(env, ev, url.origin);
       if (ctx && ctx.waitUntil) ctx.waitUntil(p);
       return p;
     };
@@ -1323,7 +1374,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     // app) and to each admin who turned on alerts.
     const notifyStaff = (ev) => {
       const p = (async () => {
-        await notifyOwner(env, ev, url.origin).catch(() => {});
+        await ownerAlert(env, { ...ev, staff: true }, url.origin).catch(() => {});
         for (const a of await adminNames(env.TELEMETRY)) await notifyUser(env, a, ev, url.origin).catch(() => {});
       })();
       if (ctx && ctx.waitUntil) ctx.waitUntil(p);
@@ -1867,6 +1918,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       '/admin/access-requests':        { method: 'GET',  perm: 'system.manage' },
       '/admin/access-requests/decide': { method: 'POST', perm: 'system.manage' },
       '/admin/access-chats':           { method: 'GET',  perm: 'system.manage' },
+      '/admin/security-summary':       { method: 'GET',  perm: 'security.view' },
       '/admin/access-chat':            { method: 'GET',  perm: 'system.manage' },
       '/admin/access-chat/send':       { method: 'POST', perm: 'system.manage' },
       '/admin/subscriptions':          { method: 'POST', perm: 'system.manage' },
@@ -2029,7 +2081,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       try { body = JSON.parse(await req.text()) || {}; } catch (e) { /* preview */ }
       const r = await weeklyReport(env);
       let sent = false;
-      if (body.send) { await notifyOwner(env, { cat: 'weekly', title: 'Weekly report', body: r.text, url: adminLink('overview') }); sent = true; }
+      if (body.send) { await ownerAlert(env, { cat: 'weekly', title: 'Weekly report', body: r.text, url: adminLink('overview') }); sent = true; }
       return json({ ok: true, report: r, sent });
     }
     // Invite codes (Admin → Security → Allowed users). A listed name with an
@@ -2118,6 +2170,51 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       const auto = [OWNER + ' (owner)', ...(await adminNames(kv))];
       return json({ ok: true, sms: smsReady(env), number: smsReady(env) ? prettyPhone(normPhone(env.TELNYX_FROM)) : '', inbound: !!(env && env.TELNYX_PUBLIC_KEY),
         cashNames: Array.isArray(cfg.cashNames) ? cfg.cashNames : [], autoNames: auto, recent: ((await kv.get('smscash', 'json')) || []).slice(0, 20) });
+    }
+
+    // The Welcome page's Security card (owner and admins): recent security
+    // alerts, devices and accounts locked right now, Forgot-PIN requests,
+    // and for the owner the access requests and unread messages from people
+    // not on the list. The buttons on the card use the routes that already
+    // do each thing (signin-help, user/action, access-requests/decide).
+    if (url.pathname === '/admin/security-summary') {
+      const kv = env.TELEMETRY;
+      const principal = await resolvePrincipal();
+      const owner = principal.role === 'owner';
+      const viewer = String(owner ? OWNER : principal.user || '').toLowerCase();
+      const now = Date.now();
+      const listPrefix = async (prefix, max = 200) => {
+        const out = [];
+        let cursor;
+        for (let i = 0; i < 5 && out.length < max; i++) {
+          const page = await kv.list({ prefix, cursor });
+          for (const k of page.keys) { const v = await kv.get(k.name, 'json'); if (v) out.push(v); }
+          if (page.list_complete || !page.cursor) break;
+          cursor = page.cursor;
+        }
+        return out;
+      };
+      let events = [];
+      if (env.CHAT_ROOMS) {
+        try {
+          const d = await chatRoomCall(env, ALERT_FEED_ROOM, 'alerts_list', { since: now - 2 * 864e5 });
+          events = d.alerts.filter((a) => ['security', 'access', 'pinhelp'].includes(a.cat) && (owner || a.staff) && a.actor !== viewer)
+            .slice(-15).reverse().map(({ staff, actor, ...a }) => a);
+        } catch (e) { events = []; }
+      }
+      const locks = (await listPrefix('devlock:')).filter((l) => l.status === 'locked' && l.until > now)
+        .map((l) => ({ id: l.id, at: l.at, until: l.until, names: l.names || [], ua: l.ua, country: l.country, notAllowed: l.notAllowed || 0, wrong: l.wrong || 0, kept: !!l.kept }));
+      const accountLocks = (await listPrefix('acctlock:')).filter((l) => l.until > now)
+        .map((l) => ({ user: l.user, at: l.at, until: l.until, tries: l.tries || 0 }));
+      const pinRequests = (await listPrefix('pinreq:')).filter((r) => r.status === 'pending' && r.until > now)
+        .map((r) => ({ user: r.user, at: r.at, sameDevice: !!r.sameDevice, note: r.note || '' }));
+      let accessRequests = [], unreadChats = 0;
+      if (owner) {
+        accessRequests = (await listPrefix('accessreq:u:')).filter((r) => r.status === 'pending').sort((a, b) => b.ts - a.ts).slice(0, 20)
+          .map((r) => ({ user: r.user, ts: r.ts, message: r.message || '', count: r.count || 1, chatId: r.chatId || '' }));
+        for (const t of await listPrefix(ACCESS_CHAT_PREFIX, 300)) unreadChats += (t.msgs || []).filter((m) => m.from === 'them' && m.ts > (t.ownerSeen || 0)).length;
+      }
+      return json({ ok: true, owner, events, locks, accountLocks, pinRequests, accessRequests, unreadChats });
     }
 
     if (url.pathname === '/admin/signin-help') {
@@ -2236,7 +2333,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       await logAudit(kv, { route: url.pathname, action: 'free_' + action, target: key, admin: principal.role, meta: { period, by } });
       if (principal.role !== 'owner') {
         const s = cfg.subscriptions[key];
-        await notifyOwner(env, action === 'give'
+        await ownerAlert(env, action === 'give'
           ? { cat: 'subs', title: by + ' gave ' + s.user + ' free access', body: (s.expiresAt >= FREE_FOREVER ? 'No end date.' : 'Until ' + day(s.expiresAt) + '.') + ' See Admin → Security → Free access.', url: adminLink('security', { focus: 'free', user: s.user }) }
           : { cat: 'subs', title: by + ' ended ' + s.user + '’s free access', body: s.user + ' was taken off your allowed users.', url: adminLink('security', { focus: 'free' }) }).catch(() => {});
       }
@@ -2562,7 +2659,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         const sess = await issue(acct, body.site);
         await logAudit(kv, { route: '/auth/owner-pin', action: 'owner_pin_reset', target: acct.user });
         await noteSec('owner_pin_reset', { user: acct.user });
-        notify({ cat: 'security', title: 'Your PIN was reset', body: 'Your Saints Service PIN was changed at ' + ownerTime(env) + '. Other sign-ins were signed out.', urgent: true, url: adminLink('security', { focus: 'events' }) });
+        notify({ cat: 'security', ownerOnly: true, title: 'Your PIN was reset', body: 'Your Saints Service PIN was changed at ' + ownerTime(env) + '. Other sign-ins were signed out.', urgent: true, url: adminLink('security', { focus: 'events' }) });
         return json({ ok: true, token: sess.token, exp: sess.exp, account: view(acct, roleOf(acct)) });
       }
       if (url.pathname === '/auth/register' && req.method === 'POST') {
@@ -3696,6 +3793,44 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       return json({ ok: true, status: 'pending' });
     }
 
+    // Staff pop-ups in the console (owner and admins): GET /staff/alerts
+    // ?since=<ts> hands out the alerts after that time that this person wants
+    // (see STAFF_POPUP_DEFS); /staff/popup-prefs reads (GET) or changes (POST
+    // { on, cats }) what they want. Separate from their phone notifications.
+    if (url.pathname === '/staff/alerts' || url.pathname === '/staff/popup-prefs') {
+      const kv = env && env.TELEMETRY;
+      const sp = await resolveSession();
+      const tp = sp ? null : await resolvePrincipal();
+      const p = sp || (tp && tp.kind === 'token' ? tp : null);
+      if (!p || !(p.role === 'owner' || p.role === 'admin')) return json({ ok: false, error: 'Staff pop-ups are for the owner and admins.' }, 403);
+      const owner = p.role === 'owner';
+      const viewer = String(owner && !sp ? OWNER : p.user || '').toLowerCase();
+      const defs = popupDefs(owner);
+      const pk = 'staffpopups:' + viewer;
+      let saved = {};
+      try { saved = (kv && (await kv.get(pk, 'json'))) || {}; } catch (e) { saved = {}; }
+      const prefsOf = (sv) => ({ on: sv.on !== false, cats: Object.fromEntries(Object.keys(defs).map((k) => [k, typeof (sv.cats || {})[k] === 'boolean' ? sv.cats[k] : defs[k].on])) });
+      let prefs = prefsOf(saved);
+      if (url.pathname === '/staff/popup-prefs') {
+        if (req.method === 'POST') {
+          let body = {};
+          try { const raw = await req.text(); if (raw.length > 4096) throw 0; body = JSON.parse(raw) || {}; } catch (e) { return json({ ok: false, error: 'invalid request' }, 400); }
+          if (typeof body.on === 'boolean') prefs.on = body.on;
+          for (const k of Object.keys(defs)) if (body.cats && typeof body.cats[k] === 'boolean') prefs.cats[k] = body.cats[k];
+          if (!kv) return json({ ok: false, error: 'storage not configured' }, 503);
+          await kv.put(pk, JSON.stringify(prefs));
+        } else if (req.method !== 'GET') return json({ ok: false, error: 'method not allowed' }, 405);
+        return json({ ok: true, defs, prefs });
+      }
+      if (req.method !== 'GET') return json({ ok: false, error: 'method not allowed' }, 405);
+      if (!env.CHAT_ROOMS) return json({ ok: true, alerts: [], latest: 0, on: prefs.on });
+      const since = Number(url.searchParams.get('since')) || 0;
+      let d;
+      try { d = await chatRoomCall(env, ALERT_FEED_ROOM, 'alerts_list', { since }); } catch (e) { return json({ ok: false, error: 'Alerts are temporarily unavailable.' }, 200); }
+      const alerts = prefs.on ? d.alerts.filter((a) => (owner || a.staff) && a.actor !== viewer && prefs.cats[popupKey(a.cat)] !== false).map(({ staff, actor, ...a }) => a) : [];
+      return json({ ok: true, alerts, latest: d.latest, on: prefs.on });
+    }
+
     // The chat box on the sign-in screen for a name that isn't allowed: the
     // owner can write to whoever tried, and they can write back (pushed to
     // the owner's phone). POST opens the thread (and sends `text`, if any);
@@ -3759,7 +3894,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       t.msgs = [...(t.msgs || []), { from: 'them', text, ts: now }].slice(-ACCESS_CHAT_MAX);
       t.lastTs = now;
       await kv.put(key, JSON.stringify(t), { expirationTtl: ACCESS_CHAT_TTL });
-      notify({ cat: 'access', title: 'Message from ' + name + ' (not on your list)', urgent: true,
+      notify({ cat: 'access', ownerOnly: true, title: 'Message from ' + name + ' (not on your list)', urgent: true,
         url: adminLink('security', { focus: 'chat', user: name, id: auth.id }),
         body: '“' + text.slice(0, 160) + '” · ' + ownerTime(env),
         throttle: { key: 'accesschat:' + auth.id, seconds: 20 } });
@@ -4294,7 +4429,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           await kv.put('config', JSON.stringify(cfg));
           try { const rq = await kv.get(accessReqKey(key), 'json'); if (rq && rq.status === 'pending') { rq.status = 'approved'; rq.decidedAt = now; await kv.put(accessReqKey(key), JSON.stringify(rq), { expirationTtl: 60 * 60 * 24 * 30 }); } } catch (e) { /* best-effort */ }
           await logAudit(kv, { route: url.pathname, action: 'subscription_stripe_' + action, target: key, meta: { amount } });
-          await notifyOwner(env, { cat: 'subs', title: info.renew ? user + ' renewed ($' + amount.toFixed(2) + ')' : 'New subscriber: ' + user, body: info.renew ? 'Paid through Stripe. Access extended a month.' : 'Paid $' + amount.toFixed(2) + ' through Stripe and was added to your allowed users.', url: adminLink('security', { focus: 'subs', user }) }, url.origin).catch(() => {});
+          await ownerAlert(env, { cat: 'subs', title: info.renew ? user + ' renewed ($' + amount.toFixed(2) + ')' : 'New subscriber: ' + user, body: info.renew ? 'Paid through Stripe. Access extended a month.' : 'Paid $' + amount.toFixed(2) + ' through Stripe and was added to your allowed users.', url: adminLink('security', { focus: 'subs', user }) }, url.origin).catch(() => {});
         }
         // A sign-up code for a name nobody has registered yet.
         let code = '';
@@ -4327,7 +4462,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
             cfg.subLedger = [...ledger, { user: cur.user, at: Date.now(), amount, action: 'duplicate', via: 'stripe', ref: sess.id }].slice(-1000);
             await kv.put('config', JSON.stringify(cfg));
             await logAudit(kv, { route: url.pathname, action: 'subscription_duplicate', target: user.toLowerCase(), meta: { amount, subscription: subId } });
-            await notifyOwner(env, { cat: 'subs', title: user + ' paid twice', body: 'They were already subscribed. Refund the extra $' + amount.toFixed(2) + ' in Stripe (Payments) and cancel the extra subscription' + (subId ? ' ' + subId : '') + ' (Subscriptions).', url: adminLink('security', { focus: 'subs', user }) }, url.origin).catch(() => {});
+            await ownerAlert(env, { cat: 'subs', title: user + ' paid twice', body: 'They were already subscribed. Refund the extra $' + amount.toFixed(2) + ' in Stripe (Payments) and cancel the extra subscription' + (subId ? ' ' + subId : '') + ' (Subscriptions).', url: adminLink('security', { focus: 'subs', user }) }, url.origin).catch(() => {});
             const rec = { user, approved: true, duplicate: true, code: '' };
             await kv.put('subpay:' + sess.id, JSON.stringify(rec), { expirationTtl: 30 * 24 * 3600 });
             return rec;
@@ -4356,7 +4491,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           await kv.put('config', JSON.stringify(cfg));
           await logAudit(kv, { route: url.pathname, action: 'subscription_contribution', target: user.toLowerCase(), meta: { amount } });
           const own = user.toLowerCase() === OWNER;
-          await notifyOwner(env, { cat: 'subs', title: own ? 'Your $' + amount.toFixed(2) + ' test contribution came through' : user + ' contributed $' + amount.toFixed(2), body: own ? 'Stripe took the payment; it will reach your bank with your next payout.' : 'A one-time contribution through Stripe, on top of their subscription.', url: adminLink('security', { focus: 'subs', user }) }, url.origin).catch(() => {});
+          await ownerAlert(env, { cat: 'subs', title: own ? 'Your $' + amount.toFixed(2) + ' test contribution came through' : user + ' contributed $' + amount.toFixed(2), body: own ? 'Stripe took the payment; it will reach your bank with your next payout.' : 'A one-time contribution through Stripe, on top of their subscription.', url: adminLink('security', { focus: 'subs', user }) }, url.origin).catch(() => {});
         }
         const rec = { user, contribution: true, paid: true, amount };
         await kv.put('subpay:' + sess.id, JSON.stringify(rec), { expirationTtl: 30 * 24 * 3600 });
@@ -4474,7 +4609,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           await kv.delete(inviteKey(key));   // used up
           await kv.put('subpay:' + id, JSON.stringify({ ...rec, code: '', account: true }), { expirationTtl: 30 * 24 * 3600 });
           await noteSec('account_created', { user, note: 'subscribe page' });
-          await notifyOwner(env, { cat: 'newuser', title: 'New account: ' + user, body: 'Set their PIN on the subscribe page after paying.', url: adminLink('users', { user }) }, url.origin).catch(() => {});
+          await ownerAlert(env, { cat: 'newuser', title: 'New account: ' + user, body: 'Set their PIN on the subscribe page after paying.', url: adminLink('users', { user }) }, url.origin).catch(() => {});
           return json({ ok: true, user });
         }
         // Right after making their PIN, a new subscriber adds their school
@@ -4515,7 +4650,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           await kv.put('config', JSON.stringify(cfg));
           const changed = (rec.emailChanges || 0) > 0;
           const alert = { title: (changed ? 'Email changed: ' : 'New subscriber email: ') + user, body: email + ' · Share the setup Google Doc with them in Admin → Security → New subscribers.', url: adminLink('security', { focus: 'emails', user }), tag: 'subemail-' + key };
-          await notifyOwner(env, { cat: 'newuser', ...alert }, url.origin).catch(() => {});
+          await ownerAlert(env, { cat: 'newuser', ...alert }, url.origin).catch(() => {});
           for (const a of await adminNames(kv)) await notifyUser(env, a, { cat: 'newuser', ...alert }, url.origin).catch(() => {});
           return json({ ok: true, email });
         }
@@ -4562,7 +4697,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
               const cfg = await getConfig(kv);
               const cur = cfg.subscriptions && cfg.subscriptions[user.toLowerCase()];
               if (cur) { cur.paymentFailedAt = Date.now(); cur.history = [...(cur.history || []), { at: Date.now(), action: 'payment_failed', note: 'Stripe' }].slice(-24); await kv.put('config', JSON.stringify(cfg)); }
-              await notifyOwner(env, { cat: 'subs', title: user + '’s payment failed', body: 'Stripe couldn’t charge their ' + (o.billing_reason === 'subscription_create' ? 'first' : 'monthly') + ' payment and will retry. If it keeps failing their access ends.', url: adminLink('security', { focus: 'subs', user }) }, url.origin).catch(() => {});
+              await ownerAlert(env, { cat: 'subs', title: user + '’s payment failed', body: 'Stripe couldn’t charge their ' + (o.billing_reason === 'subscription_create' ? 'first' : 'monthly') + ' payment and will retry. If it keeps failing their access ends.', url: adminLink('security', { focus: 'subs', user }) }, url.origin).catch(() => {});
             }
           } else if (ev.type === 'customer.subscription.updated' || ev.type === 'customer.subscription.deleted') {
             const user = await userForSub(o.id, o.metadata && o.metadata.user);
@@ -5336,6 +5471,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
             : { title: user + ' opened ' + entry.url.replace(/^https:\/\//, '').replace(/\/$/, ''), body: entry.url + ' · ' + where + ' · ' + ownerTime(env, entry.at) };
         const pushEv = { cat: ev === 'launch' ? 'proxylaunch' : 'proxysites', tag: 'proxy-' + user.toLowerCase(), url: adminLink('proxy', { user }), ...alert };
         const p = (async () => {
+          // The console pop-ups for the owner and admins (not the person who did it).
+          await feedAlert(env, { ...pushEv, staff: true, actor: user });
           if (user.toLowerCase() !== OWNER) await notifyOwner(env, pushEv, url.origin).catch(() => {});
           for (const a of await adminNamesCached(kv)) if (a.toLowerCase() !== user.toLowerCase()) await notifyUser(env, a, pushEv, url.origin).catch(() => {});
         })();
