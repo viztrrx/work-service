@@ -123,7 +123,11 @@ const REASONING_MODELS = new Set([
 ]);
 // The models the owner or an admin set for this person (from /status; null
 // = none, so the console's own settings apply). The Worker enforces them.
-let serverModels = null;
+// Kept in localStorage too ({ u, base, smart, autoUpgrade }), so after a
+// reload or a fresh inject they apply from the first question, before the
+// first /status answer comes back.
+const SERVER_MODELS_KEY = 'gpa_server_models';
+let serverModels = (() => { try { const v = JSON.parse(localStorage.getItem(SERVER_MODELS_KEY) || 'null'); return v && typeof v.u === 'string' ? v : null; } catch (e) { return null; } })();
 let reasoningEffort = localStorage.getItem(REASON_KEY) || 'medium';
 function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').trim()); }
   // Browser→OpenAI calls can be blocked by ad blockers, antivirus shields or
@@ -900,6 +904,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     { at: '2026-10-27T18:00:00-04:00', commit: '', title: 'More GPT models, per-person models and big-model limits', parts: {
       ask: ['feature', 'More OpenAI models to pick from (gpt-4.1-nano, gpt-5-nano, gpt-5-mini, o3, gpt-5.5-pro, gpt-5.6-sol/terra/luna, gpt-6-astra…); ★ marks the big ones. When a big-model limit is reached, a standard model answers instead and the console says so'],
       welcome: ['feature', 'Owner and admins: an AI models card to set a person’s base model, upgraded model and auto-upgrade for harder tasks, and their daily allowance of big models; the owner also sets big-model limits per person (hour and day) and for everyone each day'] } },
+    { at: '2026-10-27T21:00:00-04:00', commit: '', title: 'AI models: an auto-upgrade switch, and settings that stay', parts: {
+      welcome: ['feature', 'AI models: opening a person shows whether auto-upgrade for harder tasks is really on for them (set here, or what their console reports) with a switch that saves right away; the model boxes are full width on phones'],
+      ask: ['fix', 'Models the owner or an admin set for you apply from the first question after a reload or a fresh inject'] } },
   ];
   const PART_NAMES = {
     console: 'Console shell', selection: 'Selection assistant', welcome: 'Welcome', scan: 'Page Insights', ask: 'Ask AI', chat: 'Chat',
@@ -5933,6 +5940,12 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpa-wmod-who small { font-weight: 400; color: var(--gpa-sub); font-size: 12px; }
       .gpa-wmod-custom { width: 100%; margin-top: 4px; }
       .gpa-wmod-custom[hidden] { display: none; }
+      /* One column in the person's form on a phone, so model names aren't cut off. */
+      .gpa-wmod-form .gpa-wmod-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+      .gpa-wmod-grid { align-items: start; }
+      .gpa-wmod-autobox { grid-column: 1 / -1; padding: 10px 12px; border: 1px solid var(--gpa-border); border-radius: calc(10px * var(--gpa-rs, 1)); }
+      .gpa-wmod-autotop { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; font-weight: 600; }
+      .gpa-wmod-link { margin-top: 6px; padding: 0; border: 0; background: none; color: var(--gpa-accent); font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }
       .gpa-wsec-ev:hover { border-color: color-mix(in srgb, var(--gpa-accent) 45%, var(--gpa-border)); }
       .gpa-pubstats-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 10px; margin-top: 10px; }
       .gpa-pubstats-lists:empty { display: none; }
@@ -8282,6 +8295,16 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       + `<option value="__custom__"${value && !known ? ' selected' : ''}>Custom…</option>`;
   };
   const wmodLimit = (v) => (v === null ? 'no limit' : String(v));
+  // Whether this person really gets the upgraded model on hard questions:
+  // set here, else what their console reported, else on (the default).
+  function wmodAuto(u) {
+    const st = u.settings, c = u.console;
+    const smart = st.smart || (wmodData ? wmodData.defaults.smart : 'the upgraded model');
+    if (st.autoUpgrade === 'on') return { on: true, text: 'On: hard questions use ' + smart + '. Set here, so it stays on whatever their console says.' };
+    if (st.autoUpgrade === 'off') return { on: false, text: 'Off: every question uses their base model. Set here, so it stays off whatever their console says.' };
+    if (c) return { on: c.autoUpgrade === 'on', text: (c.autoUpgrade === 'on' ? 'On' : 'Off') + ', from their console’s own setting (reported ' + wsecWhen(c.at) + '). Tap to set it here instead.' };
+    return { on: true, text: 'On by default (their console hasn’t reported its setting yet). Tap to set it here.' };
+  }
   function renderWelcomeModels() {
     const d = wmodData;
     if (!d) return;
@@ -8304,7 +8327,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       + `<div class="gpa-wmod-form" id="gpa-wmod-form" hidden></div>`;
     html += `<div class="gpa-wsec-h">People with their own models</div>` + (d.custom.length
       ? `<ul class="gpa-wsec-list">${d.custom.map((c) => `<li class="gpa-wsec-item" data-user="${wsecEsc(c.user)}"><div class="gpa-wsec-top"><span>${wsecEsc(c.user)}</span><small>${c.used.today} big today</small></div>`
-        + `<div class="gpa-wsec-meta">Base: ${wsecEsc(c.base || 'default')} · Upgraded: ${wsecEsc(c.smart || 'default')} · Auto-upgrade: ${wsecEsc(c.autoUpgrade || 'default')} · Big models a day: ${wsecEsc(c.premiumDay === null ? 'default' : String(c.premiumDay))}</div>`
+        + `<div class="gpa-wsec-meta">Base: ${wsecEsc(c.base || 'default')} · Upgraded: ${wsecEsc(c.smart || 'default')} · Auto-upgrade: ${wsecEsc(c.autoUpgrade || 'their console’s')} · Big models a day: ${wsecEsc(c.premiumDay === null ? 'default' : String(c.premiumDay))}</div>`
         + `<div class="gpa-wsec-actions"><button class="gpa-btn" type="button" data-wm="edit">Edit</button></div></li>`).join('')}</ul>`
       : '<p class="gpa-sub">Nobody yet: everyone uses the default models.</p>');
     wmodBody.innerHTML = html;
@@ -8318,12 +8341,14 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const L = d.limits;
     f.hidden = false;
     const known = (v) => !v || d.catalog.some((m) => m.id === v);
+    const auto = wmodAuto(u);
     f.innerHTML = `<div class="gpa-wmod-who">${wsecEsc(u.user)} <small>${wsecEsc(u.role)} · ${u.used.today} big-model request${u.used.today === 1 ? '' : 's'} today, ${u.used.hour} this hour</small></div>`
       + (u.canEdit === false ? `<p class="gpa-sub">${u.role === 'owner' ? 'The owner’s models are set in Settings → power tools on their device.' : 'Only the owner can change an admin’s models.'}</p>` : '')
       + `<div class="gpa-wmod-grid">`
       + `<label>Base model<select class="gpa-input" data-f="base">${wmodOptions(d.catalog, d.defaults.base, st.base)}</select><input class="gpa-input gpa-wmod-custom" data-c="base" placeholder="Model id" value="${known(st.base) ? '' : wsecEsc(st.base)}"${known(st.base) ? ' hidden' : ''}></label>`
       + `<label>Upgraded model (harder tasks)<select class="gpa-input" data-f="smart">${wmodOptions(d.catalog, d.defaults.smart, st.smart)}</select><input class="gpa-input gpa-wmod-custom" data-c="smart" placeholder="Model id" value="${known(st.smart) ? '' : wsecEsc(st.smart)}"${known(st.smart) ? ' hidden' : ''}></label>`
-      + `<label>Auto-upgrade for harder tasks<select class="gpa-input" data-f="auto"><option value=""${!st.autoUpgrade ? ' selected' : ''}>Default (their console’s setting)</option><option value="on"${st.autoUpgrade === 'on' ? ' selected' : ''}>On</option><option value="off"${st.autoUpgrade === 'off' ? ' selected' : ''}>Off: always the base model</option></select></label>`
+      + `<div class="gpa-wmod-autobox"><div class="gpa-wmod-autotop"><span>Auto-upgrade for harder tasks</span><button type="button" class="gps-switch${auto.on ? ' primary' : ''}" data-wm="auto" aria-pressed="${auto.on}" aria-label="Auto-upgrade for harder tasks">Auto-upgrade for harder tasks</button></div>`
+        + `<div class="gpa-wsec-meta" data-auto-txt>${wsecEsc(auto.text)}</div>${st.autoUpgrade ? `<button type="button" class="gpa-wmod-link" data-wm="autoclear">Use their console’s setting instead</button>` : ''}</div>`
       + `<label>Big (★) models a day<input class="gpa-input" type="number" min="0" data-f="prem" placeholder="default (${wsecEsc(wmodLimit(L.perUserDay))})" value="${st.premiumDay === null ? '' : st.premiumDay}"></label>`
       + `</div>`
       + `<div class="gpa-wsec-actions"><button class="gpa-btn primary" type="button" data-wm="save">Save for ${wsecEsc(u.user)}</button><button class="gpa-btn" type="button" data-wm="reset">Back to defaults</button></div>`;
@@ -8365,6 +8390,18 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       const act = btn.dataset.wm;
       if (act === 'load') { wmodOpen(wmodBody.querySelector('#gpa-wmod-name').value); return; }
       if (act === 'edit') { wmodOpen(btn.closest('.gpa-wsec-item').dataset.user); return; }
+      if (act === 'auto' || act === 'autoclear') {
+        // Saved right away, on the server: it stays after they reload.
+        const want = act === 'autoclear' ? '' : (wmodAuto(wmodUser).on ? 'off' : 'on');
+        btn.disabled = true;
+        try {
+          const r = await wsecApi('/admin/models/set', { action: 'user', u: wmodUser.user, autoUpgrade: want });
+          wmodUser = { ...r.user, canEdit: true };
+          showToast(want === 'on' ? 'Auto-upgrade is on for ' + wmodUser.user + '.' : want === 'off' ? 'Auto-upgrade is off for ' + wmodUser.user + ': always their base model.' : wmodUser.user + ' follows their console’s setting again.');
+          await refreshWelcomeModels();
+        } catch (err) { btn.disabled = false; showToast(err.message, { type: 'danger' }); }
+        return;
+      }
       const num = (el) => { const v = String(el.value).trim(); return v === '' ? null : Math.max(0, parseInt(v, 10) || 0); };
       btn.disabled = true;
       try {
@@ -8376,7 +8413,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           const f = wmodBody.querySelector('#gpa-wmod-form');
           const model = (k) => { const sel = f.querySelector('select[data-f="' + k + '"]'); return sel.value === '__custom__' ? f.querySelector('input[data-c="' + k + '"]').value.trim() : sel.value; };
           const body = act === 'reset' ? { action: 'user', u: wmodUser.user, base: '', smart: '', autoUpgrade: '', premiumDay: null }
-            : { action: 'user', u: wmodUser.user, base: model('base'), smart: model('smart'), autoUpgrade: f.querySelector('select[data-f="auto"]').value, premiumDay: num(f.querySelector('input[data-f="prem"]')) };
+            : { action: 'user', u: wmodUser.user, base: model('base'), smart: model('smart'), premiumDay: num(f.querySelector('input[data-f="prem"]')) };
           const r = await wsecApi('/admin/models/set', body);
           wmodUser = { ...r.user, canEdit: true };
           showToast(act === 'reset' ? wmodUser.user + ' is back on the default models.' : 'Saved. ' + wmodUser.user + '’s next request uses these models.');
@@ -9088,12 +9125,33 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     return { ...(extra || {}), Authorization: 'Bearer ' + t };
   }
   // Auto-upgrade defaults to ON until the owner explicitly turns it off.
-  // Models the owner or an admin set for this person win over this device's.
-  function autoUpgradeOn() {
-    if (serverModels && serverModels.autoUpgrade) return serverModels.autoUpgrade === 'on';
-    const v = admGet(ADMIN_KEYS.AUTO_UPGRADE); return v === null ? true : v === 'on';
+  // Models the owner or an admin set for this person win over this device's
+  // (only the signed-in person's: a saved copy for someone else is ignored).
+  function srvModels() {
+    let me = '';
+    try { me = String(currentUser || '').toLowerCase(); } catch (e) { me = ''; }
+    return serverModels && me && serverModels.u.toLowerCase() === me ? serverModels : null;
   }
-  function smartModel() { return (serverModels && serverModels.smart) || (admGet(ADMIN_KEYS.SMART_MODEL) || '').trim() || SMART_MODEL_DEFAULT; }
+  // This console's own setting (Settings → power tools), on unless turned off.
+  function localAutoUpgrade() { return admGet(ADMIN_KEYS.AUTO_UPGRADE) !== 'off'; }
+  // Tells the Worker this console's own auto-upgrade setting, so Welcome →
+  // AI models can show it; only when it changed since the last report.
+  function reportConsolePrefs() {
+    try {
+      if (!sessionToken() || !telemetryOn() || !currentUser) return;
+      const val = localAutoUpgrade() ? 'on' : 'off';
+      const key = 'gpa_console_prefs_sent:' + String(currentUser).toLowerCase();
+      if (localStorage.getItem(key) === val) return;
+      fetch(telemetryEndpoint() + '/me/console-prefs', { method: 'POST', headers: { 'Content-Type': 'text/plain', 'X-GPA-Session': sessionToken() }, body: JSON.stringify({ autoUpgrade: val }) })
+        .then((r) => r.json()).then((d) => { if (d && d.ok) localStorage.setItem(key, val); }).catch(() => {});
+    } catch (e) { /* not signed in yet */ }
+  }
+  function autoUpgradeOn() {
+    const sm = srvModels();
+    if (sm && sm.autoUpgrade) return sm.autoUpgrade === 'on';
+    return localAutoUpgrade();
+  }
+  function smartModel() { const sm = srvModels(); return (sm && sm.smart) || (admGet(ADMIN_KEYS.SMART_MODEL) || '').trim() || SMART_MODEL_DEFAULT; }
   // Writes the default base and smart models into storage. Runs once when the
   // script loads and again on every sign-in (see enterApp), so each session
   // starts on gpt-4.1-mini / gpt-5 no matter what was picked before.
@@ -9109,7 +9167,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // else the default base model.
   function effectiveModel(dflt, hard) {
     if (hard && autoUpgradeOn() && smartModel()) return smartModel();
-    if (serverModels && serverModels.base) return serverModels.base;
+    if (srvModels() && srvModels().base) return srvModels().base;
     const m = (admGet(ADMIN_KEYS.MODEL) || '').trim();
     return m || dflt;
   }
@@ -23309,7 +23367,11 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     if ('usage' in s) renderUsageMeter(s.usage);
     if ('subscription' in s) renderSubStrip(s.subscription);
     if (s.assignedKeys && typeof s.assignedKeys === 'object') applyAssignedKeys(s.assignedKeys);
-    if ('models' in s) serverModels = s.models && typeof s.models === 'object' ? s.models : null;
+    if ('models' in s && currentUser) {
+      serverModels = s.models && typeof s.models === 'object' ? { u: String(currentUser), base: s.models.base || '', smart: s.models.smart || '', autoUpgrade: s.models.autoUpgrade || '' } : null;
+      try { if (serverModels) localStorage.setItem(SERVER_MODELS_KEY, JSON.stringify(serverModels)); else localStorage.removeItem(SERVER_MODELS_KEY); } catch (e) { /* storage blocked */ }
+    }
+    reportConsolePrefs();
     if (typeof s.brandName === 'string') applyBrandName(s.brandName);
     if (typeof s.defaultTheme === 'string') maybeApplyServerDefaultTheme(s.defaultTheme);
     if (typeof s.kickNonce === 'number') {
@@ -26713,8 +26775,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       autoUpgradeBtn.classList.toggle('primary', on);
     }
     autoUpgradeBtn.addEventListener('click', () => {
-      const on = !autoUpgradeOn();
+      const on = !localAutoUpgrade();
       localStorage.setItem(ADMIN_KEYS.AUTO_UPGRADE, on ? 'on' : 'off');
+      reportConsolePrefs();
       refreshAutoUpgrade();
       panel.querySelector('#gpa-adm-tools-msg').textContent = on
         ? (smartModel() ? 'On. Hard tasks will use ' + smartModel() + '.' : 'On — but set a Smart model above, or it falls back to the base model.')

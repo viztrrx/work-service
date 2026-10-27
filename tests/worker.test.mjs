@@ -486,6 +486,12 @@ test('models: per-user base/upgraded model and auto-upgrade, and big-model limit
   const one = (await c.call('/admin/models?user=ana', { headers: owner })).data;
   assert.equal(one.user.used.today, 2);
   assert.equal(one.canEdit, true);
+  // Their console reports its own auto-upgrade setting, shown when none is set here.
+  assert.equal(one.user.console, null, 'nothing reported yet');
+  assert.equal((await c.call('/me/console-prefs', { method: 'POST', body: { autoUpgrade: 'off' } })).status, 401, 'needs a sign-in');
+  assert.equal((await c.call('/me/console-prefs', { method: 'POST', headers: sess(ana), body: { autoUpgrade: 'maybe' } })).status, 400);
+  assert.equal((await c.call('/me/console-prefs', { method: 'POST', headers: sess(ana), body: { autoUpgrade: 'off' } })).data.ok, true);
+  assert.equal((await c.call('/admin/models?user=ana', { headers: owner })).data.user.console.autoUpgrade, 'off');
 
   // The owner isn't limited unless they say so.
   const ownerAsk = () => c.call('/v1/chat/completions', { method: 'POST', headers: { ...owner, ...userKey, 'X-GPA-User': 'boss' }, body: { model: 'gpt-6-astra', messages: [{ role: 'user', content: 'x' }] } });

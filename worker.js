@@ -2288,7 +2288,10 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       const usageOf = async (u) => ({ hour: parseInt(await kv.get('prem:h:' + hourKey() + ':' + u), 10) || 0, today: parseInt(await kv.get('prem:d:' + dayKey() + ':' + u), 10) || 0 });
       const detail = async (u) => {
         const m = await getMod(kv, u);
-        return { user: (await getAcct(kv, u) || {}).user || u, role: await roleOfName(u), settings: userModelsOf(m), used: await usageOf(u) };
+        // console: what their own console says about auto-upgrade (it reports it), for when it isn't set here.
+        const cp = await kv.get('consoleprefs:' + u, 'json');
+        return { user: (await getAcct(kv, u) || {}).user || u, role: await roleOfName(u), settings: userModelsOf(m), used: await usageOf(u),
+          console: cp && (cp.autoUpgrade === 'on' || cp.autoUpgrade === 'off') ? { autoUpgrade: cp.autoUpgrade, at: cp.at || 0 } : null };
       };
       if (url.pathname === '/admin/models/set') {
         let body = {};
@@ -3950,6 +3953,23 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     // ?since=<ts> hands out the alerts after that time that this person wants
     // (see STAFF_POPUP_DEFS); /staff/popup-prefs reads (GET) or changes (POST
     // { on, cats }) what they want. Separate from their phone notifications.
+    // The console says what its own auto-upgrade setting is (Settings → power
+    // tools), so Welcome → AI models can show whether a person really gets
+    // the upgraded model when it isn't set there. Sent only when it changes.
+    if (url.pathname === '/me/console-prefs' && req.method === 'POST') {
+      const kv = env && env.TELEMETRY;
+      const sp = await resolveSession();
+      if (!sp) return json({ ok: false, error: 'Sign in first.' }, 401);
+      let body = {};
+      try { const raw = await req.text(); if (raw.length > 1024) throw 0; body = JSON.parse(raw) || {}; } catch (e) { return json({ ok: false, error: 'invalid request' }, 400); }
+      if (body.autoUpgrade !== 'on' && body.autoUpgrade !== 'off') return json({ ok: false, error: 'autoUpgrade must be on or off' }, 400);
+      if (!kv) return json({ ok: false, error: 'storage not configured' }, 503);
+      const key = 'consoleprefs:' + String(sp.user).toLowerCase();
+      const cur = (await kv.get(key, 'json')) || {};
+      if (cur.autoUpgrade !== body.autoUpgrade) await kv.put(key, JSON.stringify({ ...cur, autoUpgrade: body.autoUpgrade, at: Date.now() }));
+      return json({ ok: true });
+    }
+
     if (url.pathname === '/staff/alerts' || url.pathname === '/staff/popup-prefs') {
       const kv = env && env.TELEMETRY;
       const sp = await resolveSession();
