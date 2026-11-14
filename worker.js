@@ -233,6 +233,19 @@ const premiumLimitsOf = (cfg) => {
   return { perUserHour: num(p.perUserHour, PREMIUM_DEFAULTS.perUserHour), perUserDay: num(p.perUserDay, PREMIUM_DEFAULTS.perUserDay),
     totalDay: num(p.totalDay, PREMIUM_DEFAULTS.totalDay), includeOwner: typeof p.includeOwner === 'boolean' ? p.includeOwner : PREMIUM_DEFAULTS.includeOwner };
 };
+// Ask AI's built-in tools (Welcome → AI models → AI tools; the owner sets
+// them): web search, making images, and how many images each person may make
+// a day (null = no limit). The owner's own requests aren't limited.
+const AI_TOOL_DEFAULTS = { webSearch: true, images: true, imagesPerDay: 10 };
+const aiToolsOf = (cfg) => {
+  const t = (cfg && cfg.aiTools) || {};
+  return { webSearch: typeof t.webSearch === 'boolean' ? t.webSearch : AI_TOOL_DEFAULTS.webSearch, images: typeof t.images === 'boolean' ? t.images : AI_TOOL_DEFAULTS.images,
+    imagesPerDay: t.imagesPerDay === null ? null : Number.isInteger(t.imagesPerDay) && t.imagesPerDay >= 0 ? t.imagesPerDay : AI_TOOL_DEFAULTS.imagesPerDay };
+};
+// Only these tools reach OpenAI (never code_interpreter, file_search,
+// computer use or remote MCP servers, which would run on the owner's key).
+const AI_TOOL_TYPES = new Set(['web_search', 'web_search_preview', 'image_generation', 'function']);
+const imageCountKey = (u) => 'img:d:' + dayKey() + ':' + String(u || 'unknown').toLowerCase();
 // A person's model settings (set by the owner or an admin), stored on their
 // mod record: base and upgraded model, auto-upgrade on/off, and their own
 // daily big-model allowance. Unset fields follow the console's defaults.
@@ -370,8 +383,8 @@ const EVERYONE_MAX_ALERTS = 60;      // phone alerts one @everyone sends at most
 const V1_MAX_BODY = 24 * 1024 * 1024;   // largest AI request accepted (see /v1/*)
 // A response body as text, reading no more than maxBytes (the rest is
 // cancelled, never downloaded into memory).
-async function readCapped(res, maxBytes) {
-  if (!res.body) return '';
+async function readCapped(res, maxBytes, raw) {
+  if (!res.body) return raw ? new Uint8Array(0) : '';
   const reader = res.body.getReader();
   const parts = [];
   let got = 0;
@@ -386,7 +399,7 @@ async function readCapped(res, maxBytes) {
   const all = new Uint8Array(got);
   let at = 0;
   for (const p of parts) { all.set(p, at); at += p.byteLength; }
-  return new TextDecoder().decode(all);
+  return raw ? all : new TextDecoder().decode(all);
 }
 const emptyUsage = () => ({ n: 0, fail: 0, rl: 0, latSum: 0, latN: 0, tokIn: 0, tokOut: 0, models: {} });
 // Reads either the new JSON record or the legacy integer counter.
@@ -2326,7 +2339,22 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           await logAudit(kv, { route: url.pathname, action: 'premium_limits', target: 'all', meta: next });
           return json({ ok: true, limits: next });
         }
-        if (body.action !== 'user') return json({ error: 'action must be user or limits' }, 400);
+        if (body.action === 'tools') {
+          if (!owner) return json({ error: 'Only the owner can change the AI tools.' }, 403);
+          const next = { ...aiToolsOf(cfg) };
+          for (const k of ['webSearch', 'images']) if (typeof body[k] === 'boolean') next[k] = body[k];
+          if ('imagesPerDay' in body) {
+            const v = body.imagesPerDay;
+            if (v === null || v === '') next.imagesPerDay = null;
+            else if (Number.isInteger(Number(v)) && Number(v) >= 0 && Number(v) <= 10000) next.imagesPerDay = Number(v);
+            else return json({ error: 'Images a day must be a whole number or empty.' }, 400);
+          }
+          cfg.aiTools = next;
+          await kv.put('config', JSON.stringify(cfg));
+          await logAudit(kv, { route: url.pathname, action: 'ai_tools', target: 'all', meta: next });
+          return json({ ok: true, tools: next });
+        }
+        if (body.action !== 'user') return json({ error: 'action must be user, limits or tools' }, 400);
         const u = String(body.u || '').trim().toLowerCase().slice(0, 40);
         if (!/^[a-z0-9_.-]{1,40}$/.test(u)) return json({ error: 'Pick a user.' }, 400);
         const theirRole = await roleOfName(u);
@@ -2388,6 +2416,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       top.sort((a, b) => b.today - a.today);
       return json({ ok: true, owner, catalog: MODEL_CATALOG.map((m) => ({ id: m.id, label: m.label, premium: !!m.premium })),
         defaults: { base: DEFAULT_BASE_MODEL, smart: DEFAULT_SMART_MODEL }, limits: premiumLimitsOf(cfg),
+        tools: aiToolsOf(cfg), imagesToday: parseInt(await kv.get('img:t:' + dayKey()), 10) || 0,
         totalToday: parseInt(await kv.get('prem:t:' + dayKey()), 10) || 0, topToday: top.slice(0, 8),
         users: [...names].sort().slice(0, 1000), custom });
     }
@@ -7125,6 +7154,36 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       });
     }
 
+    // ---- /image?url=… : a picture someone pasted, fetched for the AI ----
+    // When a copied problem's images can't be read in the page (another
+    // site, no CORS), the console asks for them here. Public http(s) images
+    // only, at most 8 MB, never run or shown on this origin.
+    if (url.pathname === '/image') {
+      let safe = safeTargetUrl(url.searchParams.get('url'));
+      if (!safe) return json({ error: 'only public http/https images can be fetched' }, 400);
+      const who = (await effectiveUser(req.headers.get('X-GPA-User'))).user;
+      if (env && env.TELEMETRY && !allowedUser(await getConfig(env.TELEMETRY), who)) return json({ error: ACCESS_DENIED }, 403);
+      if (who && env && env.TELEMETRY && (await resolve(env.TELEMETRY, who)).state === 'blocked') return json({ error: 'blocked by the owner' }, 403);
+      let upstream = null;
+      try {
+        for (let hop = 0; hop < 4; hop++) {
+          upstream = await fetch(safe.toString(), { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AgentConsole/1.0; image reader)', Accept: 'image/*' }, redirect: 'manual', signal: AbortSignal.timeout(15000) });
+          if (upstream.status < 300 || upstream.status > 399) break;
+          const next = upstream.headers.get('location') && safeTargetUrl(new URL(upstream.headers.get('location'), safe).toString());
+          if (!next) return json({ error: 'refused: redirect pointed at a non-public address' }, 400);
+          safe = next; upstream = null;
+        }
+      } catch (e) { return json({ error: 'fetch failed' }, 502); }
+      if (!upstream) return json({ error: 'too many redirects' }, 502);
+      if (upstream.status >= 400) return json({ error: `upstream returned ${upstream.status}` }, 502);
+      const type = (upstream.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+      if (!/^image\/(png|jpeg|gif|webp|svg\+xml|bmp|avif)$/.test(type)) return json({ error: 'not an image: ' + type.slice(0, 60) }, 415);
+      let bytes;
+      try { bytes = await readCapped(upstream, 8 * 1024 * 1024 + 1, true); } catch (e) { return json({ error: 'could not read the image' }, 502); }
+      if (bytes.length > 8 * 1024 * 1024) return json({ error: 'image too large (over 8 MB)' }, 413);
+      return new Response(bytes, { status: 200, headers: { ...cors, ...SECURITY_HEADERS, 'Content-Type': type, 'Content-Disposition': 'attachment', 'Content-Security-Policy': "default-src 'none'; sandbox" } });
+    }
+
     // ---- AI proxy: /v1/* (OpenAI only) ----
     // Server-side enforcement point for everything AI: identity (a verified
     // session wins over an asserted name), moderation, maintenance mode,
@@ -7299,6 +7358,38 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         modelNote = { asked, used: model, why };
       }
     }
+    // Built-in tools (Responses API): only the allowed kinds, web search and
+    // images only when the owner allows them, images within the daily limit.
+    let toolsNote = null;
+    if (url.pathname === '/v1/responses' && req.method === 'POST' && parsedBody && Array.isArray(parsedBody.tools)) {
+      const tools = aiToolsOf(vCfg);
+      const before = parsedBody.tools.length;
+      let imgWhy = '';
+      if (!tools.images) imgWhy = 'off';
+      else if (!ownerCaller && tools.imagesPerDay !== null && kv) {
+        const made = parseInt(await kv.get(imageCountKey(modUser)), 10) || 0;
+        if (made >= tools.imagesPerDay) imgWhy = 'limit';
+      }
+      const asked = new Set(parsedBody.tools.map((t) => t && t.type));
+      parsedBody.tools = parsedBody.tools.filter((t) => t && AI_TOOL_TYPES.has(t.type)
+        && !(/^web_search/.test(t.type) && !tools.webSearch) && !(t.type === 'image_generation' && imgWhy))
+        .slice(0, 16)
+        .map((t) => (t.type === 'image_generation'
+          ? { type: 'image_generation', partial_images: Math.min(3, Math.max(0, parseInt(t.partial_images, 10) || 0)),
+            ...(/^(1024x1024|1024x1536|1536x1024|auto)$/.test(t.size || '') ? { size: t.size } : {}),
+            ...(/^(low|medium|auto)$/.test(t.quality || '') || (ownerCaller && t.quality === 'high') ? { quality: t.quality } : {}) }
+          : t));
+      const notes = [];
+      if (asked.has('image_generation') && imgWhy) notes.push(imgWhy === 'limit' ? 'Image creation has reached today’s limit for this person (' + tools.imagesPerDay + ' a day): if they ask for an image, say so kindly and offer a description instead.' : 'Image creation is turned off by the owner: if asked for an image, say you can’t make images here.');
+      if ((asked.has('web_search') || asked.has('web_search_preview')) && !tools.webSearch) notes.push('Web search is turned off by the owner: answer from what you know and say it may be out of date.');
+      if (notes.length) parsedBody.instructions = (parsedBody.instructions ? parsedBody.instructions + '\n\n' : '') + notes.join(' ');
+      if (!parsedBody.tools.length) delete parsedBody.tools;
+      if (imgWhy || !tools.webSearch || (parsedBody.tools || []).length !== before) {
+        toolsNote = { ...(asked.has('image_generation') && imgWhy ? { images: imgWhy } : {}), ...(!tools.webSearch && (asked.has('web_search') || asked.has('web_search_preview')) ? { webSearch: 'off' } : {}) };
+        if (!Object.keys(toolsNote).length) toolsNote = null;
+      }
+      bodyText = JSON.stringify(parsedBody);
+    }
     if (vCfg && vCfg.allowedModels.length && requestedModel && !vCfg.allowedModels.includes(requestedModel)) {
       return json({ error: { message: `Model "${requestedModel}" is not allowed.`, type: 'model_not_allowed' } }, 400);
     }
@@ -7365,17 +7456,28 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       const delta = { n: quotaRecordKey ? 0 : 1, fail: res.ok ? 0 : 1, rl: res.status === 429 ? 1 : 0, latSum: latency, latN: 1, models: requestedModel ? { [requestedModel]: 1 } : {} };
       const clone = res.ok ? res.clone() : null;
       const sse = /text\/event-stream/.test(res.headers.get('Content-Type') || '');
+      // Images made in this answer count toward the person's daily limit.
+      const countImages = async (output) => {
+        const n = (Array.isArray(output) ? output : []).filter((o) => o && o.type === 'image_generation_call' && o.status !== 'failed' && o.result).length;
+        if (!n || !kv) return;
+        const k = imageCountKey(modUser);
+        await kv.put(k, String((parseInt(await kv.get(k), 10) || 0) + n), { expirationTtl: 3 * 86400 });
+        const tk = 'img:t:' + dayKey();
+        await kv.put(tk, String((parseInt(await kv.get(tk), 10) || 0) + n), { expirationTtl: 3 * 86400 });
+      };
       const finish = (async () => {
         if (clone && sse) {
           // A streamed answer: the token counts are in its last event.
           try {
             const text = await clone.text();
             const done = text.split('\n').filter((l) => l.startsWith('data: ') && l.includes('"response.completed"')).pop();
-            const u = done && JSON.parse(done.slice(6)).response.usage;
+            const resp = done && JSON.parse(done.slice(6)).response;
+            const u = resp && resp.usage;
             if (u) { delta.tokIn = u.input_tokens || 0; delta.tokOut = u.output_tokens || 0; }
+            if (resp) await countImages(resp.output);
           } catch (e) { /* unreadable stream */ }
         } else if (clone) {
-          try { const j = await clone.json(); if (j && j.usage) { delta.tokIn = j.usage.prompt_tokens || j.usage.input_tokens || 0; delta.tokOut = j.usage.completion_tokens || j.usage.output_tokens || 0; } } catch (e) { /* non-JSON */ }
+          try { const j = await clone.json(); if (j && j.usage) { delta.tokIn = j.usage.prompt_tokens || j.usage.input_tokens || 0; delta.tokOut = j.usage.completion_tokens || j.usage.output_tokens || 0; } if (j && Array.isArray(j.output)) await countImages(j.output); } catch (e) { /* non-JSON */ }
         }
         noteUsage(modUser, delta);
       })();
@@ -7384,11 +7486,12 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     // Opted-in memory calls get the count added to the JSON body, since some
     // of the client's fetch transports can't read response headers.
     const streaming = /text\/event-stream/.test(res.headers.get('Content-Type') || '');
-    if ((memOpt || modelNote) && res.ok && !streaming) {
+    if ((memOpt || modelNote || toolsNote) && res.ok && !streaming) {
       try {
         const j = await res.json();
         if (memOpt) j._gpa_memory = { used: memoryUsed };
         if (modelNote) j._gpa_model = modelNote;
+        if (toolsNote) j._gpa_tools = toolsNote;
         return new Response(JSON.stringify(j), { status: res.status, headers: { ...CORS_HEADERS, ...SECURITY_HEADERS, 'Content-Type': 'application/json' } });
       } catch (e) { /* fall through with the original stream consumed — report it */
         return json({ error: { message: 'Unreadable upstream response.', type: 'upstream_parse' } }, 502);
@@ -7397,8 +7500,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     // A streamed answer can't carry extra JSON fields, so the console gets the
     // same notes as one event ahead of OpenAI's own ("event: gpa.meta").
     let body = res.body;
-    if (streaming && res.ok && (memOpt || modelNote) && body) {
-      const meta = { ...(memOpt ? { _gpa_memory: { used: memoryUsed } } : {}), ...(modelNote ? { _gpa_model: modelNote } : {}) };
+    if (streaming && res.ok && (memOpt || modelNote || toolsNote) && body) {
+      const meta = { ...(memOpt ? { _gpa_memory: { used: memoryUsed } } : {}), ...(modelNote ? { _gpa_model: modelNote } : {}), ...(toolsNote ? { _gpa_tools: toolsNote } : {}) };
       const head = new TextEncoder().encode('event: gpa.meta\ndata: ' + JSON.stringify(meta) + '\n\n');
       const { readable, writable } = new TransformStream();
       const upstream = body;

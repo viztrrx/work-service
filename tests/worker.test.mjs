@@ -42,8 +42,18 @@ const embed = (text) => {
 const openaiLog = [];
 let nextExtraction = { memories: [] };
 const realFetch = globalThis.fetch;
+// A tiny real PNG (1×1) for image tests.
+const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 globalThis.fetch = async (url, init = {}) => {
   const u = String(url);
+  if (u.startsWith('https://img.test/')) {
+    // Pictures someone pasted (the /image route fetches them).
+    if (u.endsWith('/cat.png')) return new Response(PNG_1PX, { headers: { 'Content-Type': 'image/png' } });
+    if (u.endsWith('/page.html')) return new Response('<script>alert(1)</script>', { headers: { 'Content-Type': 'text/html' } });
+    if (u.endsWith('/huge.png')) return new Response(new Uint8Array(9 * 1024 * 1024), { headers: { 'Content-Type': 'image/png' } });
+    if (u.endsWith('/hop')) return new Response(null, { status: 302, headers: { Location: 'http://127.0.0.1/secret.png' } });
+    return new Response('nope', { status: 404 });
+  }
   if (!u.startsWith('https://api.openai.com')) return realFetch(url, init);
   const auth = (init.headers && (init.headers.Authorization || init.headers.authorization)) || '';
   const body = init.body ? JSON.parse(init.body) : null;
@@ -64,7 +74,10 @@ globalThis.fetch = async (url, init = {}) => {
       + ev('response.reasoning_summary_part.added', { summary_index: 0 })
       + ev('response.reasoning_summary_text.delta', { delta: '**Reading the question**\n\nTwo plus two.' })
       + ev('response.output_text.delta', { delta: '4' })
-      + ev('response.completed', { response: { id: 'resp_1', model: body.model, output: [{ type: 'message', content: [{ type: 'output_text', text: '4' }] }], usage: { input_tokens: 21, output_tokens: 9 } } });
+      + ev('response.completed', { response: { id: 'resp_1', model: body.model, output: [
+        // An image when the image tool was offered and asked for.
+        ...((body.tools || []).some((t) => t.type === 'image_generation') && /draw/.test(JSON.stringify(body.input)) ? [{ type: 'image_generation_call', status: 'completed', result: PNG_1PX.toString('base64') }, { type: 'image_generation_call', status: 'completed', result: PNG_1PX.toString('base64') }] : []),
+        { type: 'message', content: [{ type: 'output_text', text: '4' }] }], usage: { input_tokens: 21, output_tokens: 9 } } });
     return new Response(new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode(sse)); c.close(); } }), { headers: { 'Content-Type': 'text/event-stream' } });
   }
   return reply({ error: 'unhandled' }, 404);
@@ -465,6 +478,75 @@ test('streamed answers (/v1/responses): passed through as server-sent events, wi
   // Without memory or a model note, the stream is OpenAI’s exactly.
   const plain = await c.call('/v1/responses', { method: 'POST', headers: H, body: { model: 'gpt-5-mini', stream: true, input: [{ role: 'user', content: [{ type: 'input_text', text: 'hi' }] }] } });
   assert.match(plain.text, /^event: response\.created\n/);
+});
+
+test('AI tools: only allowed kinds reach OpenAI; the owner turns web search / images off; images a day per person', async () => {
+  const env = makeEnv(); const c = makeClient(env);
+  const a = (await signUp(c, 'ivy')).data.token;
+  const H = { ...sess(a), ...userKey };
+  const ask = (text, tools, extra = {}) => { openaiLog.length = 0; return c.call('/v1/responses', { method: 'POST', headers: H, body: { model: 'gpt-4.1-mini', stream: true, instructions: 'Be brief.', input: [{ role: 'user', content: [{ type: 'input_text', text }] }], tools, ...extra } }); };
+  const sent = () => openaiLog.find((x) => x.path === '/v1/responses').body;
+  const meta = (r) => { const m = /^event: gpa\.meta\ndata: (.+)$/m.exec(r.text); return m ? JSON.parse(m[1]) : null; };
+  const ALL = [{ type: 'web_search' }, { type: 'image_generation', partial_images: 9, quality: 'high', size: '4096x4096', background: 'transparent' }, { type: 'code_interpreter', container: { type: 'auto' } }, { type: 'mcp', server_url: 'https://evil.test' }, { type: 'file_search' }];
+
+  // Defaults: web search and images on; the dangerous kinds never pass; image options clamped.
+  let r = await ask('hello', ALL);
+  assert.equal(r.status, 200);
+  assert.deepEqual(sent().tools, [{ type: 'web_search' }, { type: 'image_generation', partial_images: 3 }], 'code interpreter, MCP and file search are dropped; image settings clamped');
+  assert.equal(meta(r), null, 'nothing to report');
+  const admin = (body) => c.call('/admin/models/set', { method: 'POST', headers: owner, body });
+  let view = (await c.call('/admin/models', { headers: owner })).data;
+  assert.deepEqual(view.tools, { webSearch: true, images: true, imagesPerDay: 10 });
+
+  // Images count per person per day (from what OpenAI actually made): 2 per "draw".
+  assert.equal((await admin({ action: 'tools', imagesPerDay: 3 })).data.tools.imagesPerDay, 3);
+  assert.equal((await c.call('/admin/models/set', { method: 'POST', headers: coadmin, body: { action: 'tools', images: false } })).status, 403, 'owner only');
+  assert.equal((await admin({ action: 'tools', imagesPerDay: 'lots' })).status, 400);
+  await ask('draw a cat', ALL); await c.settle();
+  assert.equal(await env.TELEMETRY.get('img:d:' + new Date().toISOString().slice(0, 10) + ':ivy'), '2');
+  await ask('draw a dog', ALL); await c.settle();   // 4 now, over 3
+  r = await ask('draw a bird', ALL);
+  assert.deepEqual(sent().tools.map((t) => t.type), ['web_search'], 'over the limit: no image tool');
+  assert.match(sent().instructions, /^Be brief\.\n\nImage creation has reached today’s limit for this person \(3 a day\)/);
+  assert.deepEqual(meta(r)._gpa_tools, { images: 'limit' });
+  view = (await c.call('/admin/models', { headers: owner })).data;
+  assert.equal(view.imagesToday, 4);
+  // The owner isn't limited.
+  openaiLog.length = 0;
+  await c.call('/v1/responses', { method: 'POST', headers: { ...owner, ...userKey, 'X-GPA-User': 'boss' }, body: { model: 'gpt-4.1-mini', stream: true, input: [{ role: 'user', content: [{ type: 'input_text', text: 'draw' }] }], tools: ALL } });
+  assert.ok(sent().tools.some((t) => t.type === 'image_generation'), 'owner: still has images');
+  assert.ok(sent().tools.find((t) => t.type === 'image_generation').quality === 'high', 'and may ask for high quality');
+
+  // Off switches.
+  await admin({ action: 'tools', webSearch: false, images: false, imagesPerDay: null });
+  r = await ask('news today?', ALL);
+  assert.equal(sent().tools, undefined, 'no tools left at all');
+  assert.match(sent().instructions, /Image creation is turned off by the owner.*Web search is turned off by the owner/s);
+  assert.deepEqual(meta(r)._gpa_tools, { images: 'off', webSearch: 'off' });
+  // Asking without tools: untouched.
+  r = await ask('plain', undefined);
+  assert.equal(sent().instructions, 'Be brief.');
+});
+
+test('/image: a pasted picture fetched for the AI — public images only, never run here', async () => {
+  const env = makeEnv(); const c = makeClient(env);
+  const a = (await signUp(c, 'pia')).data.token;
+  const get = (u) => worker.fetch(new Request('https://worker.test/image?url=' + encodeURIComponent(u), { headers: { 'X-GPA-Session': a, 'CF-Connecting-IP': '1.2.3.4' } }), env, { waitUntil() {} });
+  let r = await get('https://img.test/cat.png');
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get('Content-Type'), 'image/png');
+  assert.equal(r.headers.get('Content-Security-Policy'), "default-src 'none'; sandbox");
+  assert.equal(r.headers.get('X-Content-Type-Options'), 'nosniff');
+  assert.equal(r.headers.get('Access-Control-Allow-Origin'), '*');
+  assert.deepEqual(Buffer.from(await r.arrayBuffer()), PNG_1PX, 'the bytes, unchanged');
+  assert.equal((await get('https://img.test/page.html')).status, 415, 'not an image');
+  assert.equal((await get('https://img.test/huge.png')).status, 413, 'over 8 MB');
+  assert.equal((await get('http://127.0.0.1/secret.png')).status, 400, 'private address');
+  assert.equal((await get('https://img.test/hop')).status, 400, 'a redirect to a private address');
+  assert.equal((await get('file:///etc/passwd')).status, 400);
+  // People the owner hasn't let in can't use it.
+  await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: [] } } });
+  assert.equal((await get('https://img.test/cat.png')).status, 403);
 });
 
 test('models: per-user base/upgraded model and auto-upgrade, and big-model limits that switch to a standard model', async () => {

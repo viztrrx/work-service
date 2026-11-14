@@ -14,6 +14,7 @@ new subscriber and then the owner would see things.
 | [3-playlists](#3-playlists-everyone-signed-in) | Spotify / Apple Music playlist → YouTube links, for everyone; **new:** 10 new songs a day each, your limit card |
 | [4-youtube-to-mp3](#4-youtube-to-mp3-owner) | The MP3 converter in Music → My music |
 | [5-subscribe-page](#5-subscribe-page) | The payment page, the $6 contribution box, and **new:** your $1 test (owner only) |
+| [17-ai-agent-files-math](#17-ask-ai-as-an-agent-files-math-smart-paste) | **New:** Ask AI searches the web, makes pictures and files on its own; drop any file; math drawn as math; copy a problem and paste it with its pictures |
 | [16-school-days-and-thinking](#16-the-school-day-meter-and-live-thinking) | **New:** the subscription meter counts school days only (2026–27 calendar), paused on weekends, holidays, PD and weather days; live thinking in Ask AI |
 | [15-owner-pin-reset](#15-resetting-your-own-pin-owner) | **New:** reset your own PIN in Settings → Memory with Admin connected |
 | [14-music-rename-and-popups](#14-renaming-songs-and-chromebook-pop-ups) | **New:** rename a song (name, artist, file name) and download it; pop-up notifications on a Chromebook |
@@ -506,4 +507,29 @@ the reasoning streams in, then "Thought for Ns" above the answer (tap to open).
 <img src="16-school-days-and-thinking/think-03-answer-streaming.png" width="420" alt="The answer streams in, thinking folded">
 <img src="16-school-days-and-thinking/think-04-done-folded.png" width="420" alt="Done: Thought for 7s">
 <img src="16-school-days-and-thinking/think-05-thinking-opened.png" width="420" alt="Thinking opened again">
+
+---
+
+## 17. Ask AI as an agent: files, math, smart paste
+
+Taken Nov 14, 2026 by `tests/browser/ai-tools.mjs` (local test server and an
+OpenAI stand-in that streams the same events OpenAI does).
+
+**Copy, paste, pictures included.** The quiz question was copied on the page
+and pasted: the KaTeX equation and Canvas's equation picture became LaTeX,
+the three pictures came along, "[Image N]" marks where each was.
+
+<img src="17-ai-agent-files-math/01-smart-paste.png" width="720" alt="Pasted question with LaTeX and three attached pictures">
+
+**Drop any file**, and the files stay in the chat.
+
+<img src="17-ai-agent-files-math/02-drop-zone.png" width="720" alt="Drop files to add them to the chat">
+<img src="17-ai-agent-files-math/03-files-and-pictures.png" width="720" alt="Word, PDF and text files plus pictures, ready to send">
+
+**It uses its tools on its own**: a web search, then a picture (blurry while
+it's made), and the answer: math drawn as math, a Word file and a CSV it made,
+the picture, and sources.
+
+<img src="17-ai-agent-files-math/04-agent-working.png" width="720" alt="Searched the web, creating an image">
+<img src="17-ai-agent-files-math/05-answer-math-files-picture.png" width="720" alt="Answer with math, file cards, a picture">
 

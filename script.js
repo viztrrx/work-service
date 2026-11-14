@@ -1762,6 +1762,58 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpx-seg .gps-seg-btn:focus-visible, .gpx-seg-inline .gps-seg-btn:focus-visible { outline: 2px solid var(--gpa-accent); outline-offset: 2px; }
 
       /* Typing indicator for AI replies in progress */
+      /* Ask AI composer: grows with the message */
+      .gpx-ask-ta { resize: none; min-height: 38px; max-height: 180px; line-height: 1.45; padding-top: 9px; padding-bottom: 9px; font: inherit; overflow-y: auto; }
+      /* Files in this chat */
+      .gpx-files { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 6px; }
+      .gpx-files[hidden] { display: none; }
+      .gpx-files-label { font-size: 11px; font-weight: 600; color: var(--gpa-sub); text-transform: uppercase; letter-spacing: .04em; margin-right: 2px; }
+      .gpx-filechip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 4px 4px 5px; border: 1px solid var(--gpa-border); border-radius: 9px; background: var(--gpa-field, transparent); font-size: 12px; color: var(--gpa-text); }
+      .gpx-filechip-ext { flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: .03em; padding: 3px 5px; border-radius: 5px; background: color-mix(in srgb, var(--gpa-accent) 22%, transparent); }
+      .gpx-filechip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+      .gpx-filechip small { color: var(--gpa-sub); flex: none; }
+      .gpx-filechip button { all: unset; cursor: pointer; width: 20px; height: 20px; border-radius: 50%; text-align: center; line-height: 20px; color: var(--gpa-sub); }
+      .gpx-filechip button:hover { background: color-mix(in srgb, var(--gpa-text) 12%, transparent); color: var(--gpa-text); }
+      .gpx-msg-files { margin-top: 4px; font-size: 12px; opacity: .8; }
+      /* Drop files here */
+      .gpa-pane[data-pane="ask"] { position: relative; }
+      .gpx-drop { position: absolute; inset: 6px; z-index: 30; display: grid; place-items: center; border: 2px dashed var(--gpa-accent); border-radius: 14px;
+        background: color-mix(in srgb, var(--gpa-panel, #111) 88%, transparent); color: var(--gpa-text); font-weight: 600; font-size: 15px; text-align: center; pointer-events: none; }
+      .gpx-drop[hidden] { display: none; }
+      .gpx-drop small { display: block; margin-top: 6px; font-weight: 400; font-size: 12px; color: var(--gpa-sub); }
+      /* Rich answers */
+      .gpx-rich { white-space: pre-wrap; }
+      .gpx-rich a, .gpx-answer-chip a { color: var(--gpa-accent); text-decoration: underline; text-underline-offset: 2px; }
+      .gpx-math math { font-size: 1.08em; }
+      .gpx-math-block { display: block; margin: 6px 0; overflow-x: auto; overflow-y: hidden; padding: 2px 0; white-space: normal; }
+      .gpx-math-block math { font-size: 1.15em; }
+      .gpx-code { margin: 6px 0; border: 1px solid var(--gpa-border); border-radius: 9px; overflow: hidden; white-space: normal; }
+      .gpx-code-h { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px 4px 10px; font-size: 11px; color: var(--gpa-sub); background: color-mix(in srgb, var(--gpa-text) 6%, transparent); }
+      .gpx-code-h button { all: unset; cursor: pointer; font-size: 11px; padding: 2px 6px; border-radius: 5px; }
+      .gpx-code-h button:hover { background: color-mix(in srgb, var(--gpa-text) 12%, transparent); }
+      .gpx-code pre { margin: 0; padding: 8px 10px; overflow-x: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre; }
+      .gpx-file { display: flex; align-items: center; gap: 10px; margin: 6px 0; padding: 8px 10px; border: 1px solid var(--gpa-border); border-radius: 11px; background: color-mix(in srgb, var(--gpa-text) 4%, transparent); white-space: normal; }
+      .gpx-file-ic { flex: none; width: 38px; height: 44px; display: grid; place-items: center; border-radius: 7px; font-size: 10px; font-weight: 800; letter-spacing: .03em; color: #fff;
+        background: linear-gradient(160deg, var(--gpa-accent), color-mix(in srgb, var(--gpa-accent) 55%, #000)); }
+      .gpx-file-meta { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+      .gpx-file-meta b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .gpx-file-meta small { color: var(--gpa-sub); font-size: 11.5px; }
+      .gpx-file-act { display: flex; gap: 6px; flex: none; }
+      .gpx-file-act .gpa-btn { min-height: 30px; font-size: 12px; padding: 4px 10px; }
+      .gpx-file.is-writing .gpx-file-ic { animation: gpx-dot 1.1s ease-in-out infinite; }
+      .gpx-file-pre { margin: -2px 0 8px; max-height: 260px; overflow: auto; padding: 8px 10px; border: 1px solid var(--gpa-border); border-radius: 9px; font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; }
+      .gpx-extras { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; white-space: normal; }
+      .gpx-extras:empty { display: none; }
+      .gpx-gen { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+      .gpx-gen img { width: 100%; max-width: 420px; border-radius: 10px; border: 1px solid var(--gpa-border); background: color-mix(in srgb, var(--gpa-text) 6%, transparent); min-height: 60px; }
+      .gpx-gen.is-partial img { filter: blur(6px) saturate(.8); }
+      .gpx-gen figcaption { font-size: 12px; color: var(--gpa-sub); }
+      .gpx-gen figcaption .gpa-btn { min-height: 28px; font-size: 12px; padding: 3px 10px; text-decoration: none; display: inline-flex; }
+      .gpx-sources { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 11.5px; }
+      .gpx-sources > span { color: var(--gpa-sub); font-weight: 600; margin-right: 2px; }
+      .gpx-sources a { display: inline-flex; align-items: center; gap: 5px; max-width: 260px; padding: 3px 8px 3px 4px; border-radius: 999px; border: 1px solid var(--gpa-border); color: var(--gpa-text); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .gpx-sources a b { flex: none; width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; background: color-mix(in srgb, var(--gpa-accent) 25%, transparent); }
+      .gpx-sources a:hover { border-color: var(--gpa-accent); }
       /* Live thinking above an Ask AI answer */
       .gpx-think { align-self: flex-start; max-width: 92%; margin: 2px 0 4px; font-size: 12.5px; }
       .gpx-think-h { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; padding: 3px 2px; border-radius: 6px; cursor: pointer; color: var(--gpa-sub); font-weight: 600; }
@@ -1779,9 +1831,17 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpx-think.is-collapsed .gpx-think-chev { transform: translateY(0) rotate(-45deg); }
       .gpx-think.is-live .gpx-think-chev, .gpx-think.is-empty .gpx-think-chev { display: none; }
       .gpx-think-body { margin: 4px 0 2px 6px; padding: 1px 0 1px 13px; border-left: 2px solid var(--gpa-border); color: var(--gpa-sub); line-height: 1.5; max-height: 210px; overflow-y: auto; overscroll-behavior: contain; }
-      .gpx-think-body:empty, .gpx-think.is-collapsed .gpx-think-body { display: none; }
+      .gpx-think-body:not(:has(.gpx-think-text:not(:empty), .gpx-think-tools:not(:empty))), .gpx-think.is-collapsed .gpx-think-body { display: none; }
       .gpx-think-body p { margin: 0 0 7px; white-space: pre-wrap; }
       .gpx-think-step { font-weight: 600; color: var(--gpa-text); margin: 2px 0 3px; }
+      .gpx-think-tool { display: flex; align-items: center; gap: 7px; margin: 3px 0 6px; color: var(--gpa-text); font-weight: 500; }
+      .gpx-think-tool::before { content: ''; flex: none; width: 13px; height: 13px; background: currentColor; opacity: .7;
+        -webkit-mask: var(--gpx-tool-ic) center / contain no-repeat; mask: var(--gpx-tool-ic) center / contain no-repeat; }
+      .gpx-think-tool.is-search { --gpx-tool-ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18'/%3E%3C/svg%3E"); }
+      .gpx-think-tool.is-image { --gpx-tool-ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'%3E%3Crect x='3' y='4' width='18' height='16' rx='2'/%3E%3Ccircle cx='9' cy='10' r='2'/%3E%3Cpath d='M21 17l-5-5-9 8'/%3E%3C/svg%3E"); }
+      .gpx-think-tool.is-busy { background: linear-gradient(90deg, var(--gpa-sub) 0%, var(--gpa-text) 50%, var(--gpa-sub) 100%); background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: gpx-think-shimmer 1.8s linear infinite; }
+      .gpx-think-tool.is-busy::before { background: var(--gpa-sub); }
+      .gpx-think-text:empty { display: none; }
       @keyframes gpx-think-shimmer { from { background-position: 125% 0; } to { background-position: -125% 0; } }
       @keyframes gpx-think-spin { to { transform: rotate(360deg); } }
       @media (prefers-reduced-motion: reduce) { .gpx-think.is-live .gpx-think-label, .gpx-think.is-live .gpx-think-ic { animation: none; } .gpx-think.is-live .gpx-think-label { color: var(--gpa-sub); background: none; } }
@@ -3915,13 +3975,15 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
                 <button class="gpx-suggest" data-prompt="Summarize this in plain language: ">Summarize something</button>` })}
           </div>
           <div id="gpa-ask-images" class="gpa-row" style="flex-wrap:wrap; gap:6px; display:none;"></div>
+          <div id="gpa-ask-files" class="gpx-files" hidden></div>
           <div class="gpa-row gpx-composer gpx-composer-dock">
-            <input id="gpa-ask-input" class="gpa-input" placeholder="Ask me anything… (paste an image too)" aria-label="Message" />
-            <button id="gpa-ask-attach" class="gpa-btn gpx-icon-btn" title="Attach an image" aria-label="Attach an image">${GPS_ICONS.attach}</button>
+            <textarea id="gpa-ask-input" class="gpa-input gpx-ask-ta" rows="1" placeholder="Ask anything, or drop a file… (Shift+Enter for a new line)" aria-label="Message"></textarea>
+            <button id="gpa-ask-attach" class="gpa-btn gpx-icon-btn" title="Attach files or images" aria-label="Attach files or images">${GPS_ICONS.attach}</button>
             <button id="gpa-voice-btn" class="gpa-btn gpx-icon-btn" title="Speak your question" aria-label="Speak your question">${GPS_ICONS.mic}</button>
             <button id="gpa-ask-btn" class="gpa-btn primary">Send</button>
           </div>
-          <input id="gpa-ask-file" type="file" accept="image/*" multiple style="display:none;" />
+          <input id="gpa-ask-file" type="file" multiple style="display:none;" />
+          <div class="gpx-drop" id="gpa-ask-drop" hidden><div>Drop files to add them to the chat<small>PDF, Word, Excel, PowerPoint, images, text and code</small></div></div>
         </div>
       </div>
 
@@ -8373,6 +8435,14 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       + `</div>`
       + (d.owner ? `<label class="gpa-wmod-check gpa-wsec-meta" style="display:flex;margin-top:8px"><input type="checkbox" id="gpa-wmod-lo"${L.includeOwner ? ' checked' : ''}> Limit my own requests too</label>`
         + `<div class="gpa-wsec-actions"><button class="gpa-btn primary" type="button" data-wm="limits">Save limits</button></div><p class="gpa-sub" style="margin:4px 0 0">Empty = no limit, 0 = no big models.</p>` : '');
+    // Ask AI's built-in tools (web search, pictures): the owner's switches.
+    const T = d.tools || { webSearch: true, images: true, imagesPerDay: 10 };
+    html += `<div class="gpa-wsec-h">AI tools in Ask AI${d.owner ? '' : ' <span style="text-transform:none;font-weight:400">(the owner sets these)</span>'}</div>`
+      + `<div class="gpa-wsec-meta">The AI uses these on its own when a question needs them. ${d.imagesToday || 0} picture${d.imagesToday === 1 ? '' : 's'} made today.</div>`
+      + `<label class="gpa-wmod-check gpa-wsec-meta" style="display:flex;margin-top:8px"><input type="checkbox" id="gpa-wmod-tw"${T.webSearch ? ' checked' : ''}${d.owner ? '' : ' disabled'}> Search the web</label>`
+      + `<label class="gpa-wmod-check gpa-wsec-meta" style="display:flex;margin-top:4px"><input type="checkbox" id="gpa-wmod-ti"${T.images ? ' checked' : ''}${d.owner ? '' : ' disabled'}> Create pictures</label>`
+      + `<div class="gpa-wmod-grid"><label>Pictures per person, each day<input class="gpa-input" id="gpa-wmod-tn" type="number" min="0" placeholder="no limit" value="${T.imagesPerDay === null ? '' : T.imagesPerDay}"${d.owner ? '' : ' disabled'}></label></div>`
+      + (d.owner ? `<div class="gpa-wsec-actions"><button class="gpa-btn primary" type="button" data-wm="tools">Save AI tools</button></div><p class="gpa-sub" style="margin:4px 0 0">Pictures cost the most. Yours aren’t limited.</p>` : '');
     html += `<div class="gpa-wsec-h">Set someone’s models</div>`
       + `<div class="gpa-wmod-pick"><input class="gpa-input" id="gpa-wmod-name" list="gpa-wmod-names" placeholder="Type a name" autocomplete="off" value="${wmodUser ? wsecEsc(wmodUser.user) : ''}"><datalist id="gpa-wmod-names">${d.users.map((u) => `<option value="${wsecEsc(u)}">`).join('')}</datalist><button class="gpa-btn" type="button" data-wm="load">Open</button></div>`
       + `<div class="gpa-wmod-form" id="gpa-wmod-form" hidden></div>`;
@@ -8460,6 +8530,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           const r = await wsecApi('/admin/models/set', { action: 'limits', perUserHour: num(wmodBody.querySelector('#gpa-wmod-lh')), perUserDay: num(wmodBody.querySelector('#gpa-wmod-ld')), totalDay: num(wmodBody.querySelector('#gpa-wmod-lt')), includeOwner: wmodBody.querySelector('#gpa-wmod-lo').checked });
           wmodData.limits = r.limits;
           showToast('Big-model limits saved.');
+        } else if (act === 'tools') {
+          const r = await wsecApi('/admin/models/set', { action: 'tools', webSearch: wmodBody.querySelector('#gpa-wmod-tw').checked, images: wmodBody.querySelector('#gpa-wmod-ti').checked, imagesPerDay: num(wmodBody.querySelector('#gpa-wmod-tn')) });
+          wmodData.tools = r.tools;
+          showToast('AI tools saved.');
         } else if (act === 'save' || act === 'reset') {
           const f = wmodBody.querySelector('#gpa-wmod-form');
           const model = (k) => { const sel = f.querySelector('select[data-f="' + k + '"]'); return sel.value === '__custom__' ? f.querySelector('input[data-c="' + k + '"]').value.trim() : sel.value; };
@@ -9510,6 +9584,445 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     }
   }
 
+  // ---- ai-files (copy of web/ai-files.js; tests/ai-files.test.mjs keeps them identical) ----
+  // ---- Math: LaTeX → MathML --------------------------------------------------
+  const MX_ESC = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  // name → [character, element]: 'i' = identifier, 'o' = operator.
+  const MX_SYM = {
+    alpha: ['α', 'i'], beta: ['β', 'i'], gamma: ['γ', 'i'], delta: ['δ', 'i'], epsilon: ['ϵ', 'i'], varepsilon: ['ε', 'i'], zeta: ['ζ', 'i'], eta: ['η', 'i'],
+    theta: ['θ', 'i'], vartheta: ['ϑ', 'i'], iota: ['ι', 'i'], kappa: ['κ', 'i'], lambda: ['λ', 'i'], mu: ['μ', 'i'], nu: ['ν', 'i'], xi: ['ξ', 'i'], pi: ['π', 'i'],
+    varpi: ['ϖ', 'i'], rho: ['ρ', 'i'], varrho: ['ϱ', 'i'], sigma: ['σ', 'i'], varsigma: ['ς', 'i'], tau: ['τ', 'i'], upsilon: ['υ', 'i'], phi: ['ϕ', 'i'],
+    varphi: ['φ', 'i'], chi: ['χ', 'i'], psi: ['ψ', 'i'], omega: ['ω', 'i'],
+    Gamma: ['Γ', 'i'], Delta: ['Δ', 'i'], Theta: ['Θ', 'i'], Lambda: ['Λ', 'i'], Xi: ['Ξ', 'i'], Pi: ['Π', 'i'], Sigma: ['Σ', 'i'], Upsilon: ['Υ', 'i'],
+    Phi: ['Φ', 'i'], Psi: ['Ψ', 'i'], Omega: ['Ω', 'i'],
+    infty: ['∞', 'i'], partial: ['∂', 'i'], nabla: ['∇', 'i'], emptyset: ['∅', 'i'], varnothing: ['∅', 'i'], ell: ['ℓ', 'i'], hbar: ['ℏ', 'i'],
+    aleph: ['ℵ', 'i'], Re: ['ℜ', 'i'], Im: ['ℑ', 'i'], triangle: ['△', 'i'], angle: ['∠', 'o'], measuredangle: ['∡', 'o'], degree: ['°', 'o'], circ: ['∘', 'o'],
+    cdot: ['·', 'o'], times: ['×', 'o'], div: ['÷', 'o'], pm: ['±', 'o'], mp: ['∓', 'o'], ast: ['∗', 'o'], star: ['⋆', 'o'], bullet: ['∙', 'o'], oplus: ['⊕', 'o'], otimes: ['⊗', 'o'],
+    le: ['≤', 'o'], leq: ['≤', 'o'], ge: ['≥', 'o'], geq: ['≥', 'o'], ne: ['≠', 'o'], neq: ['≠', 'o'], approx: ['≈', 'o'], equiv: ['≡', 'o'], cong: ['≅', 'o'],
+    sim: ['∼', 'o'], simeq: ['≃', 'o'], propto: ['∝', 'o'], ll: ['≪', 'o'], gg: ['≫', 'o'], lt: ['<', 'o'], gt: ['>', 'o'],
+    to: ['→', 'o'], rightarrow: ['→', 'o'], leftarrow: ['←', 'o'], gets: ['←', 'o'], leftrightarrow: ['↔', 'o'], Rightarrow: ['⇒', 'o'], Leftarrow: ['⇐', 'o'],
+    Leftrightarrow: ['⇔', 'o'], implies: ['⟹', 'o'], iff: ['⟺', 'o'], mapsto: ['↦', 'o'], uparrow: ['↑', 'o'], downarrow: ['↓', 'o'], longrightarrow: ['⟶', 'o'],
+    in: ['∈', 'o'], notin: ['∉', 'o'], ni: ['∋', 'o'], subset: ['⊂', 'o'], subseteq: ['⊆', 'o'], supset: ['⊃', 'o'], supseteq: ['⊇', 'o'], cup: ['∪', 'o'], cap: ['∩', 'o'],
+    setminus: ['∖', 'o'], forall: ['∀', 'o'], exists: ['∃', 'o'], nexists: ['∄', 'o'], neg: ['¬', 'o'], lnot: ['¬', 'o'], land: ['∧', 'o'], wedge: ['∧', 'o'],
+    lor: ['∨', 'o'], vee: ['∨', 'o'], perp: ['⊥', 'o'], parallel: ['∥', 'o'], mid: ['∣', 'o'], nmid: ['∤', 'o'], therefore: ['∴', 'o'], because: ['∵', 'o'],
+    ldots: ['…', 'o'], cdots: ['⋯', 'o'], vdots: ['⋮', 'o'], ddots: ['⋱', 'o'], dots: ['…', 'o'], prime: ['′', 'o'],
+    langle: ['⟨', 'o'], rangle: ['⟩', 'o'], lceil: ['⌈', 'o'], rceil: ['⌉', 'o'], lfloor: ['⌊', 'o'], rfloor: ['⌋', 'o'], vert: ['|', 'o'], Vert: ['‖', 'o'],
+    '{': ['{', 'o'], '}': ['}', 'o'], '|': ['‖', 'o'], '%': ['%', 'o'], '$': ['$', 'o'], '&': ['&', 'o'], '#': ['#', 'o'], '_': ['_', 'o']
+  };
+  const MX_BIG = { sum: '∑', prod: '∏', coprod: '∐', bigcup: '⋃', bigcap: '⋂', int: '∫', iint: '∬', iiint: '∭', oint: '∮' };
+  const MX_FN = new Set(['sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh', 'log', 'ln', 'lg', 'exp', 'det', 'gcd', 'deg', 'dim', 'arg', 'ker', 'hom', 'Pr']);
+  const MX_LIM = new Set(['lim', 'max', 'min', 'sup', 'inf', 'liminf', 'limsup', 'argmax', 'argmin']);
+  const MX_ACCENT = { hat: '^', widehat: '^', bar: '‾', overline: '‾', vec: '→', overrightarrow: '→', dot: '˙', ddot: '¨', tilde: '~', widetilde: '~' };
+  const MX_SPACE = { ',': '0.17em', ':': '0.22em', '>': '0.22em', ';': '0.28em', ' ': '0.28em', quad: '1em', qquad: '2em', '!': '0', enspace: '0.5em' };
+  const MX_BB = { R: 'ℝ', N: 'ℕ', Z: 'ℤ', Q: 'ℚ', C: 'ℂ', P: 'ℙ', H: 'ℍ' };
+  const MX_OPS = '+-=<>,;:!/|()[]*\'.?';
+  const MX_ENVS = { matrix: ['', ''], pmatrix: ['(', ')'], bmatrix: ['[', ']'], Bmatrix: ['{', '}'], vmatrix: ['|', '|'], Vmatrix: ['‖', '‖'], cases: ['{', ''], array: ['', ''],
+    aligned: ['', ''], align: ['', ''], 'align*': ['', ''], gathered: ['', ''], split: ['', ''], eqnarray: ['', ''], smallmatrix: ['', ''] };
+
+  function latexToMathML(tex, display) {
+    const s = String(tex || '').slice(0, 6000);
+    let i = 0, depth = 0;
+    const node = (xml, kind) => ({ xml, kind: kind || '' });
+    const ws = () => { while (i < s.length && /\s/.test(s[i])) i++; };
+    const readName = () => {
+      if (i < s.length && /[A-Za-z]/.test(s[i])) { let n = ''; while (i < s.length && /[A-Za-z]/.test(s[i])) n += s[i++]; if (s[i] === '*') { n += '*'; i++; } return n; }
+      return i < s.length ? s[i++] : '';
+    };
+    // A brace group as raw text (for \text{…}, \begin{…}).
+    const readRaw = () => {
+      ws();
+      if (s[i] !== '{') { const c = s[i] || ''; i++; return c; }
+      let d = 0, out = '';
+      for (; i < s.length; i++) {
+        const c = s[i];
+        if (c === '\\' && i + 1 < s.length) { out += c + s[++i]; continue; }
+        if (c === '{') { if (d++ === 0) continue; }
+        else if (c === '}') { if (--d === 0) { i++; break; } }
+        out += c;
+      }
+      return out;
+    };
+    const row = (nodes) => (nodes.length === 1 ? nodes[0].xml : '<mrow>' + nodes.map((n) => n.xml).join('') + '</mrow>');
+    const fenceMo = (c) => (c && c !== '.' ? '<mo fence="true" stretchy="true">' + MX_ESC(c) + '</mo>' : '');
+    // A delimiter after \left, \right, \big…
+    const delim = () => {
+      ws();
+      if (s[i] === '\\') { i++; const n = readName(); return n === '{' ? '{' : n === '}' ? '}' : n === '|' ? '‖' : (MX_SYM[n] ? MX_SYM[n][0] : n === '.' ? '.' : ''); }
+      return s[i++] || '';
+    };
+    // stop(): true at a terminator for the current list (left in place).
+    function parseList(stop) {
+      if (++depth > 60) { depth--; return [node('<mtext>…</mtext>')]; }
+      const out = [];
+      while (i < s.length) {
+        ws();
+        if (i >= s.length || stop()) break;
+        const c = s[i];
+        if (c === '^' || c === '_') {
+          i++;
+          const base = out.pop() || node('<mrow></mrow>');
+          let sub = null, sup = null;
+          if (c === '_') sub = atom(); else sup = atom();
+          ws();
+          if (s[i] === '^' && !sup) { i++; sup = atom(); } else if (s[i] === '_' && !sub) { i++; sub = atom(); }
+          const b = base.xml, under = base.kind === 'big' || base.kind === 'lim';
+          const tag = under ? (sub && sup ? 'munderover' : sub ? 'munder' : 'mover') : (sub && sup ? 'msubsup' : sub ? 'msub' : 'msup');
+          out.push(node('<' + tag + '>' + b + (sub ? sub.xml : '') + (sup ? sup.xml : '') + '</' + tag + '>'));
+          continue;
+        }
+        const n = atom();
+        if (n) out.push(n);
+      }
+      depth--;
+      return out;
+    }
+    function group(term) { const nodes = parseList(() => s[i] === term); if (s[i] === term) i++; return node(row(nodes)); }
+    function atom() {
+      ws();
+      if (i >= s.length) return node('<mrow></mrow>');
+      const c = s[i];
+      if (c === '{') { i++; return group('}'); }
+      if (c === '\\') { i++; return command(readName()); }
+      if (/[0-9]/.test(c)) { let n = ''; while (i < s.length && /[0-9.]/.test(s[i])) n += s[i++]; return node('<mn>' + n + '</mn>'); }
+      i++;
+      if (/[A-Za-z]/.test(c)) return node('<mi>' + c + '</mi>');
+      if (c === '}') return null;
+      if (c === '~') return node('<mspace width="0.28em"></mspace>');
+      if (c === "'") return node('<mo>′</mo>');
+      if (c === '&') return null;
+      if (MX_OPS.includes(c)) return node('<mo>' + MX_ESC(c) + '</mo>');
+      return node('<mi>' + MX_ESC(c) + '</mi>');
+    }
+    function env(name) {
+      if (name === 'array') readRaw();
+      const [l, r] = MX_ENVS[name] || ['', ''];
+      const rows = [];
+      let cells = [];
+      const atEnd = () => s.startsWith('\\end', i);
+      for (;;) {
+        const nodes = parseList(() => s[i] === '&' || s.startsWith('\\\\', i) || atEnd());
+        cells.push('<mtd>' + row(nodes) + '</mtd>');
+        if (s[i] === '&') { i++; continue; }
+        if (s.startsWith('\\\\', i)) { i += 2; ws(); if (s[i] === '[') { while (i < s.length && s[i] !== ']') i++; i++; } rows.push(cells); cells = []; if (atEnd()) break; continue; }
+        if (cells.length > 1 || cells[0] !== '<mtd><mrow></mrow></mtd>') rows.push(cells);
+        break;
+      }
+      if (atEnd()) { i += 4; readRaw(); }
+      const align = /^(aligned|align\*?|split|eqnarray)$/.test(name) ? ' columnalign="right left right left"' : name === 'cases' ? ' columnalign="left left"' : '';
+      const table = '<mtable' + align + '>' + rows.filter((x) => x.length).map((x) => '<mtr>' + x.join('') + '</mtr>').join('') + '</mtable>';
+      return node('<mrow>' + fenceMo(l) + table + fenceMo(r) + '</mrow>');
+    }
+    function command(name) {
+      if (MX_SPACE[name] !== undefined) return node('<mspace width="' + MX_SPACE[name] + '"></mspace>');
+      if (name === '\\') return node('<mspace linebreak="newline"></mspace>');
+      if (name === 'frac' || name === 'dfrac' || name === 'tfrac' || name === 'cfrac') {
+        const a = atom(), b = atom();
+        const f = '<mfrac>' + a.xml + b.xml + '</mfrac>';
+        return node(name === 'dfrac' || name === 'cfrac' ? '<mstyle displaystyle="true">' + f + '</mstyle>' : f);
+      }
+      if (name === 'binom' || name === 'dbinom' || name === 'tbinom') { const a = atom(), b = atom(); return node('<mrow><mo>(</mo><mfrac linethickness="0">' + a.xml + b.xml + '</mfrac><mo>)</mo></mrow>'); }
+      if (name === 'sqrt') {
+        ws();
+        if (s[i] === '[') { i++; const idx = parseList(() => s[i] === ']'); i++; const a = atom(); return node('<mroot>' + a.xml + row(idx) + '</mroot>'); }
+        return node('<msqrt>' + atom().xml + '</msqrt>');
+      }
+      if (/^(text|textrm|textnormal|mbox|mathrm|textit|textbf|mathbf|mathit|mathsf|texttt|mathtt|operatorname|mathcal|mathscr|mathfrak|boldsymbol|bm|mathbb)$/.test(name)) {
+        const raw = readRaw();
+        if (name === 'mathbb') return node('<mi>' + MX_ESC(raw.split('').map((ch) => MX_BB[ch] || ch).join('')) + '</mi>');
+        if (name === 'operatorname') return node('<mi>' + MX_ESC(raw) + '</mi><mo>&#x2061;</mo>');
+        const bold = /bf|boldsymbol|bm/.test(name);
+        if (/^(text|textrm|textnormal|mbox|textit|textbf|texttt)$/.test(name)) return node('<mtext' + (bold ? ' style="font-weight:bold"' : '') + '>' + MX_ESC(raw.replace(/\\([{}%$&#_ ])/g, '$1')) + '</mtext>');
+        // \mathbf{x} etc.: the letters as math, styled.
+        return node('<mrow' + (bold ? ' style="font-weight:bold"' : '') + '>' + raw.split('').map((ch) => (/[A-Za-z]/.test(ch) ? '<mi mathvariant="normal">' + ch + '</mi>' : /\d/.test(ch) ? '<mn>' + ch + '</mn>' : /\s/.test(ch) ? '' : '<mo>' + MX_ESC(ch) + '</mo>')).join('') + '</mrow>');
+      }
+      if (name === 'left' || name === 'right' || /^(big|Big|bigg|Bigg)[lrm]?$/.test(name)) { const d = delim(); return d === '.' ? null : node('<mo fence="true" stretchy="' + (name === 'left' || name === 'right' ? 'true' : 'false') + '">' + MX_ESC(d) + '</mo>'); }
+      if (name === 'begin') { const e = readRaw(); return env(e); }
+      if (name === 'end') { readRaw(); return null; }
+      if (MX_ACCENT[name]) { const a = atom(); return node('<mover accent="true">' + a.xml + '<mo stretchy="' + (/wide|over/.test(name) ? 'true' : 'false') + '">' + MX_ACCENT[name] + '</mo></mover>'); }
+      if (name === 'underline') return node('<munder accentunder="true">' + atom().xml + '<mo stretchy="true">_</mo></munder>');
+      if (name === 'overbrace' || name === 'underbrace') { const a = atom(); return node(name === 'overbrace' ? '<mover>' + a.xml + '<mo stretchy="true">⏞</mo></mover>' : '<munder>' + a.xml + '<mo stretchy="true">⏟</mo></munder>', 'lim'); }
+      if (name === 'boxed' || name === 'fbox') return node('<mrow style="border:1px solid currentColor;padding:2px 4px">' + atom().xml + '</mrow>');
+      if (name === 'cancel' || name === 'bcancel' || name === 'xcancel') return node('<mrow style="text-decoration:line-through">' + atom().xml + '</mrow>');
+      if (name === 'color' || name === 'textcolor') { readRaw(); return name === 'textcolor' ? atom() : null; }
+      if (name === 'pmod') { const a = atom(); return node('<mrow><mspace width="0.4em"></mspace><mo>(</mo><mi>mod</mi><mspace width="0.28em"></mspace>' + a.xml + '<mo>)</mo></mrow>'); }
+      if (name === 'not') { const a = atom(); return node('<mrow style="text-decoration:line-through">' + a.xml + '</mrow>'); }
+      if (/^(displaystyle|textstyle|scriptstyle|limits|nolimits|nonumber|notag|label|tag|qquad|hfill|middle|phantom)$/.test(name)) { if (/label|tag|phantom/.test(name)) readRaw(); return null; }
+      if (MX_BIG[name]) return node('<mo' + (/int$/.test(name) ? ' largeop="true"' : ' movablelimits="true" largeop="true"') + '>' + MX_BIG[name] + '</mo>', /int$/.test(name) ? '' : 'big');
+      if (MX_LIM.has(name)) return node('<mi>' + name + '</mi>', 'lim');
+      if (MX_FN.has(name)) return node('<mrow><mi>' + name + '</mi><mo>&#x2061;</mo></mrow>');
+      if (name === 'mod' || name === 'bmod') return node('<mo lspace="0.28em" rspace="0.28em">mod</mo>');
+      if (MX_SYM[name]) { const [ch, t] = MX_SYM[name]; return node(t === 'i' ? '<mi>' + MX_ESC(ch) + '</mi>' : '<mo>' + MX_ESC(ch) + '</mo>'); }
+      return node('<mtext>' + MX_ESC('\\' + name) + '</mtext>');
+    }
+    const nodes = parseList(() => false);
+    return '<math xmlns="http://www.w3.org/1998/Math/MathML"' + (display ? ' display="block"' : '') + '>' + row(nodes.length ? nodes : [node('<mrow></mrow>')]) + '</math>';
+  }
+
+  // Text → [{ t: 'text', v } | { t: 'math', v, display }]. Delimiters: \( \),
+  // \[ \], $$ $$, and $…$ when it looks like math (not "$5 and $10").
+  function splitMath(text) {
+    const s = String(text || ''), out = [];
+    let i = 0, buf = '';
+    const flush = () => { if (buf) { out.push({ t: 'text', v: buf }); buf = ''; } };
+    while (i < s.length) {
+      const two = s.slice(i, i + 2);
+      let open = '', close = '', display = false;
+      if (two === '\\(') { open = '\\('; close = '\\)'; }
+      else if (two === '\\[') { open = '\\['; close = '\\]'; display = true; }
+      else if (two === '$$') { open = '$$'; close = '$$'; display = true; }
+      else if (s[i] === '$' && s[i - 1] !== '\\') { open = '$'; close = '$'; }
+      if (open) {
+        const start = i + open.length;
+        let end = s.indexOf(close, start);
+        if (open === '$') {
+          while (end > -1 && s[end - 1] === '\\') end = s.indexOf('$', end + 1);
+          const inner = end > -1 ? s.slice(start, end) : '';
+          if (end === -1 || !inner || /^\s|\s$/.test(inner) || /\n\n/.test(inner) || /[0-9]/.test(s[end + 1] || '')) { buf += s[i]; i++; continue; }
+        }
+        if (end > -1) { flush(); out.push({ t: 'math', v: s.slice(start, end), display }); i = end + close.length; continue; }
+      }
+      buf += s[i]; i++;
+    }
+    flush();
+    return out;
+  }
+
+  // LaTeX → plain Unicode text (for Word files and copying): \frac{a}{b} → (a)/(b), x^2 → x², \sqrt{x} → √(x).
+  const MX_SUP = { 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹', '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾', n: 'ⁿ', i: 'ⁱ' };
+  const MX_SUB = { 0: '₀', 1: '₁', 2: '₂', 3: '₃', 4: '₄', 5: '₅', 6: '₆', 7: '₇', 8: '₈', 9: '₉', '+': '₊', '-': '₋', '=': '₌', '(': '₍', ')': '₎' };
+  function texToUnicode(tex) {
+    let t = String(tex || '');
+    const arg = '\\{((?:[^{}]|\\{[^{}]*\\})*)\\}';
+    for (let k = 0; k < 4; k++) {
+      t = t.replace(new RegExp('\\\\[dt]?frac\\s*' + arg + '\\s*' + arg, 'g'), (m, a, b, off, str) => {
+        const f = (/^\w+$/.test(a) ? a : '(' + a + ')') + '/' + (/^\w+$/.test(b) ? b : '(' + b + ')');
+        return /^[\w(\\]/.test(str.slice(off + m.length)) ? '(' + f + ')' : f;   // ½bh would read as 1/(2bh)
+      });
+      t = t.replace(new RegExp('\\\\sqrt\\s*\\[([^\\]]*)\\]\\s*' + arg, 'g'), (m, n, a) => (n === '3' ? '∛' : n === '4' ? '∜' : n + '√') + (/^\w+$/.test(a) ? a : '(' + a + ')'));
+      t = t.replace(new RegExp('\\\\sqrt\\s*' + arg, 'g'), (m, a) => '√' + (/^\w+$/.test(a) ? a : '(' + a + ')'));
+      t = t.replace(new RegExp('\\\\(?:text|mathrm|textrm|textbf|mathbf|operatorname|mbox)\\s*' + arg, 'g'), '$1');
+    }
+    t = t.replace(/\\left|\\right|\\big|\\Big|\\displaystyle/g, '');
+    t = t.replace(/\\([A-Za-z]+)/g, (m, n) => (MX_SYM[n] ? MX_SYM[n][0] : MX_BIG[n] || (MX_FN.has(n) || MX_LIM.has(n) ? n + ' ' : MX_SPACE[n] !== undefined ? ' ' : m)));
+    const script = (map) => (m, a) => (a.split('').every((ch) => map[ch]) ? a.split('').map((ch) => map[ch]).join('') : null);
+    t = t.replace(/\^\{([^{}]*)\}|\^(\w)/g, (m, a, b) => script(MX_SUP)(m, a || b) || '^(' + (a || b) + ')');
+    t = t.replace(/_\{([^{}]*)\}|_(\w)/g, (m, a, b) => script(MX_SUB)(m, a || b) || '_(' + (a || b) + ')');
+    return t.replace(/\\[,;:! ]/g, ' ').replace(/[{}]/g, '').replace(/\\\\/g, '; ').replace(/\s{2,}/g, ' ').trim();
+  }
+
+  // ---- The blocks of an answer -------------------------------------------------
+  // ```file name="study-guide.docx"   → a file the AI made (closed by ```)
+  // ```python                         → code
+  // everything else                   → text. An unclosed block (still
+  // streaming) comes back with done: false.
+  function parseBlocks(text) {
+    const lines = String(text || '').split('\n'), out = [];
+    let cur = null, buf = [];
+    const flushText = () => { if (buf.length) { out.push({ t: 'text', v: buf.join('\n') }); buf = []; } };
+    for (const line of lines) {
+      if (!cur) {
+        const m = /^\s*```\s*([A-Za-z0-9_+.#-]*)\s*(.*)$/.exec(line);
+        if (m) {
+          flushText();
+          const file = /^file$/i.test(m[1]) || /^file:/i.test(m[1] + m[2]);
+          let name = '';
+          if (file) { const n = /name\s*=\s*"([^"]+)"|name\s*=\s*'([^']+)'|name\s*=\s*(\S+)|file:\s*(\S+)/i.exec(m[1] + m[2]); name = n ? (n[1] || n[2] || n[3] || n[4]) : 'file.txt'; }
+          cur = file ? { t: 'file', name: safeFileName(name), lines: [] } : { t: 'code', lang: m[1].toLowerCase(), lines: [] };
+          continue;
+        }
+        buf.push(line);
+      } else if (/^\s*```\s*$/.test(line)) {
+        out.push(cur.t === 'file' ? { t: 'file', name: cur.name, v: cur.lines.join('\n'), done: true } : { t: 'code', lang: cur.lang, v: cur.lines.join('\n'), done: true });
+        cur = null;
+      } else cur.lines.push(line);
+    }
+    flushText();
+    if (cur) out.push(cur.t === 'file' ? { t: 'file', name: cur.name, v: cur.lines.join('\n'), done: false } : { t: 'code', lang: cur.lang, v: cur.lines.join('\n'), done: false });
+    return out;
+  }
+  function safeFileName(n) {
+    const base = String(n || '').split(/[\\/]/).pop().replace(/[^\w.\- ()]/g, '_').replace(/^\.+/, '').slice(0, 80).trim();
+    return base && /\.[A-Za-z0-9]{1,8}$/.test(base) ? base : (base || 'file') + '.txt';
+  }
+
+  // ---- ZIP (store-only writer, reader with deflate) -------------------------------
+  const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  function crc32(bytes) { let c = 0xffffffff; for (let k = 0; k < bytes.length; k++) c = CRC_TABLE[(c ^ bytes[k]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+  const utf8 = (str) => new TextEncoder().encode(str);
+  // entries: [{ name, data: string | Uint8Array }] → Uint8Array (a .zip)
+  function zipStore(entries) {
+    const parts = [], central = [];
+    let offset = 0;
+    for (const e of entries) {
+      const name = utf8(e.name), data = typeof e.data === 'string' ? utf8(e.data) : e.data, crc = crc32(data);
+      const local = new DataView(new ArrayBuffer(30));
+      local.setUint32(0, 0x04034b50, true); local.setUint16(4, 20, true); local.setUint16(6, 0x0800, true); local.setUint16(8, 0, true);
+      local.setUint16(10, 0, true); local.setUint16(12, 0x21, true); local.setUint32(14, crc, true); local.setUint32(18, data.length, true);
+      local.setUint32(22, data.length, true); local.setUint16(26, name.length, true); local.setUint16(28, 0, true);
+      parts.push(new Uint8Array(local.buffer), name, data);
+      const cd = new DataView(new ArrayBuffer(46));
+      cd.setUint32(0, 0x02014b50, true); cd.setUint16(4, 20, true); cd.setUint16(6, 20, true); cd.setUint16(8, 0x0800, true); cd.setUint16(10, 0, true);
+      cd.setUint16(12, 0, true); cd.setUint16(14, 0x21, true); cd.setUint32(16, crc, true); cd.setUint32(20, data.length, true); cd.setUint32(24, data.length, true);
+      cd.setUint16(28, name.length, true); cd.setUint32(42, offset, true);
+      central.push(new Uint8Array(cd.buffer), name);
+      offset += 30 + name.length + data.length;
+    }
+    const cdSize = central.reduce((n, p) => n + p.length, 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true); end.setUint16(8, entries.length, true); end.setUint16(10, entries.length, true);
+    end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+    const all = [...parts, ...central, new Uint8Array(end.buffer)];
+    const out = new Uint8Array(all.reduce((n, p) => n + p.length, 0));
+    let p = 0; for (const a of all) { out.set(a, p); p += a.length; }
+    return out;
+  }
+  // .zip bytes → Map(name → async () => Uint8Array). Deflate via DecompressionStream.
+  function zipEntries(bytes) {
+    const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    let eocd = -1;
+    for (let k = b.length - 22; k >= Math.max(0, b.length - 66000); k--) if (dv.getUint32(k, true) === 0x06054b50) { eocd = k; break; }
+    if (eocd < 0) throw new Error('not a zip file');
+    const count = dv.getUint16(eocd + 10, true);
+    let p = dv.getUint32(eocd + 16, true);
+    const map = new Map(), dec = new TextDecoder();
+    for (let n = 0; n < count && p + 46 <= b.length; n++) {
+      if (dv.getUint32(p, true) !== 0x02014b50) break;
+      const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true), nlen = dv.getUint16(p + 28, true);
+      const xlen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true), lho = dv.getUint32(p + 42, true);
+      const name = dec.decode(b.subarray(p + 46, p + 46 + nlen));
+      p += 46 + nlen + xlen + clen;
+      map.set(name, async () => {
+        const ln = dv.getUint16(lho + 26, true), lx = dv.getUint16(lho + 28, true);
+        const data = b.subarray(lho + 30 + ln + lx, lho + 30 + ln + lx + csize);
+        if (method === 0) return data;
+        if (method !== 8) throw new Error('unsupported compression');
+        const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+        return new Uint8Array(await new Response(stream).arrayBuffer());
+      });
+    }
+    return map;
+  }
+  const xmlText = (s) => String(s).replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (m, d) => String.fromCodePoint(+d)).replace(/&#x([0-9a-f]+);/gi, (m, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&amp;/g, '&');
+  const xmlEsc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
+
+  // The text of a .docx / .xlsx / .pptx (bytes) → string, or null when it isn't one.
+  async function officeText(bytes, name) {
+    let z;
+    try { z = zipEntries(bytes); } catch (e) { return null; }
+    const read = async (n) => (z.has(n) ? new TextDecoder().decode(await z.get(n)()) : '');
+    const ext = String(name || '').toLowerCase().split('.').pop();
+    if (z.has('word/document.xml') || ext === 'docx') {
+      const xml = await read('word/document.xml');
+      let out = '';
+      for (const m of xml.matchAll(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>|<w:tab\/>|<w:br\/>|<\/w:p>/g)) out += m[1] !== undefined ? xmlText(m[1]) : m[0] === '<w:tab/>' ? '\t' : '\n';
+      return out.replace(/\n{3,}/g, '\n\n').trim();
+    }
+    if (z.has('ppt/presentation.xml') || ext === 'pptx') {
+      const slides = [...z.keys()].filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n)).sort((a, b) => +a.match(/\d+/)[0] - +b.match(/\d+/)[0]);
+      const out = [];
+      for (const n of slides) {
+        const xml = await read(n);
+        let t = '';
+        for (const m of xml.matchAll(/<a:t>([^<]*)<\/a:t>|<\/a:p>/g)) t += m[1] !== undefined ? xmlText(m[1]) : '\n';
+        out.push('Slide ' + n.match(/\d+/)[0] + ':\n' + t.trim());
+      }
+      return out.join('\n\n');
+    }
+    if (z.has('xl/workbook.xml') || ext === 'xlsx') {
+      const shared = [];
+      for (const m of (await read('xl/sharedStrings.xml')).matchAll(/<si>([\s\S]*?)<\/si>/g)) shared.push([...m[1].matchAll(/<t(?:\s[^>]*)?>([^<]*)<\/t>/g)].map((x) => xmlText(x[1])).join(''));
+      const names = [...(await read('xl/workbook.xml')).matchAll(/<sheet\b[^>]*\bname="([^"]*)"/g)].map((m) => xmlText(m[1]));
+      const sheets = [...z.keys()].filter((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort((a, b) => +a.match(/\d+/)[0] - +b.match(/\d+/)[0]);
+      const out = [];
+      for (let k = 0; k < sheets.length; k++) {
+        const xml = await read(sheets[k]);
+        const rows = [];
+        for (const r of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+          const cells = [];
+          for (const c of r[1].matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+            const attrs = c[1], inner = c[2] || '', type = (/\bt="([^"]+)"/.exec(attrs) || [])[1];
+            const v = (/<v>([\s\S]*?)<\/v>/.exec(inner) || [])[1];
+            let val = type === 's' ? shared[+v] || '' : type === 'inlineStr' ? [...inner.matchAll(/<t(?:\s[^>]*)?>([^<]*)<\/t>/g)].map((x) => xmlText(x[1])).join('') : type === 'b' ? (v === '1' ? 'TRUE' : 'FALSE') : xmlText(v || '');
+            const ref = (/\br="([A-Z]+)\d+"/.exec(attrs) || [])[1];
+            if (ref) { const col = ref.split('').reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1; while (cells.length < col) cells.push(''); }
+            cells.push(/[",\n]/.test(val) ? '"' + val.replace(/"/g, '""') + '"' : val);
+          }
+          rows.push(cells.join(','));
+        }
+        out.push('Sheet "' + (names[k] || 'Sheet' + (k + 1)) + '":\n' + rows.join('\n'));
+      }
+      return out.join('\n\n');
+    }
+    return null;
+  }
+
+  // Plain text (with "# Heading", "- bullet", **bold**, LaTeX math) → a .docx (bytes).
+  function makeDocx(text) {
+    const runs = (line, extra) => {
+      const parts = [];
+      String(line).split(/(\*\*[^*]+\*\*)/).forEach((seg) => {
+        if (!seg) return;
+        const bold = /^\*\*[^*]+\*\*$/.test(seg);
+        const plain = splitMath(bold ? seg.slice(2, -2) : seg).map((x) => (x.t === 'math' ? texToUnicode(x.v) : x.v)).join('');
+        parts.push('<w:r><w:rPr>' + (bold || extra.bold ? '<w:b/>' : '') + (extra.size ? '<w:sz w:val="' + extra.size + '"/>' : '') + '</w:rPr><w:t xml:space="preserve">' + xmlEsc(plain) + '</w:t></w:r>');
+      });
+      return parts.join('');
+    };
+    const paras = String(text || '').replace(/\r/g, '').split('\n').map((line) => {
+      const h = /^(#{1,3})\s+(.*)$/.exec(line);
+      if (h) return '<w:p><w:pPr><w:spacing w:before="240" w:after="120"/></w:pPr>' + runs(h[2], { bold: true, size: [0, 36, 30, 26][h[1].length] }) + '</w:p>';
+      const b = /^\s*[-*•]\s+(.*)$/.exec(line);
+      if (b) return '<w:p><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr>' + runs('•\t' + b[1], {}) + '</w:p>';
+      return '<w:p>' + (line ? runs(line, {}) : '') + '</w:p>';
+    }).join('');
+    const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+    return zipStore([
+      { name: '[Content_Types].xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>' },
+      { name: '_rels/.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>' },
+      { name: 'word/document.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ' + W + '><w:body>' + paras + '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>' }
+    ]);
+  }
+  function parseCsv(text) {
+    const rows = [];
+    let row = [], cell = '', q = false;
+    const s = String(text || '').replace(/\r\n?/g, '\n');
+    for (let k = 0; k < s.length; k++) {
+      const c = s[k];
+      if (q) { if (c === '"') { if (s[k + 1] === '"') { cell += '"'; k++; } else q = false; } else cell += c; continue; }
+      if (c === '"') q = true; else if (c === ',') { row.push(cell); cell = ''; } else if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; } else cell += c;
+    }
+    if (cell || row.length) { row.push(cell); rows.push(row); }
+    return rows;
+  }
+  // CSV text → a .xlsx (bytes): numbers stay numbers.
+  function makeXlsx(csv) {
+    const col = (n) => { let s = ''; n++; while (n) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+    const rows = parseCsv(csv).map((r, ri) => '<row r="' + (ri + 1) + '">' + r.map((v, ci) => {
+      const ref = col(ci) + (ri + 1), t = v.trim();
+      return /^-?\d+(\.\d+)?$/.test(t) && t.length < 16 ? '<c r="' + ref + '"><v>' + t + '</v></c>' : '<c r="' + ref + '" t="inlineStr"><is><t xml:space="preserve">' + xmlEsc(v) + '</t></is></c>';
+    }).join('') + '</row>').join('');
+    const S = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"', R = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+    return zipStore([
+      { name: '[Content_Types].xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>' },
+      { name: '_rels/.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
+      { name: 'xl/workbook.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook ' + S + ' ' + R + '><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>' },
+      { name: 'xl/_rels/workbook.xml.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>' },
+      { name: 'xl/worksheets/sheet1.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet ' + S + '><sheetData>' + rows + '</sheetData></worksheet>' }
+    ]);
+  }
+  // A file block → { bytes, type } ready to download.
+  const AI_FILE_TYPES = { txt: 'text/plain', md: 'text/markdown', csv: 'text/csv', json: 'application/json', html: 'text/html', htm: 'text/html', css: 'text/css', js: 'text/javascript',
+    py: 'text/x-python', java: 'text/x-java', c: 'text/x-c', cpp: 'text/x-c++', tex: 'application/x-tex', svg: 'image/svg+xml', xml: 'application/xml', rtf: 'application/rtf',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+  function makeFile(name, content) {
+    const ext = String(name).toLowerCase().split('.').pop();
+    if (ext === 'docx') return { bytes: makeDocx(content), type: AI_FILE_TYPES.docx };
+    if (ext === 'xlsx') return { bytes: makeXlsx(content), type: AI_FILE_TYPES.xlsx };
+    return { bytes: utf8(String(content || '') + (/\n$/.test(content) ? '' : '\n')), type: (AI_FILE_TYPES[ext] || 'text/plain') + '; charset=utf-8' };
+  }
+  // ---- end ai-files ----
+
   // ---- Streaming answers with live thinking ----------------------------------
   // The Ask AI tab streams its answer from the Responses API, with the model's
   // reasoning summary ("thinking") arriving as it goes. streamFetch is
@@ -9600,12 +10113,22 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   const SUMMARY_OFF_KEY = 'gpa_reason_summary_off';
   const summariesOff = () => { try { return Date.now() - (Number(localStorage.getItem(SUMMARY_OFF_KEY)) || 0) < 7 * 864e5; } catch (e) { return false; } };
   const markSummariesOff = () => { try { localStorage.setItem(SUMMARY_OFF_KEY, String(Date.now())); } catch (e) { /* ignore */ } };
-  // h: { onThink(fullThought), onText(fullAnswerSoFar) }. Resolves { text, thought, reasoning }.
+  // Models that refused built-in tools this session (asked again without them).
+  const noToolModels = new Set();
+  // h: { onStart, onThink(fullThought), onText(fullAnswerSoFar), onTool({ kind, id, status, query }),
+  //      onImage({ id, b64, final, failed }) }.
+  // opts.files: attached files ({ kind: 'pdf', name, dataUrl } | { kind: 'text', name, text });
+  // opts.tools: built-in tools to offer (the Worker drops what the owner doesn't allow).
+  // Resolves { text, thought, reasoning, citations: [{ url, title }], images: [b64] }.
   async function callOpenAIStream(userText, systemText, imageDataUrls, hard, opts, h) {
     const key = getOpenAiKey();
     if (!key && !OPENAI_PROXY) throw new Error('No OpenAI API key provided.');
     const content = [];
     if (userText) content.push({ type: 'input_text', text: userText });
+    for (const f of (opts && opts.files) || []) {
+      if (f.kind === 'pdf') content.push({ type: 'input_file', filename: f.name, file_data: f.dataUrl });
+      else content.push({ type: 'input_text', text: 'ATTACHED FILE "' + f.name + '"' + (f.note ? ' (' + f.note + ')' : '') + ':\n' + f.text + '\nEND OF FILE "' + f.name + '"' });
+    }
     (imageDataUrls || []).forEach((u) => content.push({ type: 'input_image', image_url: u }));
     if (!content.length) throw new Error('Nothing to send.');
     const payload = { model: OPENAI_MODEL, input: [{ role: 'user', content }], stream: true, store: false };
@@ -9616,17 +10139,31 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const wantSummary = reasoning && !summariesOff();
     if (reasoning) payload.reasoning = wantSummary ? { effort: reasoningEffort, summary: 'auto' } : { effort: reasoningEffort };
     else { const temp = effectiveTemp(); if (temp !== null) payload.temperature = temp; }
+    const tools = opts && opts.tools && opts.tools.length && !noToolModels.has(payload.model) ? opts.tools : null;
+    if (tools) payload.tools = tools;
     noteModelUsed(payload.model, 'OpenAI', hard);
     if (h && h.onStart) h.onStart({ reasoning, model: payload.model });
     let answer = '', thought = '', meta = null, failed = '';
+    const citations = [], images = [];
+    const cite = (a) => { if (a && a.type === 'url_citation' && /^https?:\/\//.test(a.url || '') && !citations.some((c) => c.url === a.url)) citations.push({ url: a.url, title: String(a.title || '').slice(0, 160) }); };
+    const toolOf = (item) => (item && item.type === 'web_search_call' ? 'search' : item && item.type === 'image_generation_call' ? 'image' : '');
     const parse = sseParser((type, j) => {
       if (type === 'gpa.meta') meta = j;
+      else if (type === 'response.output_item.added' && toolOf(j.item)) { if (h && h.onTool) h.onTool({ kind: toolOf(j.item), id: j.item.id, status: 'start' }); }
+      else if (type === 'response.output_item.done' && toolOf(j.item)) {
+        const it = j.item, kind = toolOf(it);
+        if (h && h.onTool) h.onTool({ kind, id: it.id, status: it.status === 'failed' ? 'failed' : 'done', query: kind === 'search' && it.action ? String(it.action.query || (it.action.queries || [])[0] || '') : '' });
+        if (kind === 'image') { if (it.result) images.push(it.result); if (h && h.onImage) h.onImage({ id: it.id, b64: it.result || '', final: true, failed: it.status === 'failed' || !it.result }); }
+      } else if (type === 'response.image_generation_call.partial_image') { if (h && h.onImage && j.partial_image_b64) h.onImage({ id: j.item_id, b64: j.partial_image_b64, final: false }); }
+      else if (type === 'response.output_text.annotation.added') cite(j.annotation);
       else if (type === 'response.reasoning_summary_part.added') { if (thought && !/\n\n$/.test(thought)) thought += '\n\n'; }
       else if (type === 'response.reasoning_summary_text.delta') { thought += j.delta || ''; if (h && h.onThink) h.onThink(thought); }
       else if (type === 'response.output_text.delta') { answer += j.delta || ''; if (h && h.onText) h.onText(answer); }
-      else if (type === 'response.completed' && !answer) {
+      else if (type === 'response.completed') {
         const out = (j.response && j.response.output) || [];
-        answer = out.filter((o) => o.type === 'message').flatMap((o) => o.content || []).map((c) => c.text || '').join('');
+        const parts = out.filter((o) => o.type === 'message').flatMap((o) => o.content || []);
+        if (!answer) answer = parts.map((c) => c.text || '').join('');
+        parts.forEach((c) => (c.annotations || []).forEach(cite));
       } else if (type === 'response.failed' || type === 'error') {
         failed = (j.response && j.response.error && j.response.error.message) || (j.error && j.error.message) || j.message || 'the answer failed';
       }
@@ -9636,13 +10173,15 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     if (OPENAI_PROXY) refreshUsageSoon();
     if (r.status < 200 || r.status >= 300) {
       if (wantSummary && r.status === 400 && /summar|verif/i.test(r.text)) { markSummariesOff(); return callOpenAIStream(userText, systemText, imageDataUrls, hard, opts, h); }
+      // A model that can't use the built-in tools: once more without them.
+      if (tools && r.status === 400 && /tool|web_search|image_generation|not supported/i.test(r.text)) { noToolModels.add(payload.model); return callOpenAIStream(userText, systemText, imageDataUrls, hard, opts, h); }
       const err = new Error(`OpenAI API error (${r.status}): ${redactSecrets(r.text).slice(0, 300)}`);
       err.status = r.status;
       throw err;
     }
     if (failed && !answer) throw new Error('OpenAI API error: ' + failed);
     noteGpaMeta(meta || {});
-    return { text: answer || '(no response)', thought: thought.trim(), reasoning };
+    return { text: answer || (images.length ? '' : '(no response)'), thought: thought.trim(), reasoning, citations, images, tools: (meta && meta._gpa_tools) || null };
   }
   async function callAIStream(userText, systemText, imageDataUrls, hard, opts, h) {
     if (aiBlocked) throw new Error('Access to this tool has been blocked by the owner.');
@@ -9664,40 +10203,73 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   function makeThinkPanel(beforeEl) {
     const el = document.createElement('div');
     el.className = 'gpx-think is-live';
-    el.innerHTML = '<button type="button" class="gpx-think-h" aria-expanded="true"><span class="gpx-think-ic" aria-hidden="true"></span><span class="gpx-think-label">Thinking</span><span class="gpx-think-time"></span><span class="gpx-think-chev" aria-hidden="true"></span></button><div class="gpx-think-body" role="log" aria-live="polite" aria-label="The AI’s thinking"></div>';
+    el.innerHTML = '<button type="button" class="gpx-think-h" aria-expanded="true"><span class="gpx-think-ic" aria-hidden="true"></span><span class="gpx-think-label">Thinking</span><span class="gpx-think-time"></span><span class="gpx-think-chev" aria-hidden="true"></span></button><div class="gpx-think-body" role="log" aria-live="polite" aria-label="The AI’s thinking"><div class="gpx-think-text"></div><div class="gpx-think-tools"></div></div>';
     beforeEl.parentNode.insertBefore(el, beforeEl);
     const head = el.querySelector('.gpx-think-h'), body = el.querySelector('.gpx-think-body'), time = el.querySelector('.gpx-think-time');
+    const textEl = el.querySelector('.gpx-think-text'), toolsEl = el.querySelector('.gpx-think-tools');
     const started = Date.now();
+    let finished = false, hadText = false, reasoned = false;
+    const steps = new Map();   // id → { kind, line, status }
     const secs = () => Math.max(1, Math.round((Date.now() - started) / 1000));
     const tick = setInterval(() => { time.textContent = secs() + 's'; }, 1000);
-    head.addEventListener('click', () => { if (el.classList.contains('is-live') || !body.childNodes.length) return; const open = el.classList.toggle('is-collapsed') === false; head.setAttribute('aria-expanded', String(open)); });
+    const hasBody = () => hadText || steps.size > 0;
+    head.addEventListener('click', () => { if (el.classList.contains('is-live') || !hasBody()) return; const open = el.classList.toggle('is-collapsed') === false; head.setAttribute('aria-expanded', String(open)); });
+    const scroll = () => { body.scrollTop = body.scrollHeight; if (el.parentNode) el.parentNode.scrollTop = el.parentNode.scrollHeight; };
+    // Folded: "Thought for 9s" — or, when it only used tools, what it did.
+    const label = () => {
+      const kinds = new Set([...steps.values()].map((x) => x.kind));
+      const did = [kinds.has('search') && 'Searched the web', kinds.has('image') && 'made an image'].filter(Boolean).join(', ');
+      el.querySelector('.gpx-think-label').textContent = (hadText || reasoned) ? 'Thought for ' + secs() + 's' + (did ? ' · ' + did.charAt(0).toLowerCase() + did.slice(1) : '') : did.charAt(0).toUpperCase() + did.slice(1) + ' · ' + secs() + 's';
+    };
     // "**Heading**" lines become small headings; other ** marks are dropped.
     const render = (text) => {
       el.classList.remove('is-empty');
-      body.textContent = '';
+      hadText = !!String(text).trim();
+      textEl.textContent = '';
       for (const para of String(text).split(/\n{2,}/)) {
         const lines = para.split('\n');
         const m = /^\s*\*\*(.+?)\*\*\s*$/.exec(lines[0]);
-        if (m) { const b = document.createElement('div'); b.className = 'gpx-think-step'; b.textContent = m[1]; body.appendChild(b); lines.shift(); }
+        if (m) { const b = document.createElement('div'); b.className = 'gpx-think-step'; b.textContent = m[1]; textEl.appendChild(b); lines.shift(); }
         const rest = lines.join('\n').replace(/\*\*/g, '').trim();
-        if (rest) { const p = document.createElement('p'); p.textContent = rest; body.appendChild(p); }
+        if (rest) { const p = document.createElement('p'); p.textContent = rest; textEl.appendChild(p); }
       }
-      body.scrollTop = body.scrollHeight;
-      if (el.parentNode) el.parentNode.scrollTop = el.parentNode.scrollHeight;
+      scroll();
     };
     return {
       el,
       think: render,
-      // Done: fold it. No thinking text (a model that doesn't reason, or no summary): just the time, or nothing.
+      // A built-in tool at work: searching the web, making an image.
+      step({ kind, id, status, query }) {
+        let st = steps.get(id);
+        if (!st) {
+          const line = document.createElement('div');
+          line.className = 'gpx-think-tool is-' + kind;
+          toolsEl.appendChild(line);
+          st = { kind, line, status };
+          steps.set(id, st);
+        }
+        st.status = status;
+        st.line.classList.toggle('is-busy', status === 'start');
+        st.line.textContent = kind === 'search'
+          ? (status === 'start' ? 'Searching the web…' : status === 'failed' ? 'The web search didn’t work' : 'Searched the web' + (query ? ' for “' + query + '”' : ''))
+          : (status === 'start' ? 'Creating an image…' : status === 'failed' ? 'Couldn’t create the image' : 'Created an image');
+        if (!el.isConnected && beforeEl.parentNode) beforeEl.parentNode.insertBefore(el, beforeEl);
+        el.hidden = false;
+        el.classList.remove('is-empty');
+        if (finished) label();
+        scroll();
+      },
+      // Done: fold it. Nothing to show (no thinking, no tools, a model that doesn't reason): remove it.
       done(hadThought, reasoning) {
         clearInterval(tick);
+        finished = true; reasoned = !!reasoning; hadText = hadText || !!hadThought;
         el.classList.remove('is-live');
-        if (!hadThought && !reasoning) { el.remove(); return; }
-        el.querySelector('.gpx-think-label').textContent = 'Thought for ' + secs() + 's';
+        if (!hasBody() && !reasoning) { el.remove(); return; }
         time.textContent = '';
+        label();
         el.classList.add('is-collapsed');
         head.setAttribute('aria-expanded', 'false');
-        if (!hadThought) el.classList.add('is-empty');
+        if (!hasBody()) el.classList.add('is-empty');
       },
       fail() { clearInterval(tick); el.remove(); }
     };
@@ -14131,7 +14703,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // Images pasted or attached ride along with the next question so the AI can
   // read and interpret them as context. OpenAI accepts data: URLs.
   let pendingImages = [];
-  const MAX_ASK_IMAGES = 6;
+  const MAX_ASK_IMAGES = 10;
   const imageStrip = panel.querySelector('#gpa-ask-images');
 
   function blobToDataUrl(blob) {
@@ -14201,19 +14773,309 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     renderImageStrip();
   }
 
-  // Paste: pull any images out of the clipboard; let text paste normally.
-  askInput.addEventListener('paste', (e) => {
-    const items = (e.clipboardData && e.clipboardData.items) ? [...e.clipboardData.items] : [];
-    const blobs = items.filter((it) => it.kind === 'file' && /^image\//.test(it.type))
-                       .map((it) => it.getAsFile())
-                       .filter(Boolean);
-    if (blobs.length) { e.preventDefault(); addImageBlobs(blobs); }
+  // Pictures that are already data: URLs (pasted problems) or public links.
+  async function addImageUrls(list) {
+    let n = 0;
+    for (const u of list) {
+      if (!u || pendingImages.length >= MAX_ASK_IMAGES) continue;
+      try { pendingImages.push(/^data:image\//.test(u) ? await shrinkImageDataUrl(u) : u); n++; } catch (_) { /* skip it */ }
+    }
+    renderImageStrip();
+    return n;
+  }
+
+  // ---- Ask AI: attached files (any kind), kept for the whole chat ----
+  // PDFs go to the model as files (it reads text, tables and pictures);
+  // Word / Excel / PowerPoint are turned into text here; text and code are
+  // read as they are. They stay in the chat (sent with each message) until
+  // removed or New chat, like in ChatGPT.
+  const askFilesEl = panel.querySelector('#gpa-ask-files');
+  let askFiles = [];
+  const ASK_FILES_MAX = 20 * 1024 * 1024;   // all files together, as sent (the Worker takes 24 MB)
+  const ASK_TEXT_MAX = 150000;              // characters per text file
+  const fmtBytes = (n) => (n < 1024 ? n + ' B' : n < 1048576 ? Math.round(n / 1024) + ' KB' : (n / 1048576).toFixed(1) + ' MB');
+  const fileWeight = (f) => (f.dataUrl ? f.dataUrl.length : f.text.length);
+  function renderAskFiles() {
+    askFilesEl.textContent = '';
+    askFilesEl.hidden = !askFiles.length;
+    if (!askFiles.length) return;
+    if (askFiles.some((f) => f.sent)) askFilesEl.appendChild(Object.assign(document.createElement('span'), { className: 'gpx-files-label', textContent: 'In this chat' }));
+    for (const f of askFiles) {
+      const chip = document.createElement('span');
+      chip.className = 'gpx-filechip';
+      chip.title = f.name + (f.note ? ' — ' + f.note : '');
+      chip.append(Object.assign(document.createElement('span'), { className: 'gpx-filechip-ext', textContent: f.name.split('.').pop().slice(0, 4).toUpperCase() }),
+        Object.assign(document.createElement('span'), { className: 'gpx-filechip-name', textContent: f.name }),
+        Object.assign(document.createElement('small'), { textContent: fmtBytes(f.size) }));
+      const x = Object.assign(document.createElement('button'), { type: 'button', textContent: '×', title: 'Remove ' + f.name });
+      x.setAttribute('aria-label', 'Remove ' + f.name);
+      x.addEventListener('click', () => { askFiles = askFiles.filter((y) => y !== f); renderAskFiles(); });
+      chip.appendChild(x);
+      askFilesEl.appendChild(chip);
+    }
+  }
+  const readAs = (file, how) => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(fr.error || new Error('read failed')); fr[how](file); });
+  async function addAskFiles(list) {
+    const imgs = [], notes = [];
+    for (const file of list) {
+      if (!file) continue;
+      const name = safeFileName(file.name || 'file'), ext = name.toLowerCase().split('.').pop();
+      try {
+        if (/^image\//.test(file.type) && !/svg/.test(file.type)) { imgs.push(file); continue; }
+        if (file.size > ASK_FILES_MAX) { notes.push(name + ' is too big (over 20 MB).'); continue; }
+        let entry;
+        if (file.type === 'application/pdf' || ext === 'pdf') entry = { kind: 'pdf', name, size: file.size, dataUrl: await readAs(file, 'readAsDataURL') };
+        else if (/^(docx|xlsx|pptx)$/.test(ext)) {
+          const t = await officeText(new Uint8Array(await readAs(file, 'readAsArrayBuffer')), name);
+          if (t === null) { notes.push(name + ' couldn’t be opened.'); continue; }
+          entry = { kind: 'text', name, size: file.size, text: t };
+        } else if (/^(doc|xls|ppt|pages|key|numbers|odt|ods|odp)$/.test(ext)) {
+          notes.push(name + ': save it as ' + ({ doc: '.docx', xls: '.xlsx', ppt: '.pptx', odt: '.docx', ods: '.xlsx', odp: '.pptx' }[ext] || 'a PDF') + ' (or a PDF) first, then add it.');
+          continue;
+        } else {
+          const buf = new Uint8Array(await readAs(file, 'readAsArrayBuffer'));
+          if (buf.subarray(0, 8192).includes(0)) { notes.push(name + ' isn’t something the AI can read. Try a PDF, Word, Excel, PowerPoint, text or image file.'); continue; }
+          entry = { kind: 'text', name, size: file.size, text: new TextDecoder().decode(buf) };
+        }
+        if (entry.kind === 'text') {
+          if (!entry.text.trim()) { notes.push(name + ' has no text the AI can read.'); continue; }
+          if (entry.text.length > ASK_TEXT_MAX) { entry.text = entry.text.slice(0, ASK_TEXT_MAX); entry.note = 'only the first ' + ASK_TEXT_MAX.toLocaleString() + ' characters'; }
+        }
+        const others = askFiles.filter((f) => f.name !== entry.name);
+        if (others.reduce((n, f) => n + fileWeight(f), 0) + fileWeight(entry) > ASK_FILES_MAX) { notes.push('Not enough room for ' + name + ': the files in this chat can be 20 MB together. Remove one first.'); continue; }
+        askFiles = others.concat(entry);
+      } catch (e) { notes.push('Couldn’t read ' + name + '.'); }
+    }
+    if (imgs.length) await addImageBlobs(imgs);
+    renderAskFiles();
+    if (notes.length) showToast(notes.join(' '), { type: 'danger', duration: 8000 });
+  }
+
+  // Drop files anywhere on the Ask AI tab.
+  const askPane = panel.querySelector('.gpa-pane[data-pane="ask"]');
+  const askDrop = panel.querySelector('#gpa-ask-drop');
+  let dragDepth = 0;
+  const hasFiles = (e) => !!(e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files'));
+  askPane.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; askDrop.hidden = false; });
+  askPane.addEventListener('dragover', (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+  askPane.addEventListener('dragleave', (e) => { if (!hasFiles(e)) return; if (--dragDepth <= 0) { dragDepth = 0; askDrop.hidden = true; } });
+  askPane.addEventListener('drop', (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); dragDepth = 0; askDrop.hidden = true;
+    addAskFiles([...e.dataTransfer.files]);
   });
 
-  // Attach button + hidden file input as a fallback to pasting.
+  // ---- Smart paste: a copied problem keeps its pictures and equations ----
+  // When someone copies on the page this console is on, the selection is
+  // read right then (the page's own <img>, <canvas>, <svg>, and equations
+  // drawn by KaTeX / MathJax / Canvas's equation images, which become LaTeX).
+  // Pasting that same text into Ask AI brings the pictures along, with
+  // "[Image 1]" where each one was. Copied somewhere else, the clipboard's
+  // HTML is read the same way.
+  let lastCopy = null;
+  // Compared without spaces and with math letters folded: the selection reads
+  // MathML's <mi>b</mi> as "𝑏" but the clipboard as "b".
+  const normText = (t) => String(t || '').normalize('NFKC').replace(/\s+/g, '');
+  const MATH_SEL = '.katex, .katex-display, mjx-container, .MathJax, .MathJax_Display, .MathJax_Preview, .MathJax_SVG, .MathJax_CHTML, .MJX_Assistive_MathML, math, script[type^="math/tex"], img.equation_image, img[data-equation-content]';
+  // MathML → readable text, when there's no TeX to copy.
+  const mathmlText = (n) => {
+    if (n.nodeType === 3) return n.textContent;
+    if (n.nodeType !== 1 || /^annotation/.test(n.localName)) return '';
+    const k = [...n.childNodes].map(mathmlText).filter((x) => x.trim() !== '' || n.childNodes.length === 1);
+    const g = (x) => (x && x.length > 1 ? '(' + x + ')' : x || '');
+    switch (n.localName) {
+      case 'semantics': return k[0] || '';
+      case 'mfrac': return g(k[0]) + '/' + g(k[1]);
+      case 'msup': return k[0] + '^' + g(k[1]);
+      case 'msub': return k[0] + '_' + g(k[1]);
+      case 'msubsup': return k[0] + '_' + g(k[1]) + '^' + g(k[2]);
+      case 'msqrt': return '√' + g(k.join(''));
+      case 'mroot': return g(k[1]) + '√' + g(k[0]);
+      default: return k.join('');
+    }
+  };
+  function texOf(el) {
+    if (el.matches('script[type^="math/tex"]')) return { tex: el.textContent, display: /display/.test(el.type) };
+    if (el.matches('img')) { const t = el.getAttribute('data-equation-content') || (el.getAttribute('alt') || '').replace(/^\s*LaTeX:\s*/i, ''); return t ? { tex: t } : null; }
+    const ann = el.querySelector('annotation[encoding="application/x-tex"], annotation[encoding="TeX"], annotation[encoding="text/x-tex"]');
+    if (ann) return { tex: ann.textContent, display: el.matches('.katex-display, [display="block"]') || !!el.closest('.katex-display') };
+    if (el.matches('.MathJax, .MathJax_Display, .MathJax_Preview, .MathJax_SVG, .MathJax_CHTML, .MJX_Assistive_MathML')) return { skip: true };   // MathJax 2: its <script> has the TeX
+    const m = el.matches('math') ? el : el.querySelector('math');
+    if (m) return m.getAttribute('alttext') ? { tex: m.getAttribute('alttext') } : { text: mathmlText(m) };
+    const label = el.getAttribute('aria-label');
+    return label ? { text: label } : { skip: true };
+  }
+  function snapshotRange(range, live) {
+    const start = range.commonAncestorContainer;
+    const root = start.nodeType === 1 ? start : start.parentNode;
+    const doc = root.ownerDocument;
+    const walker = doc.createTreeWalker(root, 5 /* elements + text */);
+    const visible = (el) => { if (!live) return true; try { const cs = getComputedStyle(el); return cs.display !== 'none' && cs.visibility !== 'hidden'; } catch (e) { return true; } };
+    const skipSub = (el) => { let n = el; while (n.lastChild) n = n.lastChild; walker.currentNode = n; };
+    const BLOCK = /^(P|DIV|LI|TR|H[1-6]|BLOCKQUOTE|PRE|SECTION|ARTICLE|TABLE|UL|OL|DL|DT|DD|FIGURE|FIGCAPTION|LABEL|FIELDSET|LEGEND|HR)$/;
+    let text = '', math = 0, visited = 0;
+    const imgs = [], alts = [];
+    const nl = () => { if (text && !/\n\s*$/.test(text)) text += '\n'; };
+    for (let n = walker.currentNode; n && visited < 8000; n = walker.nextNode(), visited++) {
+      if (!range.intersectsNode(n)) continue;
+      if (n.nodeType === 3) {
+        if (live && n.parentElement && !visible(n.parentElement)) continue;
+        let t = n.textContent;
+        if (n === range.endContainer) t = t.slice(0, range.endOffset);
+        if (n === range.startContainer) t = t.slice(range.startOffset);
+        text += t.replace(/\s+/g, ' ');
+        continue;
+      }
+      const el = n;
+      if (el !== root && !visible(el)) { skipSub(el); continue; }
+      const tag = el.tagName;
+      if (/^(STYLE|NOSCRIPT|TEMPLATE|BUTTON|SELECT|TEXTAREA)$/.test(tag) || (tag === 'SCRIPT' && !el.matches('script[type^="math/tex"]'))) { skipSub(el); continue; }
+      if (tag === 'IMG' && el.getAttribute('alt')) alts.push(normText(el.getAttribute('alt')));
+      if (el.matches(MATH_SEL) || (tag === 'IMG' && /^\s*LaTeX:/i.test(el.getAttribute('alt') || ''))) {
+        const m = texOf(el);
+        if (m && !m.skip) {
+          math++;
+          if (m.tex) text += m.display ? '\n\\[' + m.tex.trim() + '\\]\n' : '\\(' + m.tex.trim() + '\\)';
+          else if (m.text) text += m.text;
+        }
+        skipSub(el); continue;
+      }
+      if (tag === 'BR') { text += '\n'; continue; }
+      if (tag === 'IMG' || tag === 'CANVAS' || el.localName === 'svg') {
+        const r = live ? el.getBoundingClientRect() : { width: parseFloat(el.getAttribute('width')) || 100, height: parseFloat(el.getAttribute('height')) || 100 };
+        if (r.width >= 16 && r.height >= 16 && imgs.length < MAX_ASK_IMAGES) { imgs.push(el); text += ' [Image ' + imgs.length + '] '; }
+        skipSub(el); continue;
+      }
+      if (tag === 'TD' || tag === 'TH') text += '\t';
+      else if (BLOCK.test(tag)) nl();
+    }
+    text = text.replace(/[ \t]+\n/g, '\n').replace(/\n[ \t]+/g, '\n').replace(/[ ]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+    return { text, math, alts, count: imgs.length, images: Promise.all(imgs.map((el) => imageFromNode(el, live))).then((xs) => xs.filter(Boolean)) };
+  }
+  // A picture → a data: URL, trying: drawing it (pictures from this site),
+  // fetching it with this page's sign-in, the Worker (public pictures), and
+  // last the link itself (OpenAI fetches public pictures).
+  async function svgToPng(svg) {
+    const r = svg.getBoundingClientRect();
+    const w = Math.max(16, Math.round(r.width || parseFloat(svg.getAttribute('width')) || 300)), h = Math.max(16, Math.round(r.height || parseFloat(svg.getAttribute('height')) || 150));
+    const c = svg.cloneNode(true);
+    c.setAttribute('xmlns', 'http://www.w3.org/2000/svg'); c.setAttribute('width', w); c.setAttribute('height', h);
+    const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(c));
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const cv = document.createElement('canvas'); cv.width = w * 2; cv.height = h * 2;
+    const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height); g.drawImage(img, 0, 0, cv.width, cv.height);
+    return cv.toDataURL('image/png');
+  }
+  // OpenAI reads PNG, JPEG, GIF and WebP: an SVG is drawn into a PNG first.
+  async function asRaster(dataUrl) {
+    if (!/^data:image\/svg/.test(dataUrl)) return dataUrl;
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl; });
+    const w = img.naturalWidth || 300, h = img.naturalHeight || 150;
+    const cv = document.createElement('canvas'); cv.width = w * 2; cv.height = h * 2;
+    const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height); g.drawImage(img, 0, 0, cv.width, cv.height);
+    return cv.toDataURL('image/png');
+  }
+  async function imageFromNode(el, live) {
+    try {
+      if (el.localName === 'svg') return live ? await svgToPng(el) : null;
+      if (el.tagName === 'CANVAS') return el.toDataURL('image/png');
+      const src = el.currentSrc || el.getAttribute('src') || '';
+      if (/^data:image\//.test(src)) return src;
+      if (live && el.complete && el.naturalWidth) {
+        try {
+          const c = document.createElement('canvas'); c.width = el.naturalWidth; c.height = el.naturalHeight;
+          const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(el, 0, 0);
+          return c.toDataURL('image/png');
+        } catch (e) { /* another site's picture: the canvas can't read it */ }
+      }
+      let abs;
+      try { abs = new URL(src, location.href).href; } catch (e) { return null; }
+      if (!/^https?:/.test(abs)) return null;
+      // With the page's sign-in (pictures on this site), then without (public pictures that allow any site).
+      for (const credentials of ['include', 'omit']) {
+        try { const r = await fetch(abs, { credentials }); const b = r.ok ? await r.blob() : null; if (b && /^image\//.test(b.type)) return await asRaster(await blobToDataUrl(b)); } catch (e) { /* no CORS */ }
+      }
+      try {
+        let base = OPENAI_PROXY; try { base = AUTH_BASE(); } catch (e) { /* not set up yet */ }
+        const r = await fetch(base + '/image?url=' + encodeURIComponent(abs), { headers: sessionToken() ? { 'X-GPA-Session': sessionToken() } : {} });
+        const b = r.ok ? await r.blob() : null;
+        if (b && /^image\//.test(b.type)) return await asRaster(await blobToDataUrl(b));
+      } catch (e) { /* the Worker couldn't either */ }
+      return abs;
+    } catch (e) { return null; }
+  }
+  document.addEventListener('copy', () => {
+    try {
+      const sel = document.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) { lastCopy = null; return; }
+      const range = sel.getRangeAt(0);
+      const host = document.getElementById('gpa-root-host');
+      if (host && (range.intersectsNode(host) || host.contains(range.commonAncestorContainer))) return;   // copied in this console
+      const snap = snapshotRange(range, true);
+      lastCopy = snap.count || snap.math ? { ...snap, plain: normText(sel.toString()), at: Date.now() } : null;
+    } catch (e) { lastCopy = null; }
+  }, true);
+  // Is this paste the copy we saw? The clipboard's text also holds the
+  // pictures' alt text (the selection's doesn't), so: all of the selection's
+  // text must appear in it, in order, with at most that much extra.
+  function sameCopy(plain, snap) {
+    const c = normText(plain), want = snap.plain;
+    if (!want) return false;
+    if (c === want) return true;
+    const extra = (snap.alts || []).reduce((n, a) => n + a.length, 0);
+    if (c.length > want.length + extra + 40) return false;
+    let i = 0;
+    for (const ch of c) if (ch === want[i]) i++;
+    return i === want.length;
+  }
+  const insertAtCursor = (ta, text) => {
+    const a = ta.selectionStart ?? ta.value.length, b = ta.selectionEnd ?? a;
+    ta.setRangeText(text, a, b, 'end');
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  askInput.addEventListener('paste', async (e) => {
+    const cd = e.clipboardData;
+    if (!cd) return;
+    const files = [...(cd.files || [])];
+    const plain = cd.getData('text/plain') || '', html = cd.getData('text/html') || '';
+    // 1. Copied on this page: what was selected, pictures and equations included.
+    let rich = lastCopy && Date.now() - lastCopy.at < 20 * 60000 && plain && sameCopy(plain, lastCopy) ? lastCopy : null;
+    // 2. Copied elsewhere: the clipboard's HTML.
+    if (!rich && html && /<img|<math|<svg|katex|MathJax|equation_image|math\/tex/i.test(html)) {
+      try {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const range = doc.createRange(); range.selectNodeContents(doc.body);
+        rich = snapshotRange(range, false);
+        if (!rich.count && !rich.math) rich = null;
+      } catch (err) { rich = null; }
+    }
+    if (rich) {
+      e.preventDefault();
+      insertAtCursor(askInput, rich.text);
+      if (rich.count) {
+        const got = await rich.images;
+        const n = await addImageUrls(got);
+        showToast(n === rich.count ? 'Added ' + n + ' picture' + (n === 1 ? '' : 's') + ' from what you copied.' : 'Added ' + n + ' of ' + rich.count + ' pictures from what you copied.');
+      }
+      return;
+    }
+    // 3. Files (a screenshot, a copied PDF…). Text that came with them is kept.
+    if (files.length) {
+      e.preventDefault();
+      if (plain) insertAtCursor(askInput, plain);
+      // An app that copies text also puts a picture of it on the clipboard: only keep pictures that were really copied.
+      const keep = plain && html && !/<img/i.test(html) ? files.filter((f) => !/^image\//.test(f.type)) : files;
+      addAskFiles(keep);
+    }
+  });
+
+  // Attach button: any files.
   const askFile = panel.querySelector('#gpa-ask-file');
   panel.querySelector('#gpa-ask-attach').addEventListener('click', () => askFile.click());
-  askFile.addEventListener('change', () => { addImageBlobs([...askFile.files]); askFile.value = ''; });
+  askFile.addEventListener('change', () => { addAskFiles([...askFile.files]); askFile.value = ''; });
+  // The message box grows with what's typed (up to a point).
+  const growAsk = () => { askInput.style.height = 'auto'; askInput.style.height = Math.min(askInput.scrollHeight, 180) + 'px'; };
+  askInput.addEventListener('input', growAsk);
 
   // ---- Ask AI: study settings (per user, saved on this device) ----
   const ASK_KEYS = { subject: 'gpa_ask_subject', level: 'gpa_ask_level', context: 'gpa_ask_context' };
@@ -14279,21 +15141,103 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     chatEl.innerHTML = '';
     pendingImages = [];
     renderImageStrip();
+    askFiles = [];
+    renderAskFiles();
   });
 
 
   // Renders an AI reply with the first line lifted out as a highlighted
   // key-answer chip so it is easy to spot; the rest types in below it.
-  function renderAskReply(bubble, fullText, confidence, onDone, instant) {
+  // ---- Rich answers: math, links, code, and files the AI made ----
+  const FILE_KIND = { docx: 'Word document', xlsx: 'Excel spreadsheet', csv: 'Spreadsheet (CSV)', md: 'Markdown', txt: 'Text', html: 'Web page', htm: 'Web page', json: 'JSON',
+    py: 'Python', js: 'JavaScript', java: 'Java', c: 'C', cpp: 'C++', css: 'CSS', tex: 'LaTeX', svg: 'SVG picture', xml: 'XML', rtf: 'Rich text' };
+  function appendLinked(el, text) {
+    // [label](https://…) and bare https://… links; everything else stays text.
+    const re = /\[([^\]\n]{1,200})\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()"']+[^\s<>()"'.,;:!?])/g;
+    let last = 0, m;
+    while ((m = re.exec(text))) {
+      if (m.index > last) el.appendChild(document.createTextNode(text.slice(last, m.index)));
+      const a = document.createElement('a');
+      a.href = m[2] || m[3]; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.textContent = m[1] || m[3].replace(/^https?:\/\/(www\.)?/, '').slice(0, 60);
+      el.appendChild(a);
+      last = re.lastIndex;
+    }
+    if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
+  }
+  function appendRichText(el, text) {
+    for (const seg of splitMath(text)) {
+      if (seg.t !== 'math') { appendLinked(el, seg.v.replace(/\*\*([^*\n]+)\*\*/g, '$1')); continue; }
+      const m = document.createElement(seg.display ? 'div' : 'span');
+      m.className = seg.display ? 'gpx-math gpx-math-block' : 'gpx-math';
+      m.dataset.tex = seg.v;
+      m.innerHTML = latexToMathML(seg.v, seg.display);   // only the converter's own tags; all text escaped
+      el.appendChild(m);
+    }
+  }
+  function saveBytes(name, bytes, type) {
+    const url = URL.createObjectURL(new Blob([bytes], { type }));
+    const a = document.createElement('a');
+    a.href = url; a.download = name; a.style.display = 'none';
+    panel.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+  function fileCard(b) {
+    const ext = b.name.toLowerCase().split('.').pop();
+    const card = document.createElement('div');
+    card.className = 'gpx-file' + (b.done ? '' : ' is-writing');
+    card.innerHTML = '<span class="gpx-file-ic" aria-hidden="true"></span><span class="gpx-file-meta"><b></b><small></small></span><span class="gpx-file-act"></span>';
+    card.querySelector('.gpx-file-ic').textContent = ext.slice(0, 4).toUpperCase();
+    card.querySelector('b').textContent = b.name;
+    const lines = b.v ? b.v.split('\n').length : 0;
+    if (!b.done) { card.querySelector('small').textContent = 'Writing… ' + lines + ' line' + (lines === 1 ? '' : 's'); return card; }
+    const f = makeFile(b.name, b.v);
+    card.dataset.name = b.name;
+    card.querySelector('small').textContent = (FILE_KIND[ext] || ext.toUpperCase() + ' file') + ' · ' + fmtBytes(f.bytes.length);
+    const act = card.querySelector('.gpx-file-act');
+    const btn = (label, fn, primary) => { const x = Object.assign(document.createElement('button'), { type: 'button', textContent: label, className: 'gpa-btn' + (primary ? ' primary' : '') }); x.addEventListener('click', fn); act.appendChild(x); return x; };
+    btn('Download', () => saveBytes(b.name, f.bytes, f.type), true).dataset.act = 'download';
+    let pre = null;
+    btn('Preview', (e) => {
+      if (!pre) { pre = document.createElement('pre'); pre.className = 'gpx-file-pre'; pre.textContent = b.v; card.after(pre); }
+      else { pre.hidden = !pre.hidden; }
+      e.currentTarget.textContent = pre && !pre.hidden ? 'Hide' : 'Preview';
+    }).dataset.act = 'preview';
+    return card;
+  }
+  function codeBlock(b) {
+    const box = document.createElement('div');
+    box.className = 'gpx-code';
+    const head = document.createElement('div'); head.className = 'gpx-code-h';
+    head.append(Object.assign(document.createElement('span'), { textContent: b.lang || 'code' }));
+    const copy = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Copy' });
+    copy.addEventListener('click', async () => { try { await navigator.clipboard.writeText(b.v); copy.textContent = 'Copied'; setTimeout(() => { copy.textContent = 'Copy'; }, 1500); } catch (e) { /* blocked */ } });
+    head.appendChild(copy);
+    const pre = document.createElement('pre'); const code = document.createElement('code'); code.textContent = b.v; pre.appendChild(code);
+    box.append(head, pre);
+    return box;
+  }
+  function renderRich(el, text) {
+    el.textContent = '';
+    el.classList.add('gpx-rich');
+    for (const b of parseBlocks(text)) {
+      if (b.t === 'file') el.appendChild(fileCard(b));
+      else if (b.t === 'code') el.appendChild(codeBlock(b));
+      else appendRichText(el, b.v);
+    }
+  }
+  // The answer: its first line as the highlighted key-answer chip, the rest under it.
+  function paintAnswer(bubble, fullText) {
     const t = THEMES[theme] || THEMES.dark;
-    const nl = fullText.indexOf('\n');
-    let answer, rest;
-    if (nl > -1) { answer = fullText.slice(0, nl).trim(); rest = fullText.slice(nl + 1).trim(); }
-    else { answer = fullText.trim(); rest = ''; }
+    const text = String(fullText || '');
+    const nl = text.indexOf('\n');
+    let answer = nl > -1 ? text.slice(0, nl).trim() : text.trim(), rest = nl > -1 ? text.slice(nl + 1).trim() : '';
+    if (/^```/.test(answer)) { answer = ''; rest = text.trim(); }   // starts with a file or code: no chip
     bubble.textContent = '';
     if (answer) {
       const chip = document.createElement('div');
-      chip.textContent = answer;
+      chip.className = 'gpx-answer-chip';
+      appendRichText(chip, answer);
       chip.style.cssText = 'background:' + t.accent + '22;border:1px solid ' + t.accent + ';'
         + 'border-left:3px solid ' + t.accent + ';border-radius:6px;padding:6px 8px;margin-bottom:6px;'
         + 'font-weight:700;color:' + t.text + ';';
@@ -14301,24 +15245,90 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     }
     const body = document.createElement('div');
     bubble.appendChild(body);
+    renderRich(body, rest);
+    if (bubble._extras) bubble.appendChild(bubble._extras);
+    return { body, rest };
+  }
+  function renderAskReply(bubble, fullText, confidence, onDone, instant) {
     const finish = () => {
+      if (bubble._extras) bubble.appendChild(bubble._extras);
       appendConfidenceBadge(bubble, confidence);
       appendModelBadge(bubble);
       if (onDone) onDone();
     };
     // Already streamed in front of the reader: show it formatted, no retyping.
-    if (instant) { body.textContent = rest; chatEl.scrollTop = chatEl.scrollHeight; finish(); }
-    else typeText(body, rest, chatEl, finish);
+    if (instant) { paintAnswer(bubble, fullText); chatEl.scrollTop = chatEl.scrollHeight; finish(); return; }
+    const { body, rest } = paintAnswer(bubble, fullText);
+    typeText(body, rest, chatEl, () => { renderRich(body, rest); finish(); });
+  }
+  // Pictures the AI made, and the web pages it used, under its answer.
+  function makeExtras(bubble) {
+    const ex = document.createElement('div');
+    ex.className = 'gpx-extras';
+    bubble._extras = ex;
+    const figs = new Map();
+    let count = 0;
+    return {
+      image({ id, b64, final, failed }) {
+        let f = figs.get(id);
+        if (!f) {
+          f = document.createElement('figure'); f.className = 'gpx-gen is-partial';
+          const img = document.createElement('img'); img.alt = 'A picture the AI made';
+          const cap = document.createElement('figcaption'); cap.textContent = 'Creating the picture…';
+          f.append(img, cap); ex.prepend(f); figs.set(id, f); count++;
+        }
+        if (failed && !b64) { f.querySelector('figcaption').textContent = 'Couldn’t create the picture.'; f.classList.remove('is-partial'); f.classList.add('is-failed'); return; }
+        if (b64) f.querySelector('img').src = 'data:image/png;base64,' + b64;
+        if (final) {
+          f.classList.remove('is-partial');
+          const cap = f.querySelector('figcaption'); cap.textContent = '';
+          const n = [...figs.keys()].indexOf(id) + 1;
+          const a = Object.assign(document.createElement('a'), { textContent: 'Download', href: 'data:image/png;base64,' + b64, download: 'ai-picture-' + n + '.png', className: 'gpa-btn' });
+          cap.appendChild(a);
+        }
+        if (!bubble.isConnected || bubble.hidden) { bubble.hidden = false; if (!bubble.contains(ex)) bubble.appendChild(ex); }
+        const dots = bubble.querySelector(':scope > .gpx-typing-dots');
+        if (dots) dots.remove();   // the picture is what's happening now
+        chatEl.scrollTop = chatEl.scrollHeight;
+      },
+      sources(list) {
+        if (!list || !list.length || ex.querySelector('.gpx-sources')) return;
+        const box = document.createElement('div'); box.className = 'gpx-sources';
+        box.appendChild(Object.assign(document.createElement('span'), { textContent: 'Sources' }));
+        list.slice(0, 8).forEach((c, k) => {
+          let host = ''; try { host = new URL(c.url).hostname.replace(/^www\./, ''); } catch (e) { return; }
+          const a = Object.assign(document.createElement('a'), { href: c.url, target: '_blank', rel: 'noopener noreferrer', title: c.title || c.url });
+          a.append(Object.assign(document.createElement('b'), { textContent: String(k + 1) }), document.createTextNode((c.title ? c.title.slice(0, 60) + ' · ' : '') + host));
+          box.appendChild(a);
+        });
+        ex.appendChild(box);
+      },
+      get count() { return count; }
+    };
   }
 
+  // What the AI can do on its own in Ask AI, without switching tools.
+  const ASK_TOOLS = [{ type: 'web_search' }, { type: 'image_generation', partial_images: 2, size: 'auto', quality: 'auto' }];
   async function sendChat() {
     const q = askInput.value.trim();
     const imgs = pendingImages.slice();
-    if (!q && !imgs.length) return;
-    addMsg('user', q || '🖼 (image)', imgs);
+    if (!q && !imgs.length && !askFiles.some((f) => !f.sent)) return;
+    const files = askFiles.slice();
+    const fresh = files.filter((f) => !f.sent);
+    const userMsg = addMsg('user', q || (imgs.length ? '🖼 (image)' : '📎 (file)'), imgs);
+    // Math in the question (a pasted problem) shows as math too.
+    if (q && userMsg.firstChild && userMsg.firstChild.nodeType === 3 && splitMath(q).some((x) => x.t === 'math')) {
+      const span = document.createElement('span'); span.className = 'gpx-rich';
+      appendRichText(span, q);
+      userMsg.replaceChild(span, userMsg.firstChild);
+    }
+    if (fresh.length) userMsg.appendChild(Object.assign(document.createElement('div'), { className: 'gpx-msg-files', textContent: '📎 ' + fresh.map((f) => f.name).join(', ') }));
     askInput.value = '';
+    growAsk();
     pendingImages = [];
     renderImageStrip();
+    files.forEach((f) => { f.sent = true; });
+    renderAskFiles();
     const thinking = addMsg('ai', 'Thinking…');
     thinking.innerHTML = '<span class="gpx-typing-dots" role="status" aria-label="Thinking"><i></i><i></i><i></i></span>';
     const s = askSettings();
@@ -14332,38 +15342,56 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       + steer.join(' ') + ' '
       + 'You are given the conversation so far — use it as memory and build on it; do not ask the user to repeat things they have already told you. '
       + 'Format every reply like this: the FIRST line is the direct answer or key takeaway in one short sentence, then a blank line, then the explanation or working. '
-      + 'Reply in plain text only — no markdown symbols (no asterisks, headers, or lists). '
+      + 'Write in plain text (no markdown headings, no asterisks), except: '
+      + 'MATH — write every formula in LaTeX, \\( … \\) inline and \\[ … \\] on its own line, with real notation (\\frac, exponents, \\sqrt, Greek letters, \\le, \\ge, \\pm, \\cdot, \\times); never write math as plain words or ASCII like x^2 outside the delimiters. '
+      + 'CODE — in ``` blocks. '
+      + 'FILES — when the user wants something to keep or hand in (a document, notes, a study guide, an essay, a worksheet, a spreadsheet, a code file…), make the file: a line ```file name="name.ext", the file’s content, then a line ```. '
+      + 'Use .docx for documents (plain text, # for headings, - for bullets, LaTeX allowed), .xlsx or .csv for tables (comma-separated rows, header first), or any text format (.txt .md .html .py …). You can make several files. Never say you can’t make files. '
+      + 'TOOLS — you can search the web yourself for anything current or anything you aren’t sure of (cite the pages), and create a picture when the user asks you to draw, design or show something visual. Do it yourself; the user doesn’t need to switch tools. '
+      + (files.length ? 'The user attached files (included below): read them carefully and answer from them. ' : '')
       + 'Then, on its own final line, write exactly "CONFIDENCE: NN" where NN (0-100) is your confidence that the answer is accurate.';
 
     // Fold the running conversation into the message so the model gets memory.
     const transcript = askHistory.slice(-ASK_MEMORY_TURNS)
       .map((m) => (m.role === 'user' ? 'USER: ' : 'ASSISTANT: ') + m.content)
       .join('\n');
-    const qForModel = q || 'Please read and interpret the attached image(s) and help me with what they show.';
+    const qForModel = q || (imgs.length ? 'Please read and interpret the attached image(s) and help me with what they show.' : 'Please read the attached file(s) and help me with them.');
     const userText = (transcript ? 'CONVERSATION SO FAR:\n' + transcript + '\n\n' : '')
       + 'NEW MESSAGE:\n' + qForModel
-      + (imgs.length ? '\n\n(' + imgs.length + ' image' + (imgs.length > 1 ? 's' : '') + ' attached below — read them as part of this question.)' : '');
+      + (imgs.length ? '\n\n(' + imgs.length + ' image' + (imgs.length > 1 ? 's' : '') + ' attached below — read them as part of this question. "[Image N]" in the text marks where picture N was.)' : '')
+      + (files.length ? '\n\n(Files in this chat: ' + files.map((f) => f.name).join(', ') + '.)' : '');
+    const hard = isHardQuestion(q) || files.some((f) => f.kind === 'pdf');
 
-    // The answer streams in under a live "Thinking" panel. If streaming isn't
-    // possible here (an old Worker, a page that blocks it), the plain request
-    // still answers, with the typing dots.
+    // The answer streams in under a live "Thinking" panel, which also shows
+    // the tools the AI uses on its own (web search, pictures). If streaming
+    // isn't possible here, the plain request still answers.
     thinking.hidden = true;
     const think = makeThinkPanel(thinking);
-    let streamed = false, out, reasons = false;
+    const extras = makeExtras(thinking);
+    const hasThought = () => !!think.el.querySelector('.gpx-think-text').childNodes.length;
+    let streamed = false, out, reasons = false, painted = 0;
+    const paint = (t) => {
+      if (painted) return;
+      painted = requestAnimationFrame(() => { painted = 0; paintAnswer(thinking, t.replace(/\n*\s*CONFIDENCE:?\s*\d*\s*%?\s*$/i, '')); chatEl.scrollTop = chatEl.scrollHeight; });
+    };
     try {
       try {
-        const r = await callAIStream(userText, sys, imgs.length ? imgs : null, isHardQuestion(q), { memory: true, conversation: askConversationId }, {
+        const r = await callAIStream(userText, sys, imgs.length ? imgs : null, hard, { memory: true, conversation: askConversationId, files, tools: ASK_TOOLS }, {
           onStart: (x) => { reasons = !!x.reasoning; },
           onThink: (t) => think.think(t),
+          onTool: (x) => think.step(x),
+          onImage: (x) => extras.image(x),
           onText: (t) => {
-            if (!streamed) { streamed = true; think.done(!!think.el.querySelector('.gpx-think-body').childNodes.length, reasons); thinking.hidden = false; }
-            thinking.textContent = t.replace(/\n*\s*CONFIDENCE:?\s*\d*\s*%?\s*$/i, '');
-            chatEl.scrollTop = chatEl.scrollHeight;
+            if (!streamed) { streamed = true; think.done(hasThought(), reasons); thinking.hidden = false; }
+            paint(t);
           }
         });
+        if (painted) { cancelAnimationFrame(painted); painted = 0; }
         out = r.text;
-        if (!streamed) think.done(!!r.thought, r.reasoning);
-        if (r.thought && !think.el.querySelector('.gpx-think-body').childNodes.length && think.el.isConnected) think.think(r.thought);
+        if (!streamed) { think.done(!!r.thought, r.reasoning); streamed = true; }
+        if (r.thought && !hasThought() && think.el.isConnected) think.think(r.thought);
+        extras.sources(r.citations);
+        if (!out && extras.count) out = 'Here’s the picture.';
       } catch (e) {
         // An answer the API refused is final; anything else (the transport,
         // a Worker without /v1/responses) gets one plain try.
@@ -14371,15 +15399,16 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         think.fail(); thinking.hidden = false;
         thinking.innerHTML = '<span class="gpx-typing-dots" role="status" aria-label="Thinking"><i></i><i></i><i></i></span>';
         streamed = false;
-        out = await callAI(userText, sys, imgs.length ? imgs : null, isHardQuestion(q), { memory: true, conversation: askConversationId });
+        const textFiles = files.filter((f) => f.kind === 'text').map((f) => '\n\nATTACHED FILE "' + f.name + '":\n' + f.text + '\nEND OF FILE').join('');
+        out = await callAI(userText + textFiles, sys, imgs.length ? imgs : null, hard, { memory: true, conversation: askConversationId });
       }
       thinking.hidden = false;
       const { text: cleanText, confidence } = extractConfidenceLine(out);
-    askHistory.push({ role: 'user', content: qForModel }, { role: 'assistant', content: cleanText });
+    askHistory.push({ role: 'user', content: qForModel + (fresh.length ? ' [attached: ' + fresh.map((f) => f.name).join(', ') + ']' : '') }, { role: 'assistant', content: cleanText });
     if (typeof memoryAfterReply === 'function') memoryAfterReply(q, cleanText, askConversationId, thinking);
     if (askHistory.length > 40) askHistory = askHistory.slice(-40);
     renderAskReply(thinking, cleanText, confidence, () => {
-      speak(cleanText);
+      speak(cleanText.replace(/```[\s\S]*?```/g, ''));
       if (isHardQuestion(q)) maybeSuggestBetterModel(chatEl);
     }, streamed);
     } catch (e) {
@@ -14388,7 +15417,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     }
   }
   askBtn.addEventListener('click', sendChat);
-  askInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendChat(); });
+  // Enter sends; Shift+Enter is a new line.
+  askInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(); } });
 
   // ---- Chat -----------------------------------------------------------------
   // A public room everyone shares, plus private rooms you join with a code the

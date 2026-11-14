@@ -674,7 +674,23 @@ Any answer grid can be turned into flashcards with one click, and 💾 saves an 
 
 ![Ask AI answering a question](docs/screenshots/ask-ai.png)
 
-General\-purpose chat, independent of the page. Answers stream in as they're written, and when a reasoning model answers (a hard question auto-upgrades to one), its **thinking** shows live above the answer, like Meta AI: "Thinking" with a timer while the reasoning summary streams in step by step, then it folds to "**Thought for 9s**" (tap to read it again). Models that don't reason just show "Thinking" while you wait. If your OpenAI organization isn't verified for reasoning summaries, the console stops asking for them for a week and shows the time only. Voice input via the browser's speech recognition, and optional read\-aloud for responses via speech synthesis — both local, both free, neither needs a key.
+General\-purpose chat, independent of the page. Answers stream in as they're written, and when a reasoning model answers (a hard question auto-upgrades to one), its **thinking** shows live above the answer, like Meta AI: "Thinking" with a timer while the reasoning summary streams in step by step, then it folds to "**Thought for 9s**" (tap to read it again). Models that don't reason just show "Thinking" while you wait. If your OpenAI organization isn't verified for reasoning summaries, the console stops asking for them for a week and shows the time only.
+
+**It works like an agent, in the same chat.** Every question offers the AI OpenAI's built-in tools, and it decides by itself when to use them; the thinking panel shows each step:
+
+- **Web search** ("Searched the web for …") for anything current or uncertain; the pages it used appear as **Sources** under the answer.
+- **Pictures** ("Creating an image…"): ask it to draw, design or show something; the picture appears blurry while it's made, then sharp, with **Download**.
+- **Files it makes**: ask for a study guide, notes, an essay, a worksheet or a table and it hands you the file as a card with **Download** and **Preview**: `.docx` (a real Word file, built in the browser), `.xlsx` or `.csv`, or any text format (`.txt .md .html .py …`).
+
+**Files you give it.** Drop files anywhere on the tab, paste them, or use the paperclip: PDFs (sent as files, so tables and pictures in them are read too), Word, Excel and PowerPoint (their text is read in the browser), text, CSV, code, and images. Old `.doc` / `.xls` / `.ppt` get a "save it as .docx first" note. Files stay **In this chat** (sent with each message) until you remove them or start a New chat; up to 20 MB together.
+
+**Math.** Answers write formulas in LaTeX and the console shows them as real math (fractions, exponents, roots, matrices, Greek letters…) using the browser's own MathML, no add-ons. Downloaded Word files get the same math as symbols (x², √, π, (1/2)bh).
+
+**Copy a problem, paste it with its pictures.** Copy a question on the site you're on and paste it into Ask AI: its pictures come along, with "[Image 1]" where each was, and equations drawn by KaTeX, MathJax or Canvas's equation images arrive as LaTeX, not garbled text. Pictures from the site itself are read directly; from other sites when they allow it, else through the Worker's `/image` route (public pictures only), else as a link. Copied somewhere else (another tab, a document), the clipboard's own HTML is read the same way. The message box takes several lines (Shift+Enter) and grows as you type.
+
+**Owner controls.** Welcome → AI models → **AI tools**: turn web search or pictures off, and set **pictures per person each day** (default 10; yours aren't limited). The Worker enforces it: it only lets web search, pictures and plain functions through to OpenAI (never code interpreter, file search or remote MCP servers on your key), counts the pictures actually made, and tells the AI to explain when someone is over the limit.
+
+Voice input via the browser's speech recognition, and optional read\-aloud for responses via speech synthesis — both local, both free, neither needs a key.
 
 ### Selection assistant {#selection-assistant}
 
