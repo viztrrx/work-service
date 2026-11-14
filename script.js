@@ -2188,6 +2188,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpa-substrip .gpa-usage-row { gap: 8px; }
       .gpa-substrip .gpa-usage-track { min-width: 24px; }
       .gpa-substrip.is-staff .gpa-usage-track { display: none; }
+      .gpa-substrip.is-paused .gpa-usage-track i { opacity: .5; }
       .gpa-substrip.is-staff .gpa-usage-left { margin-left: auto; }
       .gpa-substrip-renew { flex: none; font: inherit; font-size: 11.5px; font-weight: 600; padding: 3px 10px; border-radius: 999px; cursor: pointer;
         border: 1px solid color-mix(in srgb, var(--gpa-accent) 45%, var(--gpa-border)); background: color-mix(in srgb, var(--gpa-accent) 14%, transparent); color: var(--gpa-text); }
@@ -23223,6 +23224,62 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const m = Math.max(0, Math.floor(ms / 60000)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
     return d ? d + 'd ' + h + 'h' : h ? h + 'h ' + mm + 'm' : Math.max(1, mm) + 'm';
   };
+  // ---- weekday clock (copy of web/weekdays.js; tests/weekdays.test.mjs keeps them identical) ----
+  const fmtCache = new Map();
+  function partsIn(ts, tz) {
+    let f = fmtCache.get(tz);
+    if (!f) {
+      f = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23' });
+      fmtCache.set(tz, f);
+    }
+    const p = {};
+    for (const x of f.formatToParts(new Date(ts))) p[x.type] = x.value;
+    return { y: +p.year, m: +p.month, d: +p.day, h: +p.hour % 24, mi: +p.minute, s: +p.second };
+  }
+  // ms east of UTC for tz at instant ts.
+  function offsetAt(ts, tz) {
+    const p = partsIn(ts, tz);
+    return Date.UTC(p.y, p.m - 1, p.d, p.h, p.mi, p.s) - (Math.floor(ts / 1000) * 1000);
+  }
+  // The local day ts falls in: its weekday (0 = Sunday) and the instant the
+  // next local day starts (DST-safe: a 23- or 25-hour day is handled).
+  function localDay(ts, tz) {
+    const p = partsIn(ts, tz);
+    const dow = new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay();
+    const nextLocal = Date.UTC(p.y, p.m - 1, p.d + 1);
+    let next = nextLocal - offsetAt(nextLocal, tz);
+    next = nextLocal - offsetAt(next, tz);
+    if (next <= ts) next = ts + 1;   // never stall
+    return { dow, next };
+  }
+  const isWeekend = (ts, tz) => { const d = localDay(ts, tz).dow; return d === 0 || d === 6; };
+
+  // Weekday time (ms) between a and b.
+  function weekdayMs(a, b, tz) {
+    let t = a, sum = 0;
+    for (let i = 0; t < b && i < 5000; i++) {
+      const { dow, next } = localDay(t, tz);
+      const end = Math.min(next, b);
+      if (dow !== 0 && dow !== 6) sum += end - t;
+      t = end;
+    }
+    return sum;
+  }
+  // The instant `ms` of weekday time after `from` has been used up. Starting
+  // on a weekend, the clock starts Monday at midnight.
+  function addWeekdayMs(from, ms, tz) {
+    let t = from, left = Math.max(0, ms);
+    for (let i = 0; i < 5000; i++) {
+      const { dow, next } = localDay(t, tz);
+      if (dow !== 0 && dow !== 6) {
+        if (next - t >= left) return t + left;
+        left -= next - t;
+      }
+      t = next;
+    }
+    return t + left;
+  }
+  // ---- end weekday clock ----
   let lastSub = null, subTick = 0;
   function renderSubStrip(sub) {
     if (!subStripEl) return;
@@ -23230,7 +23287,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     clearTimeout(subTick);
     const role = typeof sessionRole === 'function' ? sessionRole() : null;
     const staff = role === 'owner' || role === 'admin';
-    subStripEl.classList.remove('is-staff');
+    subStripEl.classList.remove('is-staff', 'is-paused');
     if (currentUser && staff && !(sub && sub.expiresAt > Date.now())) {
       // The owner and admins: access doesn't run out.
       subStripEl.classList.remove('is-low');
@@ -23250,13 +23307,23 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       return;
     }
     const now = Date.now();
-    const left = sub.expiresAt - now;
-    const days = Math.ceil(left / 864e5);
+    // A weekday plan: the clock is paused on Saturdays and Sundays.
+    const wk = !!sub.weekdays && !sub.autoRenew;
+    const tz = sub.tz || 'America/New_York';
+    let left = sub.expiresAt - now, used = now - sub.startedAt, paused = false;
+    if (wk) {
+      try {
+        left = weekdayMs(now, sub.expiresAt, tz);
+        used = weekdayMs(sub.startedAt, now, tz);
+        paused = isWeekend(now, tz);
+      } catch (e) { /* unknown time zone: fall back to the calendar */ }
+    }
+    const days = Math.ceil((sub.expiresAt - now) / 864e5);   // calendar days, for "tomorrow" / "in 3 days"
     const end = new Date(sub.expiresAt);
     const endDay = end.toLocaleDateString([], { month: 'short', day: 'numeric' });
     const endTime = end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     const sameDay = end.toDateString() === new Date().toDateString();
-    const pct = Math.max(0, Math.min(100, Math.round(((now - sub.startedAt) / Math.max(1, sub.expiresAt - sub.startedAt)) * 100)));
+    const pct = Math.max(0, Math.min(100, Math.round((used / Math.max(1, used + left)) * 100)));
     // Keep the countdown current (every minute) while it's on screen.
     subTick = setTimeout(() => { if (lastSub === sub) renderSubStrip(sub); }, 60000);
     // Paid monthly through the subscribe page (Stripe): it renews by itself.
@@ -23274,7 +23341,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       return;
     }
     subStripEl.classList.toggle('is-low', left <= 3 * 864e5);
-    subStripEl.querySelector('#gpa-substrip-left').textContent = fmtTimeLeft(left) + ' left';
+    subStripEl.classList.toggle('is-paused', paused);
+    subStripEl.querySelector('#gpa-substrip-left').textContent = fmtTimeLeft(left) + ' left' + (paused ? ' · paused' : '');
     const bar = subStripEl.querySelector('#gpa-substrip-bar');
     bar.querySelector('i').style.width = pct + '%';
     bar.setAttribute('aria-valuenow', String(pct));
@@ -23283,7 +23351,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       ? 'Free access, a gift: ends '
       : sub.auto
         ? 'This month’s access (on the allowed list) ends '
-        : 'Your subscription ends ') + (sameDay ? 'today at ' + endTime : endDay + ' at ' + endTime) + '. Tap Renew to keep it.';
+        : 'Your subscription ends ') + (sameDay ? 'today at ' + endTime : endDay + ' at ' + endTime) + '. '
+      + (paused ? 'Paused for the weekend: your time only counts down Monday to Friday. ' : wk ? 'Weekends don’t count. ' : '') + 'Tap Renew to keep it.';
     subRenewBtn.hidden = false;
     subStripEl.hidden = false;
     if (left <= 3 * 864e5) remindSubscriber(sub, sameDay ? 'today at ' + endTime : (days === 1 ? 'tomorrow' : 'in ' + days + ' days') + ' (' + endDay + ', ' + endTime + ')');
@@ -24716,7 +24785,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             + (ledger.length ? `<div class="gac-subs-totals${giftTotal ? ' has-gifts' : ''}"><div><b>${esc(money(month))}</b><span>this month</span></div><div><b>${esc(money(total))}</b><span>collected in all</span></div><div><b>${active.length}</b><span>active now</span></div>${giftTotal ? `<div><b>${esc(money(giftTotal))}</b><span>contributions</span></div>` : ''}</div>` : '')
             + (d.subscriptions.length ? `<p class="gps-hint gac-subs-count"${ledger.length ? ' hidden' : ''}>${active.length} active${d.subscriptions.length > active.length ? ' · ' + (d.subscriptions.length - active.length) + ' ended' : ''}</p><ul class="gac-acct-list gac-subs-list">` + d.subscriptions.map((s) => {
               const soon = s.active && s.expiresAt - Date.now() <= 3 * 864e5;
-              const badge = s.free && s.active && s.forever ? 'Free · no end' : (s.auto && s.active ? 'Automatic · ' : s.free && s.active ? 'Free · ' : '') + (!s.active ? 'Ended' : s.daysLeft <= 1 ? 'Ends today' : s.daysLeft + ' days left');
+              const badge = s.free && s.active && s.forever ? 'Free · no end' : (s.auto && s.active ? 'Automatic · ' : s.free && s.active ? 'Free · ' : '') + (!s.active ? 'Ended' : s.weekdays
+                ? (new Date(s.expiresAt).toDateString() === new Date().toDateString() ? 'Ends today' : s.daysLeft + (s.daysLeft === 1 ? ' weekday left' : ' weekdays left'))
+                : s.daysLeft <= 1 ? 'Ends today' : s.daysLeft + ' days left');
               return `<li class="gac-acct gac-subscr${s.active ? '' : ' is-ended'}${soon ? ' is-soon' : ''}" data-user="${esc(s.user)}"><div class="gac-acct-top"><span class="gac-req-name">${esc(s.user)}</span><span class="gac-req-badge ${s.active && !soon ? 'pending' : ''}">${esc(badge)}</span></div>`
                 + `<div class="gac-req-meta">${s.active ? 'Since ' + esc(fmtDay(s.startedAt)) + (s.forever ? ' · no end' : ' · ends ' + esc(fmtDay(s.expiresAt))) + (s.free && s.freeBy ? ' · given by ' + esc(s.freeBy) : '') : 'Ended ' + esc(fmtDay(s.endedAt || s.expiresAt))}${lastPaid(s) ? ' · paid ' + esc(money(lastPaid(s))) : ''}${giftsBy(s.user) ? ' · contributed ' + esc(money(giftsBy(s.user))) : ''}${s.email ? ' · ' + esc(s.email) : ''}${s.note ? ' · ' + esc(s.note) : ''}</div>`
                 + (s.free && s.active

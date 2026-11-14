@@ -93,6 +93,20 @@ async function openSubscribers(page) {
   await R(page, (r) => r.querySelector('#gac-subs-card').scrollIntoView({ block: 'start' }));
   await page.waitForTimeout(400);
 }
+// Weekdays only (counted here minute by minute with Intl, independently of the
+// app): a start date, on the minute, that leaves about `left` weekdays of a
+// 1-month plan — the plan is the start's calendar month long, spent on weekdays.
+const NYwd = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' });
+const isWkd = (t) => !/Sat|Sun/.test(NYwd.format(new Date(t)));
+const monthAfter = (t) => { const d = new Date(t); const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1, d.getUTCHours(), d.getUTCMinutes())); x.setUTCDate(Math.min(d.getUTCDate(), new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth() + 1, 0)).getUTCDate())); return x.getTime(); };
+function startWithWeekdaysLeft(left) {
+  const now = Math.floor(Date.now() / 60e3) * 60e3;
+  let start = now, used = 0;   // weekday ms from start to now
+  while (true) {
+    for (let i = 0; i < 60; i++) { start -= 60e3; if (isWkd(start)) used += 60e3; }
+    if (monthAfter(start) - start - used <= left * 864e5) return start;
+  }
+}
 const subRow = (page, user) => R(page, (r, u) => { const el = [...r.querySelectorAll('.gac-subscr')].find((x) => x.dataset.user.toLowerCase() === u.toLowerCase()); return el ? el.textContent.replace(/\s+/g, ' ').trim() : null; }, user);
 
 try {
@@ -123,7 +137,8 @@ try {
   await owner.page.click(sr('#gac-subs-form button[type="submit"]'));
   await owner.page.waitForFunction((u) => [...document.getElementById('gpa-root-host').shadowRoot.querySelectorAll('.gac-subscr')].some((x) => x.dataset.user === u), RENZO, { timeout: 10000 }).catch(() => {});
   const row = await subRow(owner.page, RENZO);
-  check('renzo is listed from 10 days ago: about 20 days left, paid $10, the note', row && /(20|21) days left/.test(row) && /Since .* ends /.test(row) && /paid \$10/.test(row) && /Cash App/.test(row) && /Renew \+1 month/.test(row) && /Change start/.test(row) && /End now/.test(row), row);
+  // Weekdays only: 10 calendar days hold 6–8 weekdays, so a month (30–31 days) has 22–25 weekdays left.
+  check('renzo is listed from 10 days ago: 22–25 weekdays left (weekends don’t count), paid $10, the note', row && /(22|23|24|25) weekdays left/.test(row) && /Since .* ends /.test(row) && /paid \$10/.test(row) && /Cash App/.test(row) && /Renew \+1 month/.test(row) && /Change start/.test(row) && /End now/.test(row), row);
   const totals = await R(owner.page, (root) => (root.querySelector('.gac-subs-totals') || {}).textContent || '');
   check('Totals: collected goes up by $10', totals.includes(money(ledgerBefore + 10) + 'collected in all') && /active now/.test(totals), totals + ' (before: ' + money(ledgerBefore) + ')');
   await owner.page.waitForTimeout(500);
@@ -139,22 +154,22 @@ try {
   const strip = () => R(renzo.page, (root) => { const el = root.querySelector('#gpa-substrip'); return { shown: !el.hidden && !!el.offsetParent, left: el.querySelector('#gpa-substrip-left').textContent, note: el.querySelector('#gpa-substrip-note').textContent, cls: el.className }; });
   const seen = await renzo.page.waitForFunction(() => { const el = document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-substrip'); return el && !el.hidden; }, null, { timeout: 25000 }).then(() => true, () => false);
   let st = await strip();
-  check('renzo sees his own countdown under the header: about 20 days left (days and hours), when it ends, and Renew', seen && /^(19|20|21)d \d+h left$/.test(st.left) && /Your subscription ends .* Tap Renew to keep it\./.test(st.note), JSON.stringify(st));
+  check('renzo sees his own countdown under the header: 21–25 weekdays left (days and hours), when it ends, and Renew', seen && /^(21|22|23|24|25)d \d+h left( · paused)?$/.test(st.left) && /Your subscription ends .* Tap Renew to keep it\./.test(st.note), JSON.stringify(st));
   await renzo.page.waitForTimeout(500);
   await shot(renzo.page, '03a-renzo-countdown.png');
 
   // Change start: moved back so only ~2 days are left: amber, "Ask the owner to renew".
   await R(owner.page, (root, u) => [...root.querySelectorAll('.gac-subscr')].find((x) => x.dataset.user === u).querySelector('[data-sub="editstart"]').click(), RENZO);
-  await owner.page.evaluate(([u, ts]) => { const row = [...document.getElementById('gpa-root-host').shadowRoot.querySelectorAll('.gac-subscr')].find((x) => x.dataset.user === u); const el = row.querySelector('.gac-subs-edit input'); const d = new Date(ts - new Date(ts).getTimezoneOffset() * 60e3); el.value = d.toISOString().slice(0, 16); }, [RENZO, (() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return d.getTime() + 2 * 864e5; })()]);
+  await owner.page.evaluate(([u, ts]) => { const row = [...document.getElementById('gpa-root-host').shadowRoot.querySelectorAll('.gac-subscr')].find((x) => x.dataset.user === u); const el = row.querySelector('.gac-subs-edit input'); const d = new Date(ts - new Date(ts).getTimezoneOffset() * 60e3); el.value = d.toISOString().slice(0, 16); }, [RENZO, startWithWeekdaysLeft(2)]);
   await owner.page.waitForTimeout(300);
   await shot(owner.page, '03b-change-start.png');
   await R(owner.page, (root, u) => [...root.querySelectorAll('.gac-subscr')].find((x) => x.dataset.user === u).querySelector('.gac-subs-edit button[type="submit"]').click(), RENZO);
   await owner.page.waitForTimeout(1500);
-  check('Owner: after changing the start, about 2 days left', /(1|2) days? left|Ends today/i.test(await subRow(owner.page, RENZO) || ''), await subRow(owner.page, RENZO));
+  check('Owner: after changing the start, about 2 weekdays left', /(1|2|3) weekdays? left|Ends today/i.test(await subRow(owner.page, RENZO) || ''), await subRow(owner.page, RENZO));
   await renzo.page.evaluate(() => window.dispatchEvent(new Event('focus')));
   const amber = await renzo.page.waitForFunction(() => { const el = document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-substrip'); return el && el.classList.contains('is-low') && /Tap Renew to keep it/.test(el.textContent); }, null, { timeout: 25000 }).then(() => true, () => false);
   st = await strip();
-  check('renzo’s countdown turns amber: “ends … Tap Renew to keep it”', amber && /^\d+(d \d+h|h \d+m|m) left$/.test(st.left), JSON.stringify(st));
+  check('renzo’s countdown turns amber: “ends … Tap Renew to keep it”', amber && /^\d+(d \d+h|h \d+m|m) left( · paused)?$/.test(st.left), JSON.stringify(st));
   await renzo.page.waitForTimeout(500);
   await shot(renzo.page, '03c-renzo-ending-soon.png');
 
@@ -176,7 +191,7 @@ try {
   // 6: owner renews; renzo is back.
   await R(owner.page, (root, u) => [...root.querySelectorAll('.gac-subscr')].find((x) => x.dataset.user === u).querySelector('[data-sub="renew"]').click(), RENZO);
   await owner.page.waitForTimeout(1500);
-  check('Renewed: active again with a month left', /(30|31) days left/.test(await subRow(owner.page, RENZO) || ''), await subRow(owner.page, RENZO));
+  check('Renewed: active again with a month left (a month’s worth of weekdays)', /(30|31) weekdays left/.test(await subRow(owner.page, RENZO) || ''), await subRow(owner.page, RENZO));
   await R(owner.page, (root) => root.querySelector('#gac-subs-card').scrollIntoView({ block: 'start' }));
   await owner.page.waitForTimeout(300);
   await shot(owner.page, '06-renewed.png');

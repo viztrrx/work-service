@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import realWorker from '../worker.js';
 import { signedIn } from './signed-in.mjs';
+import { weekdayMs } from '../web/weekdays.js';
 const worker = signedIn(realWorker);
 
 // ---- In-memory KV with the subset of the Workers KV API the worker uses ----
@@ -1140,7 +1141,10 @@ test('subscribers: paid access for a set time, cut off exactly when it ends, the
     let r = await subs({ action: 'add', user: 'Renzo', period: '1m', note: '$10 · Cash App' });
     assert.equal(r.status, 200);
     let s = r.data.subscriptions.find((x) => x.user === 'Renzo');
-    assert.equal(s.expiresAt, Date.parse('2026-11-15T18:30:00Z'), 'one calendar month later');
+    // A month (Oct 15 → Nov 15 = 31 days) counts weekdays only: Thu Oct 15
+    // 2:30 PM New York + 31 weekdays = Fri Nov 27 2:30 PM EST (clocks went back Nov 1).
+    assert.equal(s.expiresAt, Date.parse('2026-11-27T19:30:00Z'), '31 weekdays later, weekends skipped');
+    assert.equal(s.weekdays, true);
     assert.equal(s.note, '$10 · Cash App');
     assert.equal(s.active, true);
     assert.equal(s.daysLeft, 31);
@@ -1153,11 +1157,14 @@ test('subscribers: paid access for a set time, cut off exactly when it ends, the
 
     // One minute before the end: still in. At the end: out, with the reason.
     // (Sessions last 14 days, so he signs in again during the month.)
-    at(Date.parse('2026-11-15T18:29:00Z'));
+    // Nov 15 (where the calendar month would have ended): still in.
+    at(Date.parse('2026-11-15T18:30:00Z'));
+    assert.equal((await c.call('/access?user=renzo')).data.allowed, true, 'weekends didn’t use up his month');
+    at(Date.parse('2026-11-27T19:29:00Z'));
     const again = await c.call('/auth/login', { method: 'POST', body: { user: 'renzo', verifier: verifierFor('renzo', '1234') } });
     assert.equal(again.status, 200);
     assert.equal((await c.call('/status?user=renzo', { headers: sess(again.data.token) })).data.state, 'active');
-    at(Date.parse('2026-11-15T18:30:00Z'));
+    at(Date.parse('2026-11-27T19:30:00Z'));
     const st = (await c.call('/status?user=renzo', { headers: sess(again.data.token) })).data;
     assert.equal(st.notAllowed, true, 'cut off at the exact end time');
     assert.equal(st.subscriptionEnded, true);
@@ -1165,7 +1172,7 @@ test('subscribers: paid access for a set time, cut off exactly when it ends, the
     const acc = (await c.call('/access?user=renzo')).data;
     assert.equal(acc.allowed, false);
     assert.equal(acc.error, 'Your subscription has ended. Ask the owner to renew it.');
-    assert.equal(acc.subscriptionEnded, Date.parse('2026-11-15T18:30:00Z'));
+    assert.equal(acc.subscriptionEnded, Date.parse('2026-11-27T19:30:00Z'));
     assert.equal((await c.call('/auth/login', { method: 'POST', body: { user: 'renzo', verifier: verifierFor('renzo', '1234') } })).status, 403);
     // Even a stale Allowed-users save that still has the name doesn't let him back in.
     await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: ['kj', 'renzo'] } } });
@@ -1182,18 +1189,20 @@ test('subscribers: paid access for a set time, cut off exactly when it ends, the
     assert.deepEqual([s.active, s.daysLeft], [false, 0]);
 
     // Renew: a fresh month from now, back on the list.
-    at(Date.parse('2026-11-20T09:00:00Z'));
+    // Wed Dec 2 9:00 AM EST + 31 weekdays = Thu Jan 14 9:00 AM.
+    at(Date.parse('2026-12-02T14:00:00Z'));
     r = await subs({ action: 'renew', user: 'renzo', period: '1m' });
     s = r.data.subscriptions.find((x) => x.user === 'Renzo');
-    assert.equal(s.expiresAt, Date.parse('2026-12-20T09:00:00Z'));
+    assert.equal(s.expiresAt, Date.parse('2027-01-14T14:00:00Z'));
     assert.equal(s.note, '$10 · Cash App', 'the note is kept');
     assert.equal((await c.call('/access?user=renzo')).data.allowed, true);
-    // Renewing early adds on top of the time left.
+    // Renewing early adds on top of the time left: a week (7 weekdays) from
+    // Thu Jan 14 9:00 AM = Mon Jan 25 9:00 AM.
     r = await subs({ action: 'renew', user: 'renzo', period: '1w' });
-    assert.equal(r.data.subscriptions.find((x) => x.user === 'Renzo').expiresAt, Date.parse('2026-12-27T09:00:00Z'));
+    assert.equal(r.data.subscriptions.find((x) => x.user === 'Renzo').expiresAt, Date.parse('2027-01-25T14:00:00Z'));
 
     // 3 days before the end the cron reminds the owner, once.
-    at(Date.parse('2026-12-24T10:00:00Z'));
+    at(Date.parse('2027-01-22T15:00:00Z'));
     await worker.scheduled({ cron: '*/5 * * * *' }, env, ctx); await Promise.all(pend.splice(0));
     assert.equal((await env.TELEMETRY.get('config', 'json')).subscriptions.renzo.reminded, true);
     assert.equal((await c.call('/access?user=renzo')).data.allowed, true, 'a reminder doesn’t end it');
@@ -1207,8 +1216,11 @@ test('subscribers: paid access for a set time, cut off exactly when it ends, the
     assert.equal((await c.call('/access?user=renzo')).data.error, 'Unable to create account', 'back to the plain message');
 
     // Approving an access request from someone whose subscription ended lets them in for free.
+    // dub: a week from Fri Jan 22 10:00 AM = Tue Feb 2 10:00 AM (7 weekdays).
     await subs({ action: 'add', user: 'dub', period: '1w' });
-    at(Date.parse('2027-01-05T00:00:00Z'));
+    at(Date.parse('2027-02-01T15:00:00Z'));
+    assert.equal((await c.call('/access?user=dub')).data.allowed, true, 'a calendar week would be over; 7 weekdays aren’t');
+    at(Date.parse('2027-02-02T15:00:00Z'));
     assert.equal((await c.call('/access?user=dub')).data.allowed, false);
     await c.call('/access/request', { method: 'POST', body: { user: 'dub', message: 'renew pls' } });
     await c.call('/admin/access-requests/decide', { method: 'POST', headers: owner, body: { user: 'dub', action: 'approve' } });
@@ -1267,7 +1279,7 @@ test('subscribers: listed names never made subscribers get an automatic month (1
     const add = await subs({ action: 'add', user: 'KayJay', period: '1m', amount: 14, note: 'cash' });
     assert.equal(add.status, 200, JSON.stringify(add.data));
     const kj2 = add.data.subscriptions.find((x) => x.user === 'KayJay');
-    assert.deepEqual([kj2.auto, kj2.expiresAt, kj2.note], [undefined, Date.parse('2026-11-18T15:00:00Z'), 'cash']);
+    assert.deepEqual([kj2.auto, kj2.expiresAt, kj2.note], [undefined, Date.parse('2026-12-01T05:00:00Z'), 'cash']);   // added Sunday: 31 weekdays from Mon Oct 19
     // zed is made a moderator during the month: not cut off at the end.
     await signUp(c, 'zed');
     assert.equal((await c.call('/admin/user/action', { method: 'POST', headers: owner, body: { u: 'zed', action: 'setrole', role: 'moderator' } })).status, 200);
@@ -1281,7 +1293,7 @@ test('subscribers: listed names never made subscribers get an automatic month (1
     assert.equal(c1.subscriptions.zed, undefined, 'staff: the automatic month is dropped, not ended');
     assert.ok(c1.allowlist.users.includes('zed'));
     assert.equal((await c.call('/access?user=zed')).data.allowed, true);
-    assert.equal((await c.call('/access?user=kayjay')).data.allowed, true, 'paid until Nov 18');
+    assert.equal((await c.call('/access?user=kayjay')).data.allowed, true, 'paid until Dec 1');
     // A name listed in November gets Nov 1 → Dec 1 (EST after the clocks change).
     at(Date.parse('2026-11-10T12:00:00Z'));
     await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: [...c1.allowlist.users, 'nova'] } } });
@@ -1555,22 +1567,27 @@ test('day session end: 12 PM New York, today before noon, tomorrow after (DST-sa
   } finally { Date.now = realNow; }
 });
 
-test('subscribers: month math keeps the day, or the month’s last day', async () => {
+test('subscribers: month math keeps the day, or the month’s last day — then spends those days on weekdays only', async () => {
   const env = makeEnv(); const c = makeClient(env);
   const realNow = Date.now;
+  const NY = 'America/New_York';
   try {
-    for (const [from, period, want] of [
-      ['2026-01-31T12:00:00Z', '1m', '2026-02-28T12:00:00Z'],
-      ['2028-01-31T12:00:00Z', '1m', '2028-02-29T12:00:00Z'],
-      ['2026-12-15T08:00:00Z', '1m', '2027-01-15T08:00:00Z'],
-      ['2026-10-15T08:00:00Z', '3m', '2027-01-15T08:00:00Z'],
-      ['2026-10-15T08:00:00Z', '12m', '2027-10-15T08:00:00Z'],
-      ['2026-10-15T08:00:00Z', '2w', '2026-10-29T08:00:00Z']
+    // [start, period, calendar end (how many days the plan is worth), the real end with weekends skipped]
+    for (const [from, period, calEnd, want] of [
+      ['2026-01-31T12:00:00Z', '1m', '2026-02-28T12:00:00Z', '2026-03-12T04:00:00Z'],   // Sat: clock starts Mon Feb 2; 28 weekdays → end of Wed Mar 11
+      ['2028-01-31T12:00:00Z', '1m', '2028-02-29T12:00:00Z', '2028-03-10T12:00:00Z'],   // leap year: 29 weekdays from Mon 7 AM → Fri Mar 10 7 AM EST
+      ['2026-12-15T08:00:00Z', '1m', '2027-01-15T08:00:00Z', '2027-01-27T08:00:00Z'],   // Tue 3 AM + 31 weekdays (6 weeks + 1) → Wed Jan 27 3 AM
+      ['2026-10-15T08:00:00Z', '3m', '2027-01-15T08:00:00Z', '2027-02-22T09:00:00Z'],   // 92 weekdays (18 weeks + 2) → Mon Feb 22 4 AM EST
+      ['2026-10-15T08:00:00Z', '12m', '2027-10-15T08:00:00Z', '2028-03-09T09:00:00Z'],  // 365 weekdays = 73 weeks → Thu Mar 9 2028 4 AM EST
+      ['2026-10-15T08:00:00Z', '2w', '2026-10-29T08:00:00Z', '2026-11-04T09:00:00Z']    // 14 weekdays (2 weeks + 4) from Thu 4 AM EDT → Wed Nov 4 4 AM EST
     ]) {
       Date.now = () => Date.parse(from);
       const u = 'm' + Math.random().toString(36).slice(2, 8);
       const r = await c.call('/admin/subscriptions', { method: 'POST', headers: owner, body: { action: 'add', user: u, period } });
-      assert.equal(new Date(r.data.subscriptions.find((x) => x.user === u).expiresAt).toISOString(), new Date(want).toISOString(), `${from} + ${period}`);
+      const end = r.data.subscriptions.find((x) => x.user === u).expiresAt;
+      assert.equal(new Date(end).toISOString(), new Date(want).toISOString(), `${from} + ${period}`);
+      // The weekday time between start and end is exactly the calendar length of the plan.
+      assert.equal(weekdayMs(Date.parse(from), end, NY), Date.parse(calEnd) - Date.parse(from), `${from} + ${period}: weekday time = plan length`);
     }
   } finally { Date.now = realNow; }
 });
@@ -1588,14 +1605,16 @@ test('subscribers: a chosen start date, changing it later, amounts paid, and the
     assert.equal(r.status, 200);
     let s = r.data.subscriptions.find((x) => x.user === 'renzo');
     assert.equal(s.startedAt, oct1);
-    assert.equal(s.expiresAt, Date.parse('2026-11-01T13:30:00Z'));
-    assert.equal(s.daysLeft, 17);
+    // Thu Oct 1 9:30 AM + 31 weekdays = Fri Nov 13 9:30 AM EST.
+    assert.equal(s.expiresAt, Date.parse('2026-11-13T14:30:00Z'));
+    // Today is Thu Oct 15 2 PM: Oct 15 (14h) + 20 full weekdays + Fri Nov 13 till 9:30 AM = 20d 23.5h → 21.
+    assert.equal(s.daysLeft, 21, 'weekdays left');
     assert.deepEqual(r.data.ledger.map((x) => [x.user, x.amount, x.at]), [['renzo', 10, oct1]]);
     // The start can't be in the future, or so long ago it's already over.
     assert.equal((await subs({ action: 'add', user: 'dub', startedAt: Date.parse('2026-10-20T00:00:00Z') })).status, 400);
     const over = await subs({ action: 'add', user: 'dub', period: '1w', startedAt: Date.parse('2026-10-01T16:00:00Z') });
     assert.equal(over.status, 400);
-    assert.match(over.data.error, /would already have ended on Oct 8, 2026/);
+    assert.match(over.data.error, /would already have ended on Oct 12, 2026/);   // Thu Oct 1 + 7 weekdays = Mon Oct 12
     // Without a start date it starts now.
     r = await subs({ action: 'add', user: 'dub', period: '2w', amount: 5.5 });
     assert.equal(r.data.subscriptions.find((x) => x.user === 'dub').startedAt, Date.now());
@@ -1605,19 +1624,21 @@ test('subscribers: a chosen start date, changing it later, amounts paid, and the
     assert.equal(mine.sessionRequired, true, 'listed names need a session');
     const reg = await signUp(c, 'renzo');
     s = (await c.call('/status?user=renzo', { headers: sess(reg.data.token) })).data.subscription;
-    assert.deepEqual(s, { startedAt: oct1, expiresAt: Date.parse('2026-11-01T13:30:00Z'), period: '1m' });
-    assert.deepEqual((await c.call('/track', { method: 'POST', body: { user: 'renzo', event: 'beat', sid: 'r1', session: reg.data.token } })).data.subscription.expiresAt, Date.parse('2026-11-01T13:30:00Z'));
+    assert.deepEqual(s, { startedAt: oct1, expiresAt: Date.parse('2026-11-13T14:30:00Z'), period: '1m', weekdays: true, tz: 'America/New_York' });
+    assert.deepEqual((await c.call('/track', { method: 'POST', body: { user: 'renzo', event: 'beat', sid: 'r1', session: reg.data.token } })).data.subscription.expiresAt, Date.parse('2026-11-13T14:30:00Z'));
     await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: false } } });
     assert.equal((await c.call('/status?user=kj')).data.subscription, null, 'not a subscriber');
     await c.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true } } });
 
     // Change the start date: the end moves with it.
+    // Sat Oct 10: the clock starts Mon Oct 12; 31 weekdays → end of Mon Nov 23.
     r = await subs({ action: 'setstart', user: 'renzo', startedAt: Date.parse('2026-10-10T13:30:00Z') });
-    assert.equal(r.data.subscriptions.find((x) => x.user === 'renzo').expiresAt, Date.parse('2026-11-10T13:30:00Z'));
+    assert.equal(r.data.subscriptions.find((x) => x.user === 'renzo').expiresAt, Date.parse('2026-11-24T05:00:00Z'));
     // …moved far enough back it has already ended: he's cut off.
+    // Tue Sep 1 9:30 AM + 30 weekdays = Tue Oct 13 9:30 AM: before today.
     r = await subs({ action: 'setstart', user: 'renzo', startedAt: Date.parse('2026-09-01T13:30:00Z') });
     s = r.data.subscriptions.find((x) => x.user === 'renzo');
-    assert.deepEqual([s.active, s.expiresAt], [false, Date.parse('2026-10-01T13:30:00Z')]);
+    assert.deepEqual([s.active, s.expiresAt], [false, Date.parse('2026-10-13T13:30:00Z')]);
     assert.equal((await c.call('/access?user=renzo')).data.allowed, false);
     // …and moved forward again: back in.
     await subs({ action: 'setstart', user: 'renzo', startedAt: oct1 });
@@ -1626,7 +1647,8 @@ test('subscribers: a chosen start date, changing it later, amounts paid, and the
 
     // Renewals go in the ledger; removing a record keeps what was collected.
     r = await subs({ action: 'renew', user: 'renzo', period: '1m', amount: 10 });
-    assert.equal(r.data.subscriptions.find((x) => x.user === 'renzo').expiresAt, Date.parse('2026-12-01T13:30:00Z'), 'stacked on the time left');
+    // Stacked on Fri Nov 13 9:30 AM EST: Nov 13 → Dec 13 = 30 weekdays → Fri Dec 25 9:30 AM.
+    assert.equal(r.data.subscriptions.find((x) => x.user === 'renzo').expiresAt, Date.parse('2026-12-25T14:30:00Z'), 'stacked on the time left');
     await subs({ action: 'end', user: 'dub' });
     r = await subs({ action: 'delete', user: 'dub' });
     assert.equal(r.data.ledger.reduce((n, x) => n + x.amount, 0), 25.5);

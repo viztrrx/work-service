@@ -3,6 +3,7 @@ import { consoleApp } from './web/console/handler.js';
 import { extensionRoute } from './extension/routes.js';
 import { policyPage, POLICY_PAGES } from './web/policies.js';
 import { subscribePage, subscribeReady, priceCents, displayCents, stripe, checkoutParams, contributionParams, CHECKOUT_TTL_S, contribCents, isContribution, periodEndMs, invoiceSubscription, stripeSignatureOk, SUB_NAME_RE, SESSION_RE, ATTEMPT_RE, supportEmail, SCHOOL_DOMAIN, OWNER_CONTRIB_MIN_CENTS, money } from './web/subscribe.js';
+import { weekdayMs, addWeekdayMs } from './web/weekdays.js';
 import { parseYouTubeLink, videoDetails, rightsNote } from './web/mp3.js';
 import { smsReady, normPhone, prettyPhone, sendSms, telnyxSignatureOk, smsKeyword, namesList } from './web/sms.js';
 import { readPlaylist, readLists, writeLists, newList, listSummary, publicList, searchYouTube, matchCacheKey, LISTS_MAX, MATCH_BATCH, MATCH_SCAN } from './web/playlists.js';
@@ -625,6 +626,19 @@ function addSubPeriod(from, period) {
   const last = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
   t.setUTCDate(Math.min(day, last));
   return t.getTime();
+}
+// Paid plans the owner adds or renews only count down on weekdays (see
+// web/weekdays.js): the plan's length in days is spent Monday–Friday only,
+// in the owner's time zone, so a month lasts about six calendar weeks.
+// Free access, the automatic month and Stripe billing keep the calendar.
+const subTz = (env) => (env && env.OWNER_TZ) || 'America/New_York';
+function addSubWeekdays(from, period, tz) {
+  return addWeekdayMs(from, addSubPeriod(from, period) - from, tz);
+}
+// Days left for the admin card: weekdays for a weekday plan.
+function subDaysLeft(s, now, tz) {
+  if (!(s.expiresAt > now)) return 0;
+  return Math.ceil((s.weekdays ? weekdayMs(now, s.expiresAt, tz) : s.expiresAt - now) / 864e5);
 }
 // The owner's rule for Allowed users: a name on the list that was never made
 // a subscriber gets one automatically, from the 1st of this month to the 1st
@@ -1714,7 +1728,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       const s = subscriptionOf(cfg, user);
       if (!s || s.expiresAt <= Date.now() || String(user).toLowerCase() === OWNER) return null;
       if (s.free && s.expiresAt >= FREE_FOREVER) return null;   // free, no end: nothing to count down
-      return { startedAt: s.startedAt, expiresAt: s.expiresAt, period: s.period, ...(s.autoRenew ? { autoRenew: true } : {}), ...(s.auto ? { auto: true } : {}), ...(s.free ? { free: true } : {}) };
+      return { startedAt: s.startedAt, expiresAt: s.expiresAt, period: s.period, ...(s.weekdays ? { weekdays: true, tz: subTz(env) } : {}), ...(s.autoRenew ? { autoRenew: true } : {}), ...(s.auto ? { auto: true } : {}), ...(s.free ? { free: true } : {}) };
     };
     // Why a name is refused, in words for that person.
     const deniedReason = (cfg, user) => (subscriptionOf(cfg, user) ? SUB_ENDED : ACCESS_DENIED);
@@ -2509,7 +2523,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       // The automatic month for listed names, so the card shows it right away.
       if ((await autoSubscribeListed(env, cfg, now)).length) await kv.put('config', JSON.stringify(cfg));
       const view = () => {
-        const list = Object.values(cfg.subscriptions).map((s) => ({ ...s, active: s.expiresAt > now, daysLeft: Math.max(0, Math.ceil((s.expiresAt - now) / 864e5)), ...(s.expiresAt >= FREE_FOREVER ? { forever: true } : {}) }));
+        const list = Object.values(cfg.subscriptions).map((s) => ({ ...s, active: s.expiresAt > now, daysLeft: subDaysLeft(s, now, subTz(env)), ...(s.expiresAt >= FREE_FOREVER ? { forever: true } : {}) }));
         list.sort((a, b) => (b.active - a.active) || (a.active ? a.expiresAt - b.expiresAt : b.expiresAt - a.expiresAt));
         return { ok: true, subscriptions: list, allowlistOn: !!(cfg.allowlist && cfg.allowlist.on), periods: SUB_PERIOD_LABEL,
           ledger: (Array.isArray(cfg.subLedger) ? cfg.subLedger : []).slice(-1000) };
@@ -2544,12 +2558,12 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         // new period starts at the chosen start date (default: now).
         const stacking = action === 'renew' && cur.expiresAt > now;
         const from = stacking ? cur.expiresAt : startAt;
-        const expiresAt = addSubPeriod(from, period);
+        const expiresAt = addSubWeekdays(from, period, subTz(env));
         if (expiresAt <= now) return json({ error: 'Starting ' + day(from) + ', ' + (SUB_PERIOD_LABEL[period] || 'that') + ' would already have ended on ' + day(expiresAt) + '. Pick a later start date or a longer length.' }, 400);
         const rec = {
           user: cur && action === 'renew' ? cur.user : name,
           startedAt: stacking ? cur.startedAt : startAt,
-          expiresAt, period, note: note || (cur && cur.note) || '',
+          expiresAt, period, note: note || (cur && cur.note) || '', weekdays: true,
           history: [...((cur && cur.history) || []), { at: now, action, period, note, amount, from }].slice(-24)
         };
         if (amount > 0) cfg.subLedger = [...(Array.isArray(cfg.subLedger) ? cfg.subLedger : []), { user: rec.user, at: startAt, amount, action }].slice(-1000);
@@ -2562,7 +2576,10 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         if (!cur) return json({ error: 'No subscription for ' + name }, 404);
         if (body.startedAt == null || body.startedAt === '') return json({ error: 'Pick a start date.' }, 400);
         cur.startedAt = startAt;
-        cur.expiresAt = addSubPeriod(startAt, cur.period || '1m');
+        // A plan the owner manages counts weekdays only; free access and
+        // Stripe billing keep calendar time.
+        if (!cur.free && !cur.autoRenew && !cur.auto) cur.weekdays = true;
+        cur.expiresAt = cur.weekdays ? addSubWeekdays(startAt, cur.period || '1m', subTz(env)) : addSubPeriod(startAt, cur.period || '1m');
         cur.ended = cur.expiresAt <= now; cur.reminded = false;
         if (cur.ended) { cur.endedAt = cur.expiresAt; users.delete(key); } else { delete cur.endedAt; users.add(key); }
         cur.history = [...(cur.history || []), { at: now, action, from: startAt }].slice(-24);
