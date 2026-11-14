@@ -3,7 +3,7 @@ import { consoleApp } from './web/console/handler.js';
 import { extensionRoute } from './extension/routes.js';
 import { policyPage, POLICY_PAGES } from './web/policies.js';
 import { subscribePage, subscribeReady, priceCents, displayCents, stripe, checkoutParams, contributionParams, CHECKOUT_TTL_S, contribCents, isContribution, periodEndMs, invoiceSubscription, stripeSignatureOk, SUB_NAME_RE, SESSION_RE, ATTEMPT_RE, supportEmail, SCHOOL_DOMAIN, OWNER_CONTRIB_MIN_CENTS, money } from './web/subscribe.js';
-import { weekdayMs, addWeekdayMs } from './web/weekdays.js';
+import { schoolMs, addSchoolMs, SCHOOL_CALENDARS } from './web/school-days.js';
 import { parseYouTubeLink, videoDetails, rightsNote } from './web/mp3.js';
 import { smsReady, normPhone, prettyPhone, sendSms, telnyxSignatureOk, smsKeyword, namesList } from './web/sms.js';
 import { readPlaylist, readLists, writeLists, newList, listSummary, publicList, searchYouTube, matchCacheKey, LISTS_MAX, MATCH_BATCH, MATCH_SCAN } from './web/playlists.js';
@@ -627,18 +627,22 @@ function addSubPeriod(from, period) {
   t.setUTCDate(Math.min(day, last));
   return t.getTime();
 }
-// Paid plans the owner adds or renews only count down on weekdays (see
-// web/weekdays.js): the plan's length in days is spent Monday–Friday only,
-// in the owner's time zone, so a month lasts about six calendar weeks.
+// Paid plans the owner adds or renews only count down on school days (see
+// web/school-days.js): the plan's length in days is spent only on days the
+// school is open (2026–27 calendar; weekdays where no calendar is entered),
+// in the owner's time zone. Weekends, holidays, staff PD days, the owner's
+// weather days (config.closedDays) and the summer break don't count.
 // Free access, the automatic month and Stripe billing keep the calendar.
 const subTz = (env) => (env && env.OWNER_TZ) || 'America/New_York';
-function addSubWeekdays(from, period, tz) {
-  return addWeekdayMs(from, addSubPeriod(from, period) - from, tz);
+const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const closedDaysOf = (cfg) => (cfg && Array.isArray(cfg.closedDays) ? cfg.closedDays.filter((d) => DATE_KEY_RE.test(d)) : []);
+function addSubSchool(from, period, tz, closed) {
+  return addSchoolMs(from, addSubPeriod(from, period) - from, tz, closed);
 }
-// Days left for the admin card: weekdays for a weekday plan.
-function subDaysLeft(s, now, tz) {
+// Days left for the admin card: school days for a school-day plan.
+function subDaysLeft(s, now, tz, closed) {
   if (!(s.expiresAt > now)) return 0;
-  return Math.ceil((s.weekdays ? weekdayMs(now, s.expiresAt, tz) : s.expiresAt - now) / 864e5);
+  return Math.ceil((s.school ? schoolMs(now, s.expiresAt, tz, closed) : s.expiresAt - now) / 864e5);
 }
 // The owner's rule for Allowed users: a name on the list that was never made
 // a subscriber gets one automatically, from the 1st of this month to the 1st
@@ -1728,7 +1732,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       const s = subscriptionOf(cfg, user);
       if (!s || s.expiresAt <= Date.now() || String(user).toLowerCase() === OWNER) return null;
       if (s.free && s.expiresAt >= FREE_FOREVER) return null;   // free, no end: nothing to count down
-      return { startedAt: s.startedAt, expiresAt: s.expiresAt, period: s.period, ...(s.weekdays ? { weekdays: true, tz: subTz(env) } : {}), ...(s.autoRenew ? { autoRenew: true } : {}), ...(s.auto ? { auto: true } : {}), ...(s.free ? { free: true } : {}) };
+      return { startedAt: s.startedAt, expiresAt: s.expiresAt, period: s.period, ...(s.school ? { school: true, tz: subTz(env), closed: closedDaysOf(cfg) } : {}), ...(s.autoRenew ? { autoRenew: true } : {}), ...(s.auto ? { auto: true } : {}), ...(s.free ? { free: true } : {}) };
     };
     // Why a name is refused, in words for that person.
     const deniedReason = (cfg, user) => (subscriptionOf(cfg, user) ? SUB_ENDED : ACCESS_DENIED);
@@ -2523,13 +2527,34 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       // The automatic month for listed names, so the card shows it right away.
       if ((await autoSubscribeListed(env, cfg, now)).length) await kv.put('config', JSON.stringify(cfg));
       const view = () => {
-        const list = Object.values(cfg.subscriptions).map((s) => ({ ...s, active: s.expiresAt > now, daysLeft: subDaysLeft(s, now, subTz(env)), ...(s.expiresAt >= FREE_FOREVER ? { forever: true } : {}) }));
+        const list = Object.values(cfg.subscriptions).map((s) => ({ ...s, active: s.expiresAt > now, daysLeft: subDaysLeft(s, now, subTz(env), closedDaysOf(cfg)), ...(s.expiresAt >= FREE_FOREVER ? { forever: true } : {}) }));
         list.sort((a, b) => (b.active - a.active) || (a.active ? a.expiresAt - b.expiresAt : b.expiresAt - a.expiresAt));
+        const cals = SCHOOL_CALENDARS.map((c) => ({ name: c.name, first: c.first, last: c.last, to: c.to }));
         return { ok: true, subscriptions: list, allowlistOn: !!(cfg.allowlist && cfg.allowlist.on), periods: SUB_PERIOD_LABEL,
+          school: { calendars: cals, closedDays: closedDaysOf(cfg) },
           ledger: (Array.isArray(cfg.subLedger) ? cfg.subLedger : []).slice(-1000) };
       };
       const action = String(body.action || 'list');
       if (action === 'list') return json(view());
+      // Weather days (school closed, not on the calendar): { action: 'closed',
+      // add | remove: 'YYYY-MM-DD' }. Every running school-day plan keeps the
+      // school time it had left, so its end moves by that day.
+      if (action === 'closed') {
+        const date = String(body.add || body.remove || '');
+        if (!DATE_KEY_RE.test(date) || isNaN(Date.parse(date + 'T12:00:00Z'))) return json({ error: 'Pick a date.' }, 400);
+        if (Math.abs(Date.parse(date + 'T12:00:00Z') - now) > 400 * 864e5) return json({ error: 'Pick a date within a year of today.' }, 400);
+        const tz = subTz(env), before = closedDaysOf(cfg);
+        const after = body.add ? [...new Set([...before, date])].sort().slice(-200) : before.filter((d) => d !== date);
+        for (const sub of Object.values(cfg.subscriptions)) {
+          if (!sub || !sub.school || sub.ended || !(sub.expiresAt > now)) continue;
+          sub.expiresAt = addSchoolMs(now, schoolMs(now, sub.expiresAt, tz, before), tz, after);
+          sub.reminded = false;
+        }
+        cfg.closedDays = after;
+        await kv.put('config', JSON.stringify(cfg));
+        await logAudit(kv, { route: url.pathname, action: body.add ? 'school_closed_add' : 'school_closed_remove', target: date });
+        return json(view());
+      }
       const name = String(body.user || '').trim().replace(/^@/, '');
       if (!/^[A-Za-z0-9_.-]{1,40}$/.test(name)) return json({ error: 'Enter a username (letters, numbers, . _ -).' }, 400);
       const key = name.toLowerCase();
@@ -2558,12 +2583,12 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         // new period starts at the chosen start date (default: now).
         const stacking = action === 'renew' && cur.expiresAt > now;
         const from = stacking ? cur.expiresAt : startAt;
-        const expiresAt = addSubWeekdays(from, period, subTz(env));
+        const expiresAt = addSubSchool(from, period, subTz(env), closedDaysOf(cfg));
         if (expiresAt <= now) return json({ error: 'Starting ' + day(from) + ', ' + (SUB_PERIOD_LABEL[period] || 'that') + ' would already have ended on ' + day(expiresAt) + '. Pick a later start date or a longer length.' }, 400);
         const rec = {
           user: cur && action === 'renew' ? cur.user : name,
           startedAt: stacking ? cur.startedAt : startAt,
-          expiresAt, period, note: note || (cur && cur.note) || '', weekdays: true,
+          expiresAt, period, note: note || (cur && cur.note) || '', school: true,
           history: [...((cur && cur.history) || []), { at: now, action, period, note, amount, from }].slice(-24)
         };
         if (amount > 0) cfg.subLedger = [...(Array.isArray(cfg.subLedger) ? cfg.subLedger : []), { user: rec.user, at: startAt, amount, action }].slice(-1000);
@@ -2576,10 +2601,10 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         if (!cur) return json({ error: 'No subscription for ' + name }, 404);
         if (body.startedAt == null || body.startedAt === '') return json({ error: 'Pick a start date.' }, 400);
         cur.startedAt = startAt;
-        // A plan the owner manages counts weekdays only; free access and
+        // A plan the owner manages counts school days only; free access and
         // Stripe billing keep calendar time.
-        if (!cur.free && !cur.autoRenew && !cur.auto) cur.weekdays = true;
-        cur.expiresAt = cur.weekdays ? addSubWeekdays(startAt, cur.period || '1m', subTz(env)) : addSubPeriod(startAt, cur.period || '1m');
+        if (!cur.free && !cur.autoRenew && !cur.auto) cur.school = true;
+        cur.expiresAt = cur.school ? addSubSchool(startAt, cur.period || '1m', subTz(env), closedDaysOf(cfg)) : addSubPeriod(startAt, cur.period || '1m');
         cur.ended = cur.expiresAt <= now; cur.reminded = false;
         if (cur.ended) { cur.endedAt = cur.expiresAt; users.delete(key); } else { delete cur.endedAt; users.add(key); }
         cur.history = [...(cur.history || []), { at: now, action, from: startAt }].slice(-24);
@@ -2738,7 +2763,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         const counts = await Promise.all(limits.map(([k]) => kv.get(k)));
         for (let i = 0; i < limits.length; i++) if ((parseInt(counts[i], 10) || 0) >= limits[i][1]) return json({ ok: false, error: limits[i][2] }, 429);
         try {
-          await sendSms(env, to, 'Saints Service: hi ' + p.user + '! Subscribe or renew here: ' + link + ' . Paying cash instead? Reply CASH. Msg & data rates may apply. Reply STOP to opt out, HELP for help.');
+          await sendSms(env, to, 'Saints Service: hi ' + p.user + '! Subscribe or renew here: ' + link + ' . Msg & data rates may apply. Reply STOP to opt out, HELP for help.');
         } catch (e) { return json({ ok: false, error: e.message }, 502); }
         await Promise.all(limits.map(([k], i) => kv.put(k, String((parseInt(counts[i], 10) || 0) + 1), { expirationTtl: 2 * 24 * 3600 })));
         await kv.put('smsphone:' + to, JSON.stringify({ user: p.user, at: Date.now() }), { expirationTtl: 90 * 24 * 3600 });
@@ -7298,13 +7323,16 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
 
     // Memory: only for opted-in conversational calls from a verified session.
     let memoryUsed = 0;
-    if (memOpt && principal && principal.kind === 'session' && parsedBody && Array.isArray(parsedBody.messages) && url.pathname === '/v1/chat/completions') {
+    // Chat Completions keeps the turns in `messages`; the Responses API (used
+    // for streamed answers with live thinking) in `input`.
+    const memTurns = parsedBody && (url.pathname === '/v1/chat/completions' ? parsedBody.messages : url.pathname === '/v1/responses' ? parsedBody.input : null);
+    if (memOpt && principal && principal.kind === 'session' && Array.isArray(memTurns)) {
       try {
-        const got = await retrieveForRequest(principal.user, memOpt, parsedBody.messages, apiKey);
+        const got = await retrieveForRequest(principal.user, memOpt, memTurns, apiKey);
         if (got && got.items.length) {
           const ctxText = memoryContext(got.items);
-          const lastUserIdx = parsedBody.messages.map((m) => m && m.role).lastIndexOf('user');
-          parsedBody.messages.splice(lastUserIdx >= 0 ? lastUserIdx : parsedBody.messages.length, 0, { role: 'system', content: ctxText });
+          const lastUserIdx = memTurns.map((m) => m && m.role).lastIndexOf('user');
+          memTurns.splice(lastUserIdx >= 0 ? lastUserIdx : memTurns.length, 0, { role: 'system', content: ctxText });
           bodyText = JSON.stringify(parsedBody);
           memoryUsed = got.items.length;
         }
@@ -7336,9 +7364,18 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     if (isGeneration && modUser) {
       const delta = { n: quotaRecordKey ? 0 : 1, fail: res.ok ? 0 : 1, rl: res.status === 429 ? 1 : 0, latSum: latency, latN: 1, models: requestedModel ? { [requestedModel]: 1 } : {} };
       const clone = res.ok ? res.clone() : null;
+      const sse = /text\/event-stream/.test(res.headers.get('Content-Type') || '');
       const finish = (async () => {
-        if (clone) {
-          try { const j = await clone.json(); if (j && j.usage) { delta.tokIn = j.usage.prompt_tokens || 0; delta.tokOut = j.usage.completion_tokens || 0; } } catch (e) { /* non-JSON */ }
+        if (clone && sse) {
+          // A streamed answer: the token counts are in its last event.
+          try {
+            const text = await clone.text();
+            const done = text.split('\n').filter((l) => l.startsWith('data: ') && l.includes('"response.completed"')).pop();
+            const u = done && JSON.parse(done.slice(6)).response.usage;
+            if (u) { delta.tokIn = u.input_tokens || 0; delta.tokOut = u.output_tokens || 0; }
+          } catch (e) { /* unreadable stream */ }
+        } else if (clone) {
+          try { const j = await clone.json(); if (j && j.usage) { delta.tokIn = j.usage.prompt_tokens || j.usage.input_tokens || 0; delta.tokOut = j.usage.completion_tokens || j.usage.output_tokens || 0; } } catch (e) { /* non-JSON */ }
         }
         noteUsage(modUser, delta);
       })();
@@ -7357,7 +7394,18 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         return json({ error: { message: 'Unreadable upstream response.', type: 'upstream_parse' } }, 502);
       }
     }
-    const r = new Response(res.body, res);
+    // A streamed answer can't carry extra JSON fields, so the console gets the
+    // same notes as one event ahead of OpenAI's own ("event: gpa.meta").
+    let body = res.body;
+    if (streaming && res.ok && (memOpt || modelNote) && body) {
+      const meta = { ...(memOpt ? { _gpa_memory: { used: memoryUsed } } : {}), ...(modelNote ? { _gpa_model: modelNote } : {}) };
+      const head = new TextEncoder().encode('event: gpa.meta\ndata: ' + JSON.stringify(meta) + '\n\n');
+      const { readable, writable } = new TransformStream();
+      const upstream = body;
+      (async () => { const w = writable.getWriter(); await w.write(head); w.releaseLock(); await upstream.pipeTo(writable); })().catch(() => {});
+      body = readable;
+    }
+    const r = new Response(body, res);
     r.headers.set('Access-Control-Allow-Origin', '*');
     Object.entries(SECURITY_HEADERS).forEach(([k, v]) => r.headers.set(k, v));
     return r;

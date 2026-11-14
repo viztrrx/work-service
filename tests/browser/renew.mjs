@@ -1,18 +1,27 @@
 // The subscription countdown and the Renew box, end to end in the console on a
 // website against worker.js in workerd, with a stand-in for Telnyx:
-//   1. a listed person sees "Xd Yh left" under the header at every panel size
-//   2. Renew: the subscribe link, "Text me the link" (a real text request to
-//      the Telnyx stand-in), and who takes cash (the owner and admins)
+//   1. a listed person sees "N days left · Through <day>" under the header at
+//      every panel size
+//   2. Renew: the subscribe link and "Text me the link" (a real text request
+//      to the Telnyx stand-in); nothing about paying cash
 //   3. texting CASH to the number: a signed webhook → the reply says who to pay
 //   4. an admin sees "No expiry"; the owner's Cash & texting card
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { serve, launch, ROOT, HOST_PAGE } from './harness.mjs';
 import { startEnv } from './env.mjs';
 
 const OUT = process.argv[2] || 'renew-out';
 fs.mkdirSync(OUT, { recursive: true });
 const ADMIN = 'test-admin-token-0123456789abcdef';
+// The owner's account, registered with the owner code (as the real owner does once).
+const OWNER_CODE = 'owner-code-test-0123456789';
+const ownerVerifier = (user, pin) => crypto.pbkdf2Sync(`gpa-server|${user.toLowerCase()}|${pin}`, 'gpa-server-salt|' + user.toLowerCase(), 210000, 32, 'sha256').toString('hex');
+async function registerOwner(base) {
+  const r = await fetch(base + '/auth/register', { method: 'POST', headers: { 'Content-Type': 'text/plain', 'X-GPA-Owner': OWNER_CODE }, body: JSON.stringify({ user: 'ivan', verifier: ownerVerifier('ivan', '246810') }) });
+  if (r.status !== 200 && r.status !== 409) throw new Error('owner register ' + r.status + ' ' + await r.text());
+}
 const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`); };
 
@@ -30,7 +39,7 @@ const telnyx = await serve((rq, rs) => {
 });
 const keys = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
 const PUB = Buffer.from(await crypto.subtle.exportKey('raw', keys.publicKey)).toString('base64');
-const env = await startEnv({ extraEnv: { ADMIN_TOKEN: ADMIN, TELNYX_API: `http://127.0.0.1:${telnyx.port}/v2`, TELNYX_API_KEY: 'KEY_browser', TELNYX_FROM: '+12395550100', TELNYX_PUBLIC_KEY: PUB } });
+const env = await startEnv({ extraEnv: { ADMIN_TOKEN: ADMIN, OWNER_CODE, TELNYX_API: `http://127.0.0.1:${telnyx.port}/v2`, TELNYX_API_KEY: 'KEY_browser', TELNYX_FROM: '+12395550100', TELNYX_PUBLIC_KEY: PUB } });
 const site = await serve((rq, rs) => { rs.setHeader('Content-Type', 'text/html'); rs.end(HOST_PAGE.replace('Some ordinary page', 'A school website')); });
 const code = fs.readFileSync(path.join(ROOT, 'script.js'), 'utf8');
 const admin = (p, body) => fetch(env.workerUrl + p, { method: body ? 'POST' : 'GET', headers: { Authorization: 'Bearer ' + ADMIN, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }).then((r) => r.json());
@@ -61,7 +70,9 @@ async function signIn(page, user, button = '#gpa-signup-btn') {
   await R(page, (r) => { const b = r.querySelector('#gpa-langpick .gpa-langpick-opt[data-lang="en"]'); if (b && b.offsetParent) b.click(); });
   return R(page, (r) => r.querySelector('#gpa-login').style.display === 'none');
 }
-const strip = (page) => R(page, (r) => { const s = r.querySelector('#gpa-substrip'); return { shown: !!s && !s.hidden && !!s.offsetParent, left: r.querySelector('#gpa-substrip-left').textContent, note: r.querySelector('#gpa-substrip-note').textContent, renew: !r.querySelector('#gpa-substrip-renew').hidden }; });
+// The panel lives in a fixed-position shadow root (the host itself is 0×0), so pictures clip to the panel.
+const panelShot = async (page, file) => { const b = await R(page, (r) => { const x = r.querySelector('.gpa-panel').getBoundingClientRect(); return { x: x.left, y: x.top, width: x.width, height: x.height }; }); await page.screenshot({ path: path.join(OUT, file), clip: b }); };
+const strip = (page) => R(page, (r) => { const s = r.querySelector('#gpa-substrip'); return { shown: !!s && !s.hidden && !!s.offsetParent, num: r.querySelector('#gpa-substrip-num').textContent, left: r.querySelector('#gpa-substrip-left').textContent, note: r.querySelector('#gpa-substrip-note').textContent, renew: !r.querySelector('#gpa-substrip-renew').hidden }; });
 
 let kj, ana, owner;
 try {
@@ -72,33 +83,33 @@ try {
   check('kj signs in', await signIn(kj.page, KJ));
   await waitFor(kj.page, (r) => { const s = r.querySelector('#gpa-substrip'); return s && !s.hidden; }, null, 20000);
   let st = await strip(kj.page);
-  check('Under the header: “Subscription … Xd Yh left” and a Renew button', st.shown && /^\d+d \d+h left$/.test(st.left) && st.renew, JSON.stringify(st));
-  check('…and when it ends (date and time)', /ends \w+ \d+ at \d+:\d\d/.test(st.note), st.note);
+  check('Under the header: a big “N” + “days left” and a Renew button', st.shown && /^\d+$/.test(st.num) && /^days? left$/.test(st.left) && st.renew, JSON.stringify(st));
+  check('…and when it ends (“Through <last day>” when it runs out at midnight here, else “Ends <day>”)', /^(Through|Ends) \w+, \w+ \d+$/.test(st.note), st.note);
   await kj.page.screenshot({ path: path.join(OUT, '01-countdown.png') });
   for (const size of ['compact', 'normal', 'large', 'xl', 'full', 'center']) {
     await R(kj.page, (r, s) => r.querySelector(`.size-btn[data-size="${s}"]`).click(), size);
     await kj.page.waitForTimeout(500);
     const g = await R(kj.page, (r) => {
       const p = r.querySelector('.gpa-panel').getBoundingClientRect(), el = r.querySelector('#gpa-substrip'), b = el.getBoundingClientRect();
-      const row = el.querySelector('.gpa-usage-row');
+      const row = el.querySelector('.gpa-sub-row');
       return { shown: !el.hidden && b.height > 0, inside: b.left >= p.left - 1 && b.right <= p.right + 1 && b.top >= p.top - 1, fits: row.scrollWidth <= row.clientWidth + 1, left: r.querySelector('#gpa-substrip-left').textContent };
     });
     check(`${size}: the countdown shows, inside the panel, nothing cut off (${g.left})`, g.shown && g.inside && g.fits, JSON.stringify(g));
-    if (size === 'compact') await kj.page.locator('#gpa-root-host').screenshot({ path: path.join(OUT, '02-countdown-compact.png') });
+    if (size === 'compact') await panelShot(kj.page, '02-countdown-compact.png');
   }
 
   // 2: Renew.
   await R(kj.page, (r) => r.querySelector('#gpa-substrip-renew').click());
-  const opened = await waitFor(kj.page, (r) => !r.querySelector('#gpa-renew').hidden && !/Loading/.test(r.querySelector('#gpa-renew-cash').textContent), null, 10000);
-  const box = await R(kj.page, (r) => ({ href: r.querySelector('#gpa-renew-open').href, sms: !r.querySelector('#gpa-renew-sms').hidden, cash: r.querySelector('#gpa-renew-cash').textContent }));
+  const opened = await waitFor(kj.page, (r) => !r.querySelector('#gpa-renew').hidden && !r.querySelector('#gpa-renew-sms').hidden, null, 10000);
+  const box = await R(kj.page, (r) => ({ href: r.querySelector('#gpa-renew-open').href, sms: !r.querySelector('#gpa-renew-sms').hidden, text: r.querySelector('#gpa-renew').textContent.replace(/\s+/g, ' '), cashEl: !!r.querySelector('#gpa-renew-cash') }));
   check('Renew opens: the subscribe link', opened && box.href === env.workerUrl + '/subscribe/', box.href);
   check('…“Text me the link” (texting is on)', box.sms);
-  check('…and paying cash: who to give it to (the owner, automatically) and the number to text CASH to', /in person to ivan \(owner\)/.test(box.cash) && /text CASH to \(239\) 555-0100/.test(box.cash), box.cash);
+  check('…and nothing about paying cash any more', !box.cashEl && !/cash/i.test(box.text), box.text);
   await kj.page.fill(sr('#gpa-renew-phone'), '(239) 555-0123');
   await kj.page.click(sr('#gpa-renew-send'));
   await waitFor(kj.page, (r) => /Sent to|Couldn|isn’t/.test(r.querySelector('#gpa-renew-msg').textContent), null, 10000);
   const sentMsg = await R(kj.page, (r) => r.querySelector('#gpa-renew-msg').textContent);
-  check('Text me the link: “Sent to (239) 555-0123”, and Telnyx got exactly one text with the link', /Sent to \(239\) 555-0123/.test(sentMsg) && texts.length === 1 && texts[0].to === '+12395550123' && texts[0].from === '+12395550100' && texts[0].text.includes(env.workerUrl + '/subscribe/') && /Reply CASH/.test(texts[0].text), sentMsg + ' ' + JSON.stringify(texts[0]));
+  check('Text me the link: “Sent to (239) 555-0123”, and Telnyx got exactly one text with the link', /Sent to \(239\) 555-0123/.test(sentMsg) && texts.length === 1 && texts[0].to === '+12395550123' && texts[0].from === '+12395550100' && texts[0].text.includes(env.workerUrl + '/subscribe/') && !/cash/i.test(texts[0].text), sentMsg + ' ' + JSON.stringify(texts[0]));
   await kj.page.screenshot({ path: path.join(OUT, '03-renew-box.png') });
 
   // 3: kj texts CASH to the number (Telnyx forwards it, signed).
@@ -120,17 +131,15 @@ try {
   await signIn(ana.page, ANA, '#gpa-login-btn');
   await waitFor(ana.page, (r) => /No expiry/.test(r.querySelector('#gpa-substrip-left').textContent), null, 20000);
   st = await strip(ana.page);
-  check('An admin sees “No expiry” (and no Renew button)', st.shown && st.left === 'No expiry' && !st.renew && /doesn’t expire/.test(st.note), JSON.stringify(st));
-  await ana.page.locator('#gpa-root-host').screenshot({ path: path.join(OUT, '04-admin-no-expiry.png') });
+  check('An admin sees “No expiry” (and no Renew button)', st.shown && st.left === 'No expiry' && !st.renew && st.note === 'Admin' && st.num === '', JSON.stringify(st));
+  await panelShot(ana.page, '04-admin-no-expiry.png');
   const info = await (await fetch(env.workerUrl + '/sms/info')).json();
   check('The cash list is now the owner and the admin, automatically', info.cash.join('|') === 'ivan (owner)|' + ANA, info.cash.join(', '));
 
   // The owner's Cash & texting card.
   owner = await computer();
-  for (const btn of ['#gpa-signup-btn', '#gpa-login-btn']) {
-    if (await R(owner.page, (r) => r.querySelector('#gpa-login').style.display === 'none')) break;
-    await signIn(owner.page, 'ivan', btn);
-  }
+  await registerOwner(env.workerUrl);
+  check('The owner signs in', await signIn(owner.page, 'ivan', '#gpa-login-btn'));
   await R(owner.page, (r, a) => {
     const n = r.querySelector('.gpa-dropdown-item[data-tab="admin"]'); n.style.display = ''; n.click();
     const f = r.querySelector('#gac-auth-fields');

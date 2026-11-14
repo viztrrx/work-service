@@ -429,7 +429,7 @@ its PIN, so add a name when that person is ready to sign up, and check that it
 shows up as theirs (you also get a "New account" notification). If someone
 else got there first, use **Reset PIN**.
 
-**Subscribers (paid access).** **Admin → Security → Subscribers** registers a name as a paying subscriber for a set time: 1 week, 2 weeks, 1 month (default), 3 months, 6 months or 1 year, with an optional note such as "$10 · Cash App". Adding someone puts them on Allowed users and lets them sign in right away. While **Only allow listed users** is on (the card offers to turn it on), a subscriber gets in exactly until their end time; at that moment the Worker refuses them, they're signed out with "Your subscription has ended. Ask the owner to renew it.", and within 5 minutes they're taken off Allowed users. You get a phone alert ("Subscriptions ending") 3 days before and when it ends. **Renew** adds the chosen length (on top of any time left, or from today if it already ended); **End now** cuts them off immediately; **Remove** forgets an ended record. **Weekends don't count.** A plan's time only runs Monday to Friday (your time zone, `OWNER_TZ`, default New York): its length is still measured in calendar days (1 month = Oct 15 → Nov 15 = 31 days; Jan 31 → Feb 28 = 28 days; 1 week = 7 days), but each of those days is used up only on a weekday, so 1 month lasts about six calendar weeks (Thu Oct 15, 2:30 PM + 31 weekdays = Fri Nov 27, 2:30 PM). A plan added on a Saturday or Sunday starts counting Monday at midnight. The subscriber's countdown stands still all weekend and says "· paused" ("Paused for the weekend: your time only counts down Monday to Friday."); the row on this card says **N weekdays left**. This applies to plans you add, renew or re-date here; free access, the automatic month and Stripe's monthly billing keep calendar time, and subscriptions added before this change keep the end date they had. **Subscribed on** (date and time, default now) sets when the time starts, so someone who paid on Oct 1 and is added on Oct 15 still ends 31 weekdays after Oct 1 (Fri Nov 13); it can't be in the future, and a start so early that the time is already over is refused. **Change start** on a row moves the start (and the end with it) later. **Paid ($)** records what they paid; the card totals **this month** and **collected in all** (payments stay in the total even if a record is removed). In their last 3 days a subscriber also gets a pop-up once a day ("Your access ends in 2 days (Nov 5, 7:40 PM). Ask the owner to renew it…"). Subscribers see their own countdown under the header on every tab ("Subscription · 21 days left · ends Nov 5 at 7:40 PM"), amber in the last 3 days with "Ask the owner to renew to keep access". An ended subscriber can tap **Ask to renew** on the sign-in screen; approving that request in Access requests lets them in for free (Renew is the paid way back). A subscription decides on its own, so a name left on the Allowed users text box doesn't let an expired subscriber back in.
+**Subscribers (paid access).** **Admin → Security → Subscribers** registers a name as a paying subscriber for a set time: 1 week, 2 weeks, 1 month (default), 3 months, 6 months or 1 year, with an optional note such as "$10 · Cash App". Adding someone puts them on Allowed users and lets them sign in right away. While **Only allow listed users** is on (the card offers to turn it on), a subscriber gets in exactly until their end time; at that moment the Worker refuses them, they're signed out with "Your subscription has ended. Ask the owner to renew it.", and within 5 minutes they're taken off Allowed users. You get a phone alert ("Subscriptions ending") 3 days before and when it ends. **Renew** adds the chosen length (on top of any time left, or from today if it already ended); **End now** cuts them off immediately; **Remove** forgets an ended record. **Only school days count.** A plan's time only runs on days school is open, using the **2026–27 school calendar** (180 days, Tue Aug 11, 2026 → Thu May 27, 2027; your time zone, `OWNER_TZ`, default New York). Weekends, holidays (Labor Day, Thanksgiving week, winter break, MLK, Presidents' Day, spring break…), staff PD days, summer break and any **weather days** you add don't use anyone's time. Its length is still measured in calendar days (1 month = Oct 15 → Nov 15 = 31 days; 1 week = 7 days), but each of those days is used up only on a school day, so 1 month = 31 school days (Thu Oct 15, 2:30 PM → Tue Dec 8, 2:30 PM). A plan added on a day off starts counting at midnight of the next school day. Outside the calendar (from Aug 2027 until next year's calendar is entered in `web/school-days.js`) weekdays count. The card's **School days only** box shows the calendar and lets you add a **weather day** (school closed): every running plan gets that day back (its end moves one school day later), and removing it undoes that. The row on this card says **N school days left**. This applies to plans you add, renew or re-date here; free access, the automatic month and Stripe's monthly billing keep calendar time. **Subscribed on** (date and time, default now) sets when the time starts, so someone who paid on Oct 1 and is added on Oct 15 still ends 31 school days after Oct 1 (Tue Nov 17); it can't be in the future, and a start so early that the time is already over is refused. **Change start** on a row moves the start (and the end with it) later. **Paid ($)** records what they paid; the card totals **this month** and **collected in all** (payments stay in the total even if a record is removed). In their last 3 days a subscriber also gets a pop-up once a day ("Your access ends in 2 days (Nov 5, 7:40 PM). Ask the owner to renew it…"). Subscribers see their own countdown under the header on every tab ("Subscription · 21 days left · ends Nov 5 at 7:40 PM"), amber in the last 3 days with "Ask the owner to renew to keep access". An ended subscriber can tap **Ask to renew** on the sign-in screen; approving that request in Access requests lets them in for free (Renew is the paid way back). A subscription decides on its own, so a name left on the Allowed users text box doesn't let an expired subscriber back in.
 
 **Automatic month for Allowed users.** While **Only allow listed users** is on, anyone on Allowed users you haven't made a subscriber gets one automatically: from the 1st of this month at midnight (your time, New York) to the 1st of next month. Their row says **Automatic · N days left** with the note "Automatic: on Allowed users". When it ends they lose access like any subscriber, unless you **Renew** them or they pay on the subscribe page (their paid month starts the day they pay). **Add subscriber** on one of them replaces the automatic month with a real one. Names that already had a subscription (even an ended one) don't get one, admins and moderators stay unlimited, and taking a name off Allowed users removes its automatic month. A name added in the middle of the month gets the rest of that month. Putting a name back on Allowed users after its automatic month ended gives it the current month (a paid subscriber who ended still needs **Renew**). **Recent events** on the same page is folded under its title (with a count); tap it to open, and it stays the way you left it on that device.
 
@@ -471,19 +471,24 @@ that aren't listed.
 
 ## Subscription countdown, Renew and texting (Telnyx) {#texting}
 
-**The countdown.** Under the header, on every panel size, each person sees how
-long their access has left, in days and hours ("12d 9h left"), updated every
-minute, plus the exact date and time it ends. People paying monthly see
-"Renews in 12d 9h". You and admins see "No expiry".
+**The meter.** Under the header, on every panel size, one line shows what's left
+at a glance, with nothing to tap: a big number and what it counts ("**23** school
+days left"), when it ends ("Through Wed, Jan 20"), and, on a day off, a pill
+saying it's paused and why ("Paused · weekend / holiday / no school / weather
+day / summer break") with the day it starts again ("back Mon, Nov 30"). A thin
+bar along the bottom fills as the time is used; it all turns amber in the last
+3 school days, and on the last day it shows hours ("8h 59m left · Last day
+today"). Hovering it gives the full sentence. People paying monthly see "Renews
+Fri, Dec 4". You and admins see "No expiry".
 
 **Renew.** Next to the countdown, a **Renew** button opens:
 - **Open the subscribe page** / **Copy link**;
 - **Text me the link**: they type their phone number and get one text with the
-  subscribe link (only when texting is set up, below);
-- **Paying cash?**: "Give $13.80 in person to ivan (owner) or …", and "or
-  text CASH to (239) 555-0100".
+  subscribe link (only when texting is set up, below).
 
-**Texting CASH.** Anyone who texts **CASH** to your Telnyx number gets a reply
+The Renew box and that text no longer mention paying cash.
+
+**Texting CASH.** (Not advertised in the console any more.) Anyone who texts **CASH** to your Telnyx number gets a reply
 saying who to give the cash to, and you and your admins get an alert ("Paying
 cash: kj (239) 555-0123"). When you get the cash, mark them paid in Admin →
 Security → Subscribers. **STOP**, **START** and **HELP** work as carriers
@@ -531,8 +536,7 @@ delivered; that's the one-time cost and takes about 1–3 weeks.
 7. Check: Admin → Security → Cash & texting says "Texting is **on** from …".
    Tap Renew → Text me the link with your own number; text CASH back.
 
-Until those are set, texting is simply off: the Renew box still shows the link
-and who to pay in cash.
+Until those are set, texting is simply off: the Renew box still shows the link.
 
 ## Saints Service as an iPhone app {#iphone-app}
 
@@ -670,7 +674,7 @@ Any answer grid can be turned into flashcards with one click, and 💾 saves an 
 
 ![Ask AI answering a question](docs/screenshots/ask-ai.png)
 
-General\-purpose chat, independent of the page. Voice input via the browser's speech recognition, and optional read\-aloud for responses via speech synthesis — both local, both free, neither needs a key.
+General\-purpose chat, independent of the page. Answers stream in as they're written, and when a reasoning model answers (a hard question auto-upgrades to one), its **thinking** shows live above the answer, like Meta AI: "Thinking" with a timer while the reasoning summary streams in step by step, then it folds to "**Thought for 9s**" (tap to read it again). Models that don't reason just show "Thinking" while you wait. If your OpenAI organization isn't verified for reasoning summaries, the console stops asking for them for a week and shows the time only. Voice input via the browser's speech recognition, and optional read\-aloud for responses via speech synthesis — both local, both free, neither needs a key.
 
 ### Selection assistant {#selection-assistant}
 

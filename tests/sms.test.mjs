@@ -84,7 +84,8 @@ test('sms: text yourself the subscribe link (signed in, limited, opt-out respect
     assert.deepEqual([ok.status, ok.data.to], [200, '(239) 555-0123']);
     assert.equal(tx.sent.length, 1);
     assert.deepEqual([tx.sent[0].from, tx.sent[0].to], ['+12395550100', '+12395550123']);
-    assert.match(tx.sent[0].text, /hi kj! Subscribe or renew here: https:\/\/w\.test\/subscribe\/ .*Reply CASH.*Reply STOP to opt out/);
+    assert.match(tx.sent[0].text, /hi kj! Subscribe or renew here: https:\/\/w\.test\/subscribe\/ .*Reply STOP to opt out/);
+    assert.doesNotMatch(tx.sent[0].text, /cash/i, 'the link text no longer talks about paying cash');
     // The same number twice a day at most; the person 3 a day.
     await t.call('/sms/subscribe-link', { method: 'POST', headers: S, body: { phone: '2395550123' } });
     const third = await t.call('/sms/subscribe-link', { method: 'POST', headers: S, body: { phone: '2395550123' } });

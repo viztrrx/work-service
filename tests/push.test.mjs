@@ -392,20 +392,20 @@ test('push: subscriptions — a reminder 3 days before, and an alert when one en
     await t.call('/admin/config', { method: 'POST', headers: owner, body: { allowlist: { on: true, users: [] } } });
     await t.call('/admin/subscriptions', { method: 'POST', headers: owner, body: { action: 'add', user: 'Renzo', period: '1m' } });
     await got();
-    // Weekdays only: Thu Oct 15 2 PM + 31 weekdays = Fri Nov 27 2 PM EST.
+    // School days only: Thu Oct 15 2 PM + 31 school days = Tue Dec 8 2 PM EST.
     Date.now = () => Date.parse('2026-11-15T18:00:00Z');   // the calendar month is over: no alert yet
     await cron();
     assert.equal((await got()).filter((m) => m.cat === 'subs').length, 0, 'weekends don’t count: not ending yet');
-    Date.now = () => Date.parse('2026-11-25T19:00:00Z');   // 2 days left
+    Date.now = () => Date.parse('2026-12-06T19:00:00Z');   // 2 days left
     await cron();
     let n = (await got()).filter((m) => m.cat === 'subs');
     assert.equal(n.length, 1);
     assert.equal(n[0].title, 'Renzo’s subscription ends soon');
-    assert.match(n[0].body, /^Ends Nov 27/);
+    assert.match(n[0].body, /^Ends Dec 8/);
     assert.equal(n[0].url, '/console/#tab=admin&sec=security&focus=subs&user=Renzo');
     await cron();
     assert.equal((await got()).filter((m) => m.cat === 'subs').length, 0, 'reminded once');
-    Date.now = () => Date.parse('2026-11-27T19:01:00Z');
+    Date.now = () => Date.parse('2026-12-08T19:01:00Z');
     await cron();
     n = (await got()).filter((m) => m.cat === 'subs');
     assert.equal(n.length, 1);

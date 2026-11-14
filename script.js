@@ -1762,6 +1762,29 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpx-seg .gps-seg-btn:focus-visible, .gpx-seg-inline .gps-seg-btn:focus-visible { outline: 2px solid var(--gpa-accent); outline-offset: 2px; }
 
       /* Typing indicator for AI replies in progress */
+      /* Live thinking above an Ask AI answer */
+      .gpx-think { align-self: flex-start; max-width: 92%; margin: 2px 0 4px; font-size: 12.5px; }
+      .gpx-think-h { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; padding: 3px 2px; border-radius: 6px; cursor: pointer; color: var(--gpa-sub); font-weight: 600; }
+      .gpx-think-h:focus-visible { outline: 2px solid var(--gpa-accent); outline-offset: 2px; }
+      .gpx-think.is-live .gpx-think-h, .gpx-think.is-empty .gpx-think-h { cursor: default; }
+      .gpx-think-ic { width: 14px; height: 14px; flex: none; background: var(--gpa-accent);
+        -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2l1.9 6.1L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.9z'/%3E%3Cpath d='M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z'/%3E%3C/svg%3E") center / contain no-repeat;
+                mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2l1.9 6.1L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.9z'/%3E%3Cpath d='M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z'/%3E%3C/svg%3E") center / contain no-repeat; }
+      .gpx-think.is-live .gpx-think-ic { animation: gpx-think-spin 2.4s linear infinite; }
+      .gpx-think.is-live .gpx-think-label { background: linear-gradient(90deg, var(--gpa-sub) 0%, var(--gpa-sub) 35%, var(--gpa-text) 50%, var(--gpa-sub) 65%, var(--gpa-sub) 100%); background-size: 250% 100%;
+        -webkit-background-clip: text; background-clip: text; color: transparent; animation: gpx-think-shimmer 1.8s linear infinite; }
+      .gpx-think-time { font-weight: 500; opacity: .7; font-variant-numeric: tabular-nums; }
+      .gpx-think-time:empty { display: none; }
+      .gpx-think-chev { width: 7px; height: 7px; border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform .2s ease; }
+      .gpx-think.is-collapsed .gpx-think-chev { transform: translateY(0) rotate(-45deg); }
+      .gpx-think.is-live .gpx-think-chev, .gpx-think.is-empty .gpx-think-chev { display: none; }
+      .gpx-think-body { margin: 4px 0 2px 6px; padding: 1px 0 1px 13px; border-left: 2px solid var(--gpa-border); color: var(--gpa-sub); line-height: 1.5; max-height: 210px; overflow-y: auto; overscroll-behavior: contain; }
+      .gpx-think-body:empty, .gpx-think.is-collapsed .gpx-think-body { display: none; }
+      .gpx-think-body p { margin: 0 0 7px; white-space: pre-wrap; }
+      .gpx-think-step { font-weight: 600; color: var(--gpa-text); margin: 2px 0 3px; }
+      @keyframes gpx-think-shimmer { from { background-position: 125% 0; } to { background-position: -125% 0; } }
+      @keyframes gpx-think-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .gpx-think.is-live .gpx-think-label, .gpx-think.is-live .gpx-think-ic { animation: none; } .gpx-think.is-live .gpx-think-label { color: var(--gpa-sub); background: none; } }
       .gpx-typing-dots { display: inline-flex; gap: 5px; align-items: center; height: 18px; padding: 0 2px; }
       .gpx-typing-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--gpa-accent); opacity: 0.35; animation: gpx-dot 1.1s ease-in-out infinite; }
       .gpx-typing-dots i:nth-child(2) { animation-delay: 0.15s; } .gpx-typing-dots i:nth-child(3) { animation-delay: 0.3s; }
@@ -2185,11 +2208,30 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpa-usage.is-rate .gpa-usage-track { display: none; }
       .gpa-usage.is-rate .gpa-usage-left { margin-left: auto; }
       .gpa-panel.gpa-minimized .gpa-usage { display: none; }
-      .gpa-substrip .gpa-usage-row { gap: 8px; }
-      .gpa-substrip .gpa-usage-track { min-width: 24px; }
-      .gpa-substrip.is-staff .gpa-usage-track { display: none; }
-      .gpa-substrip.is-paused .gpa-usage-track i { opacity: .5; }
-      .gpa-substrip.is-staff .gpa-usage-left { margin-left: auto; }
+      /* Subscription meter: one line, readable at a glance — the big number
+         is what's left, the small line when it ends, a pill when paused. */
+      .gpa-substrip { position: relative; flex: none; padding: 7px 14px 9px; border-bottom: 1px solid var(--gpa-border); background: color-mix(in srgb, var(--gpa-text) 2%, var(--gpa-panel-t, var(--gpa-panel))); --gpa-sub-fill: var(--gpa-accent); }
+      .gpa-substrip[hidden] { display: none; }
+      .gpa-panel.gpa-minimized .gpa-substrip { display: none; }
+      .gpa-app .gpa-substrip { padding-left: calc(14px + env(safe-area-inset-left)); padding-right: calc(14px + env(safe-area-inset-right)); }
+      .gpa-sub-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+      .gpa-sub-num { flex: none; font-size: 22px; font-weight: 700; line-height: 1; letter-spacing: -.02em; color: var(--gpa-text); font-variant-numeric: tabular-nums; }
+      .gpa-sub-num:empty { display: none; }
+      .gpa-sub-txt { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; gap: 1px; }
+      .gpa-sub-left { font-size: 12.5px; font-weight: 600; color: var(--gpa-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .gpa-sub-note { font-size: 11.5px; color: var(--gpa-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .gpa-sub-note:empty { display: none; }
+      .gpa-sub-pause { flex: none; display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+        color: var(--gpa-text); background: color-mix(in srgb, var(--gpa-text) 9%, transparent); }
+      .gpa-sub-pause::before { content: ''; width: 7px; height: 9px; border-left: 2.5px solid currentColor; border-right: 2.5px solid currentColor; box-sizing: border-box; opacity: .75; }
+      .gpa-sub-pause[hidden] { display: none; }
+      .gpa-sub-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: color-mix(in srgb, var(--gpa-text) 8%, transparent); overflow: hidden; }
+      .gpa-sub-bar > i { display: block; height: 100%; width: 0; background: var(--gpa-sub-fill); transition: width .4s ease; }
+      .gpa-substrip.is-low { --gpa-sub-fill: var(--gpa-warning, #e0a63b); }
+      .gpa-substrip.is-low .gpa-sub-num { color: var(--gpa-warning, #e0a63b); }
+      .gpa-substrip.is-paused .gpa-sub-bar > i { opacity: .45; }
+      .gpa-substrip.is-staff .gpa-sub-bar { display: none; }
+      @media (prefers-reduced-motion: reduce) { .gpa-sub-bar > i { transition: none; } }
       .gpa-substrip-renew { flex: none; font: inherit; font-size: 11.5px; font-weight: 600; padding: 3px 10px; border-radius: 999px; cursor: pointer;
         border: 1px solid color-mix(in srgb, var(--gpa-accent) 45%, var(--gpa-border)); background: color-mix(in srgb, var(--gpa-accent) 14%, transparent); color: var(--gpa-text); }
       .gpa-substrip-renew:hover { background: color-mix(in srgb, var(--gpa-accent) 24%, transparent); }
@@ -2200,8 +2242,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpa-renew-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
       .gpa-renew-row .gpa-input { flex: 1 1 140px; min-width: 0; }
       .gpa-renew-row .gpa-btn { min-height: 30px; font-size: 12.5px; text-decoration: none; }
-      .gpa-renew-fine, .gpa-renew-cash { font-size: 11.5px; color: var(--gpa-sub); line-height: 1.4; }
-      .gpa-renew-cash b { color: var(--gpa-text); }
+      .gpa-renew-fine { font-size: 11.5px; color: var(--gpa-sub); line-height: 1.4; }
       .gpa-renew-msg { font-size: 12px; color: var(--gpa-sub); }
       .gpa-renew-msg.bad { color: var(--gpa-danger, #e5484d); }
       .gpa-renew-msg:empty { display: none; }
@@ -2544,6 +2585,16 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gac-subs-warn { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 12px; margin: 8px 0; border-radius: var(--gps-r2); font-size: 12.5px;
         border: 1px solid color-mix(in srgb, var(--gpa-warning, #e0a63b) 55%, var(--gpa-border)); background: color-mix(in srgb, var(--gpa-warning, #e0a63b) 10%, transparent); }
       .gac-subs-count { margin: 4px 0 0; }
+      .gac-school { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--gpa-border); border-radius: var(--gps-r2); background: var(--gpa-field); }
+      .gac-school-h { font-size: 12.5px; font-weight: 700; color: var(--gpa-text); }
+      .gac-school .gps-hint { margin: 4px 0 8px; }
+      .gac-school-days { display: flex; flex-wrap: wrap; gap: 6px; }
+      .gac-school-days:empty { display: none; }
+      .gac-school-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; padding: 2px 4px 2px 9px; border-radius: 999px; background: color-mix(in srgb, var(--gpa-warning, #e0a63b) 18%, transparent); color: var(--gpa-text); }
+      .gac-school-chip button { all: unset; cursor: pointer; width: 18px; height: 18px; border-radius: 50%; text-align: center; line-height: 18px; }
+      .gac-school-chip button:hover { background: color-mix(in srgb, var(--gpa-text) 12%, transparent); }
+      .gac-school-add { display: flex; align-items: end; gap: 8px; margin-top: 8px; }
+      .gac-school-add label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--gpa-sub); flex: 1 1 auto; min-width: 0; }
       .gac-subs-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0 4px; }
       .gac-subs-totals.has-gifts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       /* Folding cards (Security → Recent events) */
@@ -3456,14 +3507,14 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       </div>
       <div class="gpa-usage-note" id="gpa-usage-note" role="status" aria-live="polite"></div>
     </div>
-    <div class="gpa-usage gpa-substrip" id="gpa-substrip" hidden>
-      <div class="gpa-usage-row">
-        <span class="gpa-usage-label" id="gpa-substrip-label">Subscription</span>
-        <div class="gpa-usage-track" id="gpa-substrip-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-labelledby="gpa-substrip-label"><i></i></div>
-        <span class="gpa-usage-left" id="gpa-substrip-left"></span>
+    <div class="gpa-substrip" id="gpa-substrip" role="group" aria-labelledby="gpa-substrip-left" hidden>
+      <div class="gpa-sub-row">
+        <span class="gpa-sub-num" id="gpa-substrip-num" aria-hidden="true"></span>
+        <span class="gpa-sub-txt"><span class="gpa-sub-left" id="gpa-substrip-left"></span><span class="gpa-sub-note" id="gpa-substrip-note"></span></span>
+        <span class="gpa-sub-pause" id="gpa-substrip-pause" hidden></span>
         <button type="button" class="gpa-substrip-renew" id="gpa-substrip-renew" aria-expanded="false" aria-controls="gpa-renew" hidden>Renew</button>
       </div>
-      <div class="gpa-usage-note" id="gpa-substrip-note"></div>
+      <div class="gpa-sub-bar" id="gpa-substrip-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Subscription used"><i></i></div>
       <div class="gpa-renew" id="gpa-renew" hidden>
         <div class="gpa-renew-sec">
           <div class="gpa-renew-h">Subscribe or renew</div>
@@ -3473,10 +3524,6 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           <div class="gpa-renew-h">Text me the link</div>
           <div class="gpa-renew-row"><input class="gpa-input" id="gpa-renew-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="(239) 555-0123" maxlength="20" aria-label="Your phone number"><button type="button" class="gpa-btn" id="gpa-renew-send">Send</button></div>
           <div class="gpa-renew-fine">US numbers. One text with the link; reply STOP to opt out. Msg &amp; data rates may apply.</div>
-        </div>
-        <div class="gpa-renew-sec">
-          <div class="gpa-renew-h">Paying cash?</div>
-          <div class="gpa-renew-cash" id="gpa-renew-cash">Loading…</div>
         </div>
         <div class="gpa-renew-msg" id="gpa-renew-msg" role="status" aria-live="polite"></div>
       </div>
@@ -9383,11 +9430,41 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     if (systemText) messages.push({ role: 'system', content: systemText });
     messages.push({ role: 'user', content });
 
-    if (key) assertHeaderSafe(key, 'OpenAI');
+    const payload = { model: OPENAI_MODEL, messages };
+    const headers = openAIHeaders(key, payload, opts);
+    const endpoint = OPENAI_PROXY
+      ? `${OPENAI_PROXY}/v1/chat/completions`
+      : 'https://api.openai.com/v1/chat/completions';
 
+    payload.model = effectiveModel(OPENAI_MODEL, hard);
+    if (modelSupportsReasoning(payload.model)) payload.reasoning_effort = reasoningEffort;
+    noteModelUsed(payload.model, 'OpenAI', hard);
+    // Reasoning models (gpt-5 and friends) reject any temperature but the
+    // default, so the admin temperature only applies to the others.
+    const temp = effectiveTemp();
+    if (temp !== null && !modelSupportsReasoning(payload.model)) payload.temperature = temp;
+
+    const res = await rawFetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+    if (OPENAI_PROXY) refreshUsageSoon();   // the meter moves right after each request
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`OpenAI API error (${res.status}): ${redactSecrets(errText).slice(0, 300)}`);
+    }
+    const data = await res.json();
+    noteGpaMeta(data);
+    return data?.choices?.[0]?.message?.content || '(no response)';
+  }
+
+  // Headers for an OpenAI request (directly or through the Worker proxy), and
+  // the proxy-only fields added to the payload.
+  function openAIHeaders(key, payload, opts) {
+    if (key) assertHeaderSafe(key, 'OpenAI');
     const headers = { 'Content-Type': 'application/json' };
     if (key) headers['Authorization'] = `Bearer ${key}`;
-    const payload = { model: OPENAI_MODEL, messages };
     // Backup channels for pages whose wrappers strip the Authorization header
     // in transit: (1) the X-GPA-Key custom header, (2) a _gpa_key field in the
     // request body. The worker converts either back into a real Authorization
@@ -9416,31 +9493,13 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         payload._gpa_mem = { project: activeMemoryProject(), conversation: String(opts.conversation || '').slice(0, 60) };
       }
     }
-    const endpoint = OPENAI_PROXY
-      ? `${OPENAI_PROXY}/v1/chat/completions`
-      : 'https://api.openai.com/v1/chat/completions';
+    return headers;
+  }
 
-    payload.model = effectiveModel(OPENAI_MODEL, hard);
-    if (modelSupportsReasoning(payload.model)) payload.reasoning_effort = reasoningEffort;
-    noteModelUsed(payload.model, 'OpenAI', hard);
-    // Reasoning models (gpt-5 and friends) reject any temperature but the
-    // default, so the admin temperature only applies to the others.
-    const temp = effectiveTemp();
-    if (temp !== null && !modelSupportsReasoning(payload.model)) payload.temperature = temp;
-
-    const res = await rawFetch(endpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload)
-    });
-    if (OPENAI_PROXY) refreshUsageSoon();   // the meter moves right after each request
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      throw new Error(`OpenAI API error (${res.status}): ${redactSecrets(errText).slice(0, 300)}`);
-    }
-    const data = await res.json();
+  // The Worker's notes on an answer: memories used, and a swapped model
+  // (not one you're given, or a big-model limit).
+  function noteGpaMeta(data) {
     lastMemoryUsed = data && data._gpa_memory ? (data._gpa_memory.used || 0) : null;
-    // The Worker swapped the model (not one you're given, or a big-model limit).
     if (data && data._gpa_model && data._gpa_model.used) {
       lastAIModel = String(data._gpa_model.used);
       lastAIUpgraded = false;
@@ -9449,7 +9508,199 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         showToast('Big-model limit reached' + (data._gpa_model.why === 'premium_total' ? ' for today' : '') + ', so ' + data._gpa_model.used + ' answered instead of ' + data._gpa_model.asked + '.', { duration: 7000 });
       }
     }
-    return data?.choices?.[0]?.message?.content || '(no response)';
+  }
+
+  // ---- Streaming answers with live thinking ----------------------------------
+  // The Ask AI tab streams its answer from the Responses API, with the model's
+  // reasoning summary ("thinking") arriving as it goes. streamFetch is
+  // rawFetch's streaming twin: each transport hands the body over piece by
+  // piece (a Web Worker posts chunks, fetch reads its body, XHR reports
+  // progress). Where a page only allows a transport that can't stream, the
+  // whole body arrives at the end and the thinking is shown then.
+  const STREAM_WORKER_CODE = 'self.onmessage = async (e) => { const { url, opts } = e.data; try { const res = await fetch(url, opts); self.postMessage({ t: "head", status: res.status }); if (res.body && res.body.getReader) { const r = res.body.getReader(), d = new TextDecoder(); for (;;) { const { done, value } = await r.read(); if (done) break; self.postMessage({ t: "chunk", text: d.decode(value, { stream: true }) }); } } else { self.postMessage({ t: "chunk", text: await res.text() }); } self.postMessage({ t: "end" }); } catch (err) { self.postMessage({ t: "error", error: String((err && err.message) || err) }); } };';
+  function workerStream(url, opts, onChunk) {
+    return new Promise((resolve, reject) => {
+      let w;
+      try { w = new Worker(URL.createObjectURL(new Blob([STREAM_WORKER_CODE], { type: 'application/javascript' }))); } catch (e) { reject(e); return; }
+      let status = 0, text = '';
+      w.onmessage = (e) => {
+        const d = e.data;
+        if (d.t === 'head') status = d.status;
+        else if (d.t === 'chunk') { text += d.text; if (status >= 200 && status < 300) onChunk(d.text); }
+        else if (d.t === 'end') { w.terminate(); resolve({ status, text }); }
+        else { w.terminate(); reject(new TypeError(d.error)); }
+      };
+      w.onerror = (e) => { w.terminate(); reject(new Error('worker fetch failed: ' + (e.message || 'unknown error'))); };
+      w.postMessage({ url, opts });
+    });
+  }
+  async function fetchStream(fetchFn, url, opts, onChunk) {
+    const res = await fetchFn(url, opts);
+    let text = '';
+    if (res.ok && res.body && res.body.getReader) {
+      const r = res.body.getReader(), d = new TextDecoder();
+      for (;;) { const { done, value } = await r.read(); if (done) break; const c = d.decode(value, { stream: true }); text += c; onChunk(c); }
+    } else { text = await res.text(); if (res.ok) onChunk(text); }
+    return { status: res.status, text };
+  }
+  function xhrStream(url, opts, onChunk) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open(opts.method || 'GET', url, true);
+      try { Object.entries(opts.headers || {}).forEach(([k, v]) => xhr.setRequestHeader(k, v)); }
+      catch (e) { xhr.abort(); reject(new TypeError('XHR refused header: ' + ((e && e.message) || e))); return; }
+      let seen = 0;
+      const pump = () => { if (xhr.status >= 200 && xhr.status < 300 && xhr.responseText.length > seen) { onChunk(xhr.responseText.slice(seen)); seen = xhr.responseText.length; } };
+      xhr.onprogress = pump;
+      xhr.onload = () => { pump(); resolve({ status: xhr.status, text: xhr.responseText }); };
+      xhr.onerror = () => reject(new TypeError('Failed to fetch'));
+      xhr.send(opts.body || null);
+    });
+  }
+  async function streamFetch(url, opts, onChunk) {
+    const chain = [];
+    const cached = rawFetchCache && rawFetchCache.name;
+    const add = (name, run) => { if (name === cached) chain.unshift({ name, run }); else chain.push({ name, run }); };
+    add('worker', () => workerStream(url, opts, onChunk));
+    add('iframe', () => { const f = cached === 'iframe' ? rawFetchCache.fn : makeIframeFetch(); if (!f) throw new TypeError('no iframe'); return fetchStream(f, url, opts, onChunk); });
+    add('xhr', () => xhrStream(url, opts, onChunk));
+    if (window.fetch) add('window', () => fetchStream(window.fetch.bind(window), url, opts, onChunk));
+    let lastErr = null;
+    for (const t of chain) {
+      try {
+        const r = await t.run();
+        // A wrapper that silently dropped the Authorization header: try the next one.
+        if (r.status === 401 && /didn'?t provide an API key|No API key provided|api key was not provided/i.test(r.text)) { lastErr = new Error('OpenAI API error (401): ' + r.text.slice(0, 300)); continue; }
+        return r;
+      } catch (e) { lastErr = e; }
+    }
+    throw lastErr || new TypeError('Failed to fetch');
+  }
+  // Server-sent events → onEvent(type, data) for each complete event.
+  function sseParser(onEvent) {
+    let buf = '';
+    return (chunk) => {
+      buf += String(chunk).replace(/\r/g, '');
+      let i;
+      while ((i = buf.indexOf('\n\n')) >= 0) {
+        const block = buf.slice(0, i); buf = buf.slice(i + 2);
+        let ev = '', data = '';
+        for (const line of block.split('\n')) {
+          if (line.startsWith('event:')) ev = line.slice(6).trim();
+          else if (line.startsWith('data:')) data += line.slice(5).trim();
+        }
+        if (!data || data === '[DONE]') continue;
+        let j; try { j = JSON.parse(data); } catch (e) { continue; }
+        onEvent(ev || j.type || '', j);
+      }
+    };
+  }
+  // Reasoning summaries need a verified OpenAI organization; without one the
+  // request is refused, so the console stops asking for a week.
+  const SUMMARY_OFF_KEY = 'gpa_reason_summary_off';
+  const summariesOff = () => { try { return Date.now() - (Number(localStorage.getItem(SUMMARY_OFF_KEY)) || 0) < 7 * 864e5; } catch (e) { return false; } };
+  const markSummariesOff = () => { try { localStorage.setItem(SUMMARY_OFF_KEY, String(Date.now())); } catch (e) { /* ignore */ } };
+  // h: { onThink(fullThought), onText(fullAnswerSoFar) }. Resolves { text, thought, reasoning }.
+  async function callOpenAIStream(userText, systemText, imageDataUrls, hard, opts, h) {
+    const key = getOpenAiKey();
+    if (!key && !OPENAI_PROXY) throw new Error('No OpenAI API key provided.');
+    const content = [];
+    if (userText) content.push({ type: 'input_text', text: userText });
+    (imageDataUrls || []).forEach((u) => content.push({ type: 'input_image', image_url: u }));
+    if (!content.length) throw new Error('Nothing to send.');
+    const payload = { model: OPENAI_MODEL, input: [{ role: 'user', content }], stream: true, store: false };
+    if (systemText) payload.instructions = systemText;
+    const headers = openAIHeaders(key, payload, opts);
+    payload.model = effectiveModel(OPENAI_MODEL, hard);
+    const reasoning = modelSupportsReasoning(payload.model);
+    const wantSummary = reasoning && !summariesOff();
+    if (reasoning) payload.reasoning = wantSummary ? { effort: reasoningEffort, summary: 'auto' } : { effort: reasoningEffort };
+    else { const temp = effectiveTemp(); if (temp !== null) payload.temperature = temp; }
+    noteModelUsed(payload.model, 'OpenAI', hard);
+    if (h && h.onStart) h.onStart({ reasoning, model: payload.model });
+    let answer = '', thought = '', meta = null, failed = '';
+    const parse = sseParser((type, j) => {
+      if (type === 'gpa.meta') meta = j;
+      else if (type === 'response.reasoning_summary_part.added') { if (thought && !/\n\n$/.test(thought)) thought += '\n\n'; }
+      else if (type === 'response.reasoning_summary_text.delta') { thought += j.delta || ''; if (h && h.onThink) h.onThink(thought); }
+      else if (type === 'response.output_text.delta') { answer += j.delta || ''; if (h && h.onText) h.onText(answer); }
+      else if (type === 'response.completed' && !answer) {
+        const out = (j.response && j.response.output) || [];
+        answer = out.filter((o) => o.type === 'message').flatMap((o) => o.content || []).map((c) => c.text || '').join('');
+      } else if (type === 'response.failed' || type === 'error') {
+        failed = (j.response && j.response.error && j.response.error.message) || (j.error && j.error.message) || j.message || 'the answer failed';
+      }
+    });
+    const endpoint = (OPENAI_PROXY || 'https://api.openai.com') + '/v1/responses';
+    const r = await streamFetch(endpoint, { method: 'POST', headers, body: JSON.stringify(payload) }, parse);
+    if (OPENAI_PROXY) refreshUsageSoon();
+    if (r.status < 200 || r.status >= 300) {
+      if (wantSummary && r.status === 400 && /summar|verif/i.test(r.text)) { markSummariesOff(); return callOpenAIStream(userText, systemText, imageDataUrls, hard, opts, h); }
+      const err = new Error(`OpenAI API error (${r.status}): ${redactSecrets(r.text).slice(0, 300)}`);
+      err.status = r.status;
+      throw err;
+    }
+    if (failed && !answer) throw new Error('OpenAI API error: ' + failed);
+    noteGpaMeta(meta || {});
+    return { text: answer || '(no response)', thought: thought.trim(), reasoning };
+  }
+  async function callAIStream(userText, systemText, imageDataUrls, hard, opts, h) {
+    if (aiBlocked) throw new Error('Access to this tool has been blocked by the owner.');
+    const sys = adminSysPrefix() + buildContextMemory() + (systemText || '');
+    const room = typeof gpxAiStart === 'function' ? gpxAiStart(hard) : null;
+    try {
+      const out = await callOpenAIStream(userText, sys, imageDataUrls, hard, opts, h);
+      if (typeof gpxAiEnd === 'function') gpxAiEnd(room, true);
+      return out;
+    } catch (e) {
+      if (typeof gpxAiEnd === 'function') gpxAiEnd(room, false, e);
+      throw e;
+    }
+  }
+
+  // The thinking panel above an answer (like Meta AI's): "Thinking" shimmers
+  // with a timer while the reasoning streams in underneath; when the answer
+  // comes it folds to "Thought for 9s" (tap to open it again).
+  function makeThinkPanel(beforeEl) {
+    const el = document.createElement('div');
+    el.className = 'gpx-think is-live';
+    el.innerHTML = '<button type="button" class="gpx-think-h" aria-expanded="true"><span class="gpx-think-ic" aria-hidden="true"></span><span class="gpx-think-label">Thinking</span><span class="gpx-think-time"></span><span class="gpx-think-chev" aria-hidden="true"></span></button><div class="gpx-think-body" role="log" aria-live="polite" aria-label="The AI’s thinking"></div>';
+    beforeEl.parentNode.insertBefore(el, beforeEl);
+    const head = el.querySelector('.gpx-think-h'), body = el.querySelector('.gpx-think-body'), time = el.querySelector('.gpx-think-time');
+    const started = Date.now();
+    const secs = () => Math.max(1, Math.round((Date.now() - started) / 1000));
+    const tick = setInterval(() => { time.textContent = secs() + 's'; }, 1000);
+    head.addEventListener('click', () => { if (el.classList.contains('is-live') || !body.childNodes.length) return; const open = el.classList.toggle('is-collapsed') === false; head.setAttribute('aria-expanded', String(open)); });
+    // "**Heading**" lines become small headings; other ** marks are dropped.
+    const render = (text) => {
+      el.classList.remove('is-empty');
+      body.textContent = '';
+      for (const para of String(text).split(/\n{2,}/)) {
+        const lines = para.split('\n');
+        const m = /^\s*\*\*(.+?)\*\*\s*$/.exec(lines[0]);
+        if (m) { const b = document.createElement('div'); b.className = 'gpx-think-step'; b.textContent = m[1]; body.appendChild(b); lines.shift(); }
+        const rest = lines.join('\n').replace(/\*\*/g, '').trim();
+        if (rest) { const p = document.createElement('p'); p.textContent = rest; body.appendChild(p); }
+      }
+      body.scrollTop = body.scrollHeight;
+      if (el.parentNode) el.parentNode.scrollTop = el.parentNode.scrollHeight;
+    };
+    return {
+      el,
+      think: render,
+      // Done: fold it. No thinking text (a model that doesn't reason, or no summary): just the time, or nothing.
+      done(hadThought, reasoning) {
+        clearInterval(tick);
+        el.classList.remove('is-live');
+        if (!hadThought && !reasoning) { el.remove(); return; }
+        el.querySelector('.gpx-think-label').textContent = 'Thought for ' + secs() + 's';
+        time.textContent = '';
+        el.classList.add('is-collapsed');
+        head.setAttribute('aria-expanded', 'false');
+        if (!hadThought) el.classList.add('is-empty');
+      },
+      fail() { clearInterval(tick); el.remove(); }
+    };
   }
 
   // ---- Context memory -------------------------------------------------------
@@ -14033,7 +14284,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
 
   // Renders an AI reply with the first line lifted out as a highlighted
   // key-answer chip so it is easy to spot; the rest types in below it.
-  function renderAskReply(bubble, fullText, confidence, onDone) {
+  function renderAskReply(bubble, fullText, confidence, onDone, instant) {
     const t = THEMES[theme] || THEMES.dark;
     const nl = fullText.indexOf('\n');
     let answer, rest;
@@ -14050,11 +14301,14 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     }
     const body = document.createElement('div');
     bubble.appendChild(body);
-    typeText(body, rest, chatEl, () => {
+    const finish = () => {
       appendConfidenceBadge(bubble, confidence);
       appendModelBadge(bubble);
       if (onDone) onDone();
-    });
+    };
+    // Already streamed in front of the reader: show it formatted, no retyping.
+    if (instant) { body.textContent = rest; chatEl.scrollTop = chatEl.scrollHeight; finish(); }
+    else typeText(body, rest, chatEl, finish);
   }
 
   async function sendChat() {
@@ -14090,8 +14344,36 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       + 'NEW MESSAGE:\n' + qForModel
       + (imgs.length ? '\n\n(' + imgs.length + ' image' + (imgs.length > 1 ? 's' : '') + ' attached below — read them as part of this question.)' : '');
 
+    // The answer streams in under a live "Thinking" panel. If streaming isn't
+    // possible here (an old Worker, a page that blocks it), the plain request
+    // still answers, with the typing dots.
+    thinking.hidden = true;
+    const think = makeThinkPanel(thinking);
+    let streamed = false, out, reasons = false;
     try {
-      const out = await callAI(userText, sys, imgs.length ? imgs : null, isHardQuestion(q), { memory: true, conversation: askConversationId });
+      try {
+        const r = await callAIStream(userText, sys, imgs.length ? imgs : null, isHardQuestion(q), { memory: true, conversation: askConversationId }, {
+          onStart: (x) => { reasons = !!x.reasoning; },
+          onThink: (t) => think.think(t),
+          onText: (t) => {
+            if (!streamed) { streamed = true; think.done(!!think.el.querySelector('.gpx-think-body').childNodes.length, reasons); thinking.hidden = false; }
+            thinking.textContent = t.replace(/\n*\s*CONFIDENCE:?\s*\d*\s*%?\s*$/i, '');
+            chatEl.scrollTop = chatEl.scrollHeight;
+          }
+        });
+        out = r.text;
+        if (!streamed) think.done(!!r.thought, r.reasoning);
+        if (r.thought && !think.el.querySelector('.gpx-think-body').childNodes.length && think.el.isConnected) think.think(r.thought);
+      } catch (e) {
+        // An answer the API refused is final; anything else (the transport,
+        // a Worker without /v1/responses) gets one plain try.
+        if (/OpenAI API error \((?!404|405)\d+\)|blocked by the owner|No OpenAI API key/.test(String(e && e.message))) throw e;
+        think.fail(); thinking.hidden = false;
+        thinking.innerHTML = '<span class="gpx-typing-dots" role="status" aria-label="Thinking"><i></i><i></i><i></i></span>';
+        streamed = false;
+        out = await callAI(userText, sys, imgs.length ? imgs : null, isHardQuestion(q), { memory: true, conversation: askConversationId });
+      }
+      thinking.hidden = false;
       const { text: cleanText, confidence } = extractConfidenceLine(out);
     askHistory.push({ role: 'user', content: qForModel }, { role: 'assistant', content: cleanText });
     if (typeof memoryAfterReply === 'function') memoryAfterReply(q, cleanText, askConversationId, thinking);
@@ -14099,8 +14381,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     renderAskReply(thinking, cleanText, confidence, () => {
       speak(cleanText);
       if (isHardQuestion(q)) maybeSuggestBetterModel(chatEl);
-    });
+    }, streamed);
     } catch (e) {
+      think.fail(); thinking.hidden = false;
       showError(thinking, e, currentProviderLabel());
     }
   }
@@ -23219,12 +23502,28 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // each status poll, null for everyone else.
   const subStripEl = panel.querySelector('#gpa-substrip');
   const subRenewBtn = panel.querySelector('#gpa-substrip-renew');
-  // "12d 4h left", "5h 20m left", "12m left": precise enough to plan around.
-  const fmtTimeLeft = (ms) => {
-    const m = Math.max(0, Math.floor(ms / 60000)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
-    return d ? d + 'd ' + h + 'h' : h ? h + 'h ' + mm + 'm' : Math.max(1, mm) + 'm';
-  };
-  // ---- weekday clock (copy of web/weekdays.js; tests/weekdays.test.mjs keeps them identical) ----
+
+  // ---- school-day clock (copy of web/school-days.js; tests/school-days.test.mjs keeps them identical) ----
+  // 2026–27 school calendar (180 days: Aug 11, 2026 → May 27, 2027).
+  // pd = staff PD / training (no students), holiday = closed.
+  const SCHOOL_CALENDARS = [{
+    name: '2026–27',
+    from: '2026-08-01', to: '2027-07-31',
+    first: '2026-08-11', last: '2027-05-27',
+    closed: {
+      '2026-08-04': 'pd', '2026-08-05': 'pd', '2026-08-06': 'pd', '2026-08-07': 'pd', '2026-08-10': 'pd',
+      '2026-09-07': 'holiday', '2026-09-21': 'holiday',
+      '2026-10-19': 'pd',
+      '2026-11-11': 'holiday', '2026-11-23': 'holiday', '2026-11-24': 'holiday', '2026-11-25': 'holiday', '2026-11-26': 'holiday', '2026-11-27': 'holiday',
+      '2026-12-21': 'holiday', '2026-12-22': 'holiday', '2026-12-23': 'holiday', '2026-12-24': 'holiday', '2026-12-25': 'holiday',
+      '2026-12-28': 'holiday', '2026-12-29': 'holiday', '2026-12-30': 'holiday', '2026-12-31': 'holiday',
+      '2027-01-01': 'holiday', '2027-01-04': 'pd', '2027-01-18': 'holiday',
+      '2027-02-15': 'holiday',
+      '2027-03-22': 'holiday', '2027-03-23': 'holiday', '2027-03-24': 'holiday', '2027-03-25': 'holiday', '2027-03-26': 'holiday', '2027-03-29': 'pd',
+      '2027-05-28': 'pd', '2027-05-31': 'holiday'
+    }
+  }];
+
   const fmtCache = new Map();
   function partsIn(ts, tz) {
     let f = fmtCache.get(tz);
@@ -23241,37 +23540,52 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const p = partsIn(ts, tz);
     return Date.UTC(p.y, p.m - 1, p.d, p.h, p.mi, p.s) - (Math.floor(ts / 1000) * 1000);
   }
-  // The local day ts falls in: its weekday (0 = Sunday) and the instant the
-  // next local day starts (DST-safe: a 23- or 25-hour day is handled).
+  // The local day ts falls in: its date ("2026-11-16"), weekday (0 = Sunday)
+  // and the instant the next local day starts (DST-safe).
   function localDay(ts, tz) {
     const p = partsIn(ts, tz);
     const dow = new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay();
+    const key = p.y + '-' + String(p.m).padStart(2, '0') + '-' + String(p.d).padStart(2, '0');
     const nextLocal = Date.UTC(p.y, p.m - 1, p.d + 1);
     let next = nextLocal - offsetAt(nextLocal, tz);
     next = nextLocal - offsetAt(next, tz);
     if (next <= ts) next = ts + 1;   // never stall
-    return { dow, next };
+    return { key, dow, next };
   }
-  const isWeekend = (ts, tz) => { const d = localDay(ts, tz).dow; return d === 0 || d === 6; };
+  // Why a day doesn't count ('' when it does): weekend, holiday, pd, weather,
+  // summer (outside the school year inside a calendar's range).
+  // extra: the owner's added closed days, { 'YYYY-MM-DD': 'weather' } or a Set/array of dates.
+  function dayOff(key, dow, extra) {
+    if (dow === 0 || dow === 6) return 'weekend';
+    if (extra && (extra instanceof Set ? extra.has(key) : Array.isArray(extra) ? extra.includes(key) : extra[key])) return 'weather';
+    for (const c of SCHOOL_CALENDARS) {
+      if (key < c.from || key > c.to) continue;
+      if (c.closed[key]) return c.closed[key];
+      if (key < c.first || key > c.last) return 'summer';
+      return '';
+    }
+    return '';
+  }
+  function offReason(ts, tz, extra) { const d = localDay(ts, tz); return dayOff(d.key, d.dow, extra); }
 
-  // Weekday time (ms) between a and b.
-  function weekdayMs(a, b, tz) {
+  // School time (ms) between a and b.
+  function schoolMs(a, b, tz, extra) {
     let t = a, sum = 0;
     for (let i = 0; t < b && i < 5000; i++) {
-      const { dow, next } = localDay(t, tz);
+      const { key, dow, next } = localDay(t, tz);
       const end = Math.min(next, b);
-      if (dow !== 0 && dow !== 6) sum += end - t;
+      if (!dayOff(key, dow, extra)) sum += end - t;
       t = end;
     }
     return sum;
   }
-  // The instant `ms` of weekday time after `from` has been used up. Starting
-  // on a weekend, the clock starts Monday at midnight.
-  function addWeekdayMs(from, ms, tz) {
+  // The instant `ms` of school time after `from` has been used up. Starting on
+  // a day off, the clock starts at midnight of the next school day.
+  function addSchoolMs(from, ms, tz, extra) {
     let t = from, left = Math.max(0, ms);
     for (let i = 0; i < 5000; i++) {
-      const { dow, next } = localDay(t, tz);
-      if (dow !== 0 && dow !== 6) {
+      const { key, dow, next } = localDay(t, tz);
+      if (!dayOff(key, dow, extra)) {
         if (next - t >= left) return t + left;
         left -= next - t;
       }
@@ -23279,7 +23593,17 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     }
     return t + left;
   }
-  // ---- end weekday clock ----
+  // The next day that counts, as a timestamp of its local midnight (for "resumes Mon").
+  function nextSchoolDay(ts, tz, extra) {
+    let t = ts;
+    for (let i = 0; i < 400; i++) {
+      const { key, dow, next } = localDay(t, tz);
+      if (!dayOff(key, dow, extra) && t !== ts) return t;
+      t = next;
+    }
+    return t;
+  }
+  // ---- end school-day clock ----
   let lastSub = null, subTick = 0;
   function renderSubStrip(sub) {
     if (!subStripEl) return;
@@ -23287,13 +23611,19 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     clearTimeout(subTick);
     const role = typeof sessionRole === 'function' ? sessionRole() : null;
     const staff = role === 'owner' || role === 'admin';
-    subStripEl.classList.remove('is-staff', 'is-paused');
+    subStripEl.classList.remove('is-staff', 'is-paused', 'is-low');
+    const $ = (id) => subStripEl.querySelector(id);
+    const set = (num, left, note, pause) => {
+      $('#gpa-substrip-num').textContent = num;
+      $('#gpa-substrip-left').textContent = left;
+      $('#gpa-substrip-note').textContent = note;
+      $('#gpa-substrip-pause').hidden = !pause;
+      $('#gpa-substrip-pause').textContent = pause ? 'Paused · ' + pause : '';
+    };
     if (currentUser && staff && !(sub && sub.expiresAt > Date.now())) {
       // The owner and admins: access doesn't run out.
-      subStripEl.classList.remove('is-low');
       subStripEl.classList.add('is-staff');
-      subStripEl.querySelector('#gpa-substrip-left').textContent = 'No expiry';
-      subStripEl.querySelector('#gpa-substrip-note').textContent = role === 'owner' ? 'You’re the owner: your access doesn’t expire.' : 'Admin: your access doesn’t expire while you’re an admin.';
+      set('', 'No expiry', role === 'owner' ? 'Owner' : 'Admin', '');
       subRenewBtn.hidden = true; closeRenew();
       subStripEl.hidden = false;
       return;
@@ -23307,57 +23637,74 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       return;
     }
     const now = Date.now();
-    // A weekday plan: the clock is paused on Saturdays and Sundays.
-    const wk = !!sub.weekdays && !sub.autoRenew;
+    // A school-day plan: the clock only runs on days the school is open.
+    const school = !!sub.school && !sub.autoRenew;
     const tz = sub.tz || 'America/New_York';
-    let left = sub.expiresAt - now, used = now - sub.startedAt, paused = false;
-    if (wk) {
+    const closed = Array.isArray(sub.closed) ? sub.closed : [];
+    let left = sub.expiresAt - now, used = now - sub.startedAt, off = '';
+    if (school) {
       try {
-        left = weekdayMs(now, sub.expiresAt, tz);
-        used = weekdayMs(sub.startedAt, now, tz);
-        paused = isWeekend(now, tz);
+        left = schoolMs(now, sub.expiresAt, tz, closed);
+        used = schoolMs(sub.startedAt, now, tz, closed);
+        off = offReason(now, tz, closed);
       } catch (e) { /* unknown time zone: fall back to the calendar */ }
     }
     const days = Math.ceil((sub.expiresAt - now) / 864e5);   // calendar days, for "tomorrow" / "in 3 days"
     const end = new Date(sub.expiresAt);
     const endDay = end.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    const endWk = end.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
     const endTime = end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     const sameDay = end.toDateString() === new Date().toDateString();
     const pct = Math.max(0, Math.min(100, Math.round((used / Math.max(1, used + left)) * 100)));
+    const bar = $('#gpa-substrip-bar');
+    bar.querySelector('i').style.width = pct + '%';
+    bar.setAttribute('aria-valuenow', String(pct));
     // Keep the countdown current (every minute) while it's on screen.
     subTick = setTimeout(() => { if (lastSub === sub) renderSubStrip(sub); }, 60000);
+    // The big number: whole days left, or hours / minutes on the last day.
+    const unit = school ? 'school day' : 'day';
+    const big = (ms) => {
+      if (ms >= 864e5) { const n = Math.ceil(ms / 864e5); return [String(n), n === 1 ? unit + ' left' : unit + 's left']; }
+      const m = Math.max(1, Math.ceil(ms / 60000));
+      return m >= 60 ? [Math.floor(m / 60) + 'h', (m % 60 ? (m % 60) + 'm ' : '') + 'left'] : [m + 'm', 'left'];
+    };
     // Paid monthly through the subscribe page (Stripe): it renews by itself.
     if (sub.autoRenew) {
-      subStripEl.classList.remove('is-low');
-      subStripEl.querySelector('#gpa-substrip-left').textContent = 'Renews in ' + fmtTimeLeft(left);
-      const b = subStripEl.querySelector('#gpa-substrip-bar');
-      b.querySelector('i').style.width = pct + '%';
-      b.setAttribute('aria-valuetext', 'Renews ' + endDay);
-      subStripEl.querySelector('#gpa-substrip-note').textContent = 'Subscribed since ' + new Date(sub.startedAt).toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' · renews automatically ' + endDay + ' at ' + endTime;
+      const [n, t] = big(left);
+      set(n, t.replace(' left', '') + ' until it renews', 'Renews ' + endWk, '');
+      bar.setAttribute('aria-valuetext', 'Renews ' + endDay);
       subRenewBtn.hidden = true; closeRenew();
       subStripEl.hidden = false;
       const remind = panel.querySelector('.gpa-sub-remind');
       if (remind) remind.remove();
       return;
     }
+    const OFF_LABEL = { weekend: 'weekend', holiday: 'holiday', pd: 'no school', weather: 'weather day', summer: 'summer break' };
+    const [n, t] = big(left);
+    // A plan that runs out at midnight really ends the evening before: "Through Tue, Jan 19".
+    const atMidnight = end.getHours() === 0 && end.getMinutes() === 0;
+    const lastDay = new Date(sub.expiresAt - 1);
+    let note = atMidnight
+      ? (lastDay.toDateString() === new Date(now).toDateString() ? 'Last day today' : 'Through ' + lastDay.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }))
+      : sameDay ? 'Ends today, ' + endTime : 'Ends ' + endWk;
+    if (off) {
+      try { note += ' · back ' + new Date(nextSchoolDay(now, tz, closed)).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }); } catch (e) { /* ignore */ }
+    }
     subStripEl.classList.toggle('is-low', left <= 3 * 864e5);
-    subStripEl.classList.toggle('is-paused', paused);
-    subStripEl.querySelector('#gpa-substrip-left').textContent = fmtTimeLeft(left) + ' left' + (paused ? ' · paused' : '');
-    const bar = subStripEl.querySelector('#gpa-substrip-bar');
-    bar.querySelector('i').style.width = pct + '%';
-    bar.setAttribute('aria-valuenow', String(pct));
-    bar.setAttribute('aria-valuetext', fmtTimeLeft(left) + ' left, until ' + endDay + ' ' + endTime);
-    subStripEl.querySelector('#gpa-substrip-note').textContent = (sub.free
-      ? 'Free access, a gift: ends '
-      : sub.auto
-        ? 'This month’s access (on the allowed list) ends '
-        : 'Your subscription ends ') + (sameDay ? 'today at ' + endTime : endDay + ' at ' + endTime) + '. '
-      + (paused ? 'Paused for the weekend: your time only counts down Monday to Friday. ' : wk ? 'Weekends don’t count. ' : '') + 'Tap Renew to keep it.';
+    subStripEl.classList.toggle('is-paused', !!off);
+    set(n, t, note, off ? (OFF_LABEL[off] || 'no school') : '');
+    const label = n + ' ' + t + (off ? ', paused (' + (OFF_LABEL[off] || 'no school') + ')' : '') + '. ' + note + '.';
+    subStripEl.title = (school ? 'Your time only counts on school days: weekends, holidays and breaks don’t use it up. ' : '') + label;
+    bar.setAttribute('aria-valuetext', label);
     subRenewBtn.hidden = false;
     subStripEl.hidden = false;
-    if (left <= 3 * 864e5) remindSubscriber(sub, sameDay ? 'today at ' + endTime : (days === 1 ? 'tomorrow' : 'in ' + days + ' days') + ' (' + endDay + ', ' + endTime + ')');
+    if (left <= 3 * 864e5) {
+      remindSubscriber(sub, atMidnight
+        ? (lastDay.toDateString() === new Date(now).toDateString() ? 'tonight' : 'after ' + lastDay.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })) + (school ? ' (' + n + ' ' + t.replace(' left', '') + ' left)' : '')
+        : sameDay ? 'today at ' + endTime : (days === 1 ? 'tomorrow' : 'in ' + days + ' days') + ' (' + endDay + ', ' + endTime + ')');
+    }
   }
-  // ---- Renew box (under the strip): link, "text me the link", paying cash ----
+  // ---- Renew box (under the strip): the subscribe link, "text me the link" ----
   const renewEl = panel.querySelector('#gpa-renew');
   const renewMsg = (t, bad) => { const m = panel.querySelector('#gpa-renew-msg'); m.textContent = t || ''; m.classList.toggle('bad', !!bad); };
   // (looked up each time: the strip can render before this part of the script has run)
@@ -23368,17 +23715,11 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     const link = (base || '') + '/subscribe/';
     panel.querySelector('#gpa-renew-open').href = link;
     panel.querySelector('#gpa-renew-copy').dataset.link = link;
-    const cashEl = panel.querySelector('#gpa-renew-cash');
     try {
       const d = await (await fetch(base + '/sms/info', { cache: 'no-store' })).json();
       if (d.link) { panel.querySelector('#gpa-renew-open').href = d.link; panel.querySelector('#gpa-renew-copy').dataset.link = d.link; }
       panel.querySelector('#gpa-renew-sms').hidden = !d.sms;
-      cashEl.innerHTML = '';
-      const a = document.createElement('span');
-      a.append('Give ', Object.assign(document.createElement('b'), { textContent: d.price || 'the monthly price' }), ' in person to ', Object.assign(document.createElement('b'), { textContent: (d.cash || []).join(', ') || 'the owner' }), '. They mark you as paid.');
-      cashEl.appendChild(a);
-      if (d.sms && d.number) cashEl.appendChild(Object.assign(document.createElement('div'), { textContent: 'Or text CASH to ' + d.number + ' and the reply tells you the same.' }));
-    } catch (e) { cashEl.textContent = 'Give the cash to the owner or an admin in person.'; }
+    } catch (e) { /* the link above still works */ }
   }
   subRenewBtn.addEventListener('click', () => { if (renewEl.hidden) openRenew(); else closeRenew(); });
   panel.querySelector('#gpa-renew-copy').addEventListener('click', async (e) => {
@@ -24773,6 +25114,14 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           const giftsBy = (u) => gifts.filter((x) => String(x.user).toLowerCase() === String(u).toLowerCase()).reduce((n, x) => n + (Number(x.amount) || 0), 0);
           subsEl.innerHTML = `<p class="gps-hint">Add someone who paid for access. They can sign in right away, and when their time is up they’re signed out (“Your subscription has ended”) and taken off Allowed users. You get a phone alert 3 days before and when it ends.</p>`
             + `<p class="gps-hint">Anyone on Allowed users you haven’t made a subscriber gets one automatically: from the 1st of this month to the 1st of next, then it ends the same way unless you renew it or they pay. Admins and moderators stay unlimited. <b>Add subscriber</b> on one of them replaces the automatic month.</p>`
+            + (d.school ? (() => {
+              const cal = (d.school.calendars || [])[0];
+              const wd = (k) => new Date(k + 'T12:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+              return `<div class="gac-school" id="gac-school"><div class="gac-school-h">School days only</div>`
+                + `<p class="gps-hint">Plans you add count down only on days school is open${cal ? ` (${esc(cal.name)} calendar: ${esc(wd(cal.first))} – ${esc(wd(cal.last))})` : ''}. Weekends, holidays, staff training days, weather days and summer break don’t use up anyone’s time.</p>`
+                + `<div class="gac-school-days">${(d.school.closedDays || []).map((k) => `<span class="gac-school-chip">Weather · ${esc(wd(k))}<button type="button" data-closed-rm="${esc(k)}" aria-label="Remove ${esc(wd(k))}">×</button></span>`).join('')}</div>`
+                + `<form class="gac-school-add" id="gac-school-add"><label>Weather day (school closed)<input class="gpa-input" id="gac-school-date" type="date" required></label><button class="gps-btn" type="submit">Add</button></form></div>`;
+            })() : '')
             + (d.allowlistOn ? '' : `<div class="gac-subs-warn" role="note"><span>Subscriptions only matter while <b>Only allow listed users</b> is on; right now everyone can get in.</span><button class="gps-btn primary" id="gac-subs-allow" type="button">Turn it on</button></div>`)
             + `<form class="gac-subs-form" id="gac-subs-form" autocomplete="off">`
             + `<label>Username<input class="gpa-input" id="gac-subs-name" placeholder="e.g. renzo" spellcheck="false" autocapitalize="off" maxlength="40" required></label>`
@@ -24785,11 +25134,11 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             + (ledger.length ? `<div class="gac-subs-totals${giftTotal ? ' has-gifts' : ''}"><div><b>${esc(money(month))}</b><span>this month</span></div><div><b>${esc(money(total))}</b><span>collected in all</span></div><div><b>${active.length}</b><span>active now</span></div>${giftTotal ? `<div><b>${esc(money(giftTotal))}</b><span>contributions</span></div>` : ''}</div>` : '')
             + (d.subscriptions.length ? `<p class="gps-hint gac-subs-count"${ledger.length ? ' hidden' : ''}>${active.length} active${d.subscriptions.length > active.length ? ' · ' + (d.subscriptions.length - active.length) + ' ended' : ''}</p><ul class="gac-acct-list gac-subs-list">` + d.subscriptions.map((s) => {
               const soon = s.active && s.expiresAt - Date.now() <= 3 * 864e5;
-              const badge = s.free && s.active && s.forever ? 'Free · no end' : (s.auto && s.active ? 'Automatic · ' : s.free && s.active ? 'Free · ' : '') + (!s.active ? 'Ended' : s.weekdays
-                ? (new Date(s.expiresAt).toDateString() === new Date().toDateString() ? 'Ends today' : s.daysLeft + (s.daysLeft === 1 ? ' weekday left' : ' weekdays left'))
+              const badge = s.free && s.active && s.forever ? 'Free · no end' : (s.auto && s.active ? 'Automatic · ' : s.free && s.active ? 'Free · ' : '') + (!s.active ? 'Ended' : s.school
+                ? (new Date(s.expiresAt).toDateString() === new Date().toDateString() ? 'Ends today' : s.daysLeft + (s.daysLeft === 1 ? ' school day left' : ' school days left'))
                 : s.daysLeft <= 1 ? 'Ends today' : s.daysLeft + ' days left');
               return `<li class="gac-acct gac-subscr${s.active ? '' : ' is-ended'}${soon ? ' is-soon' : ''}" data-user="${esc(s.user)}"><div class="gac-acct-top"><span class="gac-req-name">${esc(s.user)}</span><span class="gac-req-badge ${s.active && !soon ? 'pending' : ''}">${esc(badge)}</span></div>`
-                + `<div class="gac-req-meta">${s.active ? 'Since ' + esc(fmtDay(s.startedAt)) + (s.forever ? ' · no end' : ' · ends ' + esc(fmtDay(s.expiresAt))) + (s.free && s.freeBy ? ' · given by ' + esc(s.freeBy) : '') : 'Ended ' + esc(fmtDay(s.endedAt || s.expiresAt))}${lastPaid(s) ? ' · paid ' + esc(money(lastPaid(s))) : ''}${giftsBy(s.user) ? ' · contributed ' + esc(money(giftsBy(s.user))) : ''}${s.email ? ' · ' + esc(s.email) : ''}${s.note ? ' · ' + esc(s.note) : ''}</div>`
+                + `<div class="gac-req-meta">${s.active ? 'Since ' + esc(fmtDay(s.startedAt)) + (s.forever ? ' · no end' : s.school && new Date(s.expiresAt).getHours() === 0 && new Date(s.expiresAt).getMinutes() === 0 ? ' · through ' + esc(fmtDay(s.expiresAt - 1)) : ' · ends ' + esc(fmtDay(s.expiresAt))) + (s.free && s.freeBy ? ' · given by ' + esc(s.freeBy) : '') : 'Ended ' + esc(fmtDay(s.endedAt || s.expiresAt))}${lastPaid(s) ? ' · paid ' + esc(money(lastPaid(s))) : ''}${giftsBy(s.user) ? ' · contributed ' + esc(money(giftsBy(s.user))) : ''}${s.email ? ' · ' + esc(s.email) : ''}${s.note ? ' · ' + esc(s.note) : ''}</div>`
                 + (s.free && s.active
                   ? `<div class="gac-req-actions"><button class="gps-btn" data-sub="end" type="button">End free access</button></div>`
                   : `<div class="gac-req-actions"><button class="gps-btn${s.active ? '' : ' primary'}" data-sub="renew" type="button">Renew +${esc(periods[subsPeriod] || '1 month')}</button>`
@@ -24798,6 +25147,23 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
                 + `<form class="gac-subs-edit" hidden><label>Subscribed on<input class="gpa-input" type="datetime-local" value="${esc(localInput(s.startedAt))}" max="${esc(localInput(Date.now() + 60e3))}"></label><button class="gps-btn primary" type="submit">Save</button><button class="gps-btn" type="button" data-sub="canceledit">Cancel</button></form></li>`;
             }).join('') + `</ul>` : `<p class="gps-hint">No subscribers yet.</p>`);
           const form = subsEl.querySelector('#gac-subs-form');
+          // Weather days: add / remove; running plans move their end date by that day.
+          const schoolEl = subsEl.querySelector('#gac-school');
+          if (schoolEl) {
+            schoolEl.querySelector('#gac-school-add').addEventListener('submit', async (e) => {
+              e.preventDefault();
+              const v = schoolEl.querySelector('#gac-school-date').value;
+              if (!v) return;
+              try { renderSubs(await api('/admin/subscriptions', { method: 'POST', body: { action: 'closed', add: v } })); showToast('Weather day added. Running plans got that day back.'); }
+              catch (err) { showToast(err.message, { type: 'danger' }); }
+            });
+            schoolEl.addEventListener('click', async (e) => {
+              const b2 = e.target.closest('[data-closed-rm]');
+              if (!b2) return;
+              try { renderSubs(await api('/admin/subscriptions', { method: 'POST', body: { action: 'closed', remove: b2.dataset.closedRm } })); showToast('Weather day removed.'); }
+              catch (err) { showToast(err.message, { type: 'danger' }); }
+            });
+          }
           subsEl.querySelector('#gac-subs-period').addEventListener('change', (e) => { subsPeriod = e.target.value; subsEl.querySelectorAll('[data-sub="renew"]').forEach((x) => { x.textContent = 'Renew +' + (periods[subsPeriod] || '1 month'); }); });
           form.addEventListener('submit', async (e) => {
             e.preventDefault();
