@@ -20466,7 +20466,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   const gateButtons = () => ['#gpa-login-btn', '#gpa-signup-btn', '#gpa-login-restore'].map((q) => panel.querySelector(q)).filter(Boolean);
   function renderServerGate() {
     const ready = serverGate === 'ready';
-    gateButtons().forEach((b) => { b.disabled = !ready; b.setAttribute('aria-disabled', String(!ready)); });
+    // A locked device keeps them off whatever the server says (see showDeviceLock).
+    const locked = !!panel.querySelector('.gpa-device-lock:not([hidden])');
+    gateButtons().forEach((b) => { b.disabled = !ready || locked; b.setAttribute('aria-disabled', String(!ready || locked)); });
     if (ready) {
       if (loginMsg.textContent === GATE_CONNECTING_MSG || loginMsg.textContent === SERVER_UNREACHABLE_MSG) showLoginMsg('');
     } else if (!loginMsg.textContent || loginMsg.textContent === GATE_CONNECTING_MSG || loginMsg.textContent === SERVER_UNREACHABLE_MSG) {
@@ -21104,6 +21106,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     if (deviceLockEl && deviceLockEl.contains(achatEl)) { closeAccessChat(); reqBox.after(achatEl); }
     [...panel.children].forEach((c) => { c.inert = false; });
     panel.querySelectorAll('[data-lock-off]').forEach((el) => { el.disabled = false; delete el.dataset.lockOff; });
+    renderServerGate();   // Sign in / Create follow the server connection again
     try { localStorage.removeItem('gpa_device_locked'); } catch (e) { /* ignore */ }
   }
   async function checkDeviceLock() {

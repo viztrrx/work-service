@@ -11,6 +11,8 @@
 //   4  someone tries names that aren't allowed: after 3, the device locks
 //      (nothing usable); the owner sees it and unlocks it
 //   node tests/browser/signin-help.mjs [outDir]
+// Forgot PIN allows 5 requests per network per hour and a run makes 3, so a
+// second run within the same hour needs fresh local data (rm -rf .wrangler/state).
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -20,11 +22,16 @@ import { startEnv } from './env.mjs';
 const OUT = process.argv[2] || 'signin-help-out';
 fs.mkdirSync(OUT, { recursive: true });
 const ADMIN = 'test-admin-token-0123456789abcdef';
+// The owner's name can only be claimed with OWNER_CODE (as the real owner does once).
+const OWNER_CODE = 'owner-code-test-0123456789';
 const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`); };
-const env = await startEnv({ extraEnv: { ADMIN_TOKEN: ADMIN, STUDENT_ID_OPTIONAL: '0' } });
+const env = await startEnv({ extraEnv: { ADMIN_TOKEN: ADMIN, OWNER_CODE, STUDENT_ID_OPTIONAL: '0' } });
 const site = await serve((rq, rs) => { rs.setHeader('Content-Type', 'text/html'); rs.end(HOST_PAGE); });
-const code = fs.readFileSync(path.join(ROOT, 'script.js'), 'utf8');
+// Point the console's AI/memory calls at the test Worker: unchanged it talks to
+// the live Worker, whose 401 for this test session signs the test user out.
+const code = fs.readFileSync(path.join(ROOT, 'script.js'), 'utf8').replace("const OPENAI_PROXY = 'https://donnajbe.viztrrx.workers.dev';", `const OPENAI_PROXY = '${env.workerUrl}';`);
+if (!code.includes(`const OPENAI_PROXY = '${env.workerUrl}';`)) throw new Error('could not point the console at the test Worker');
 const admin = (p, body) => fetch(env.workerUrl + p, { method: body ? 'POST' : 'GET', headers: { Authorization: 'Bearer ' + ADMIN, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }).then((r) => r.json());
 const browser = await launch();
 const R = (page, fn, arg) => page.evaluate(([f, a]) => (0, eval)(f)(document.getElementById('gpa-root-host').shadowRoot, a), [String(fn), arg]);
@@ -174,7 +181,10 @@ try {
   check('No number on file: sent to the owner and admins; “Check back every 10 minutes”', waitMsg.wait && /Check back every 10 minutes/.test(waitMsg.text), JSON.stringify(waitMsg));
   await lou.page.screenshot({ path: path.join(OUT, '04-forgot-pin-waiting.png') });
 
-  // The owner: Admin → Security → Sign-in help.
+  // The owner: Admin → Security → Sign-in help. The account is claimed with
+  // the owner code first (409 = already there from an earlier run).
+  const ownerReg = await fetch(env.workerUrl + '/auth/register', { method: 'POST', headers: { 'Content-Type': 'text/plain', 'X-GPA-Owner': OWNER_CODE }, body: JSON.stringify({ user: 'ivan', verifier: crypto.pbkdf2Sync('gpa-server|ivan|246810', 'gpa-server-salt|ivan', 210000, 32, 'sha256').toString('hex'), device: crypto.randomBytes(16).toString('hex') }) });
+  if (ownerReg.status !== 200 && ownerReg.status !== 409) throw new Error('owner register ' + ownerReg.status + ' ' + await ownerReg.text());
   owner = await computer();
   for (const btn of ['#gpa-signup-btn', '#gpa-login-btn']) {
     if (await R(owner.page, (r) => r.querySelector('#gpa-login').style.display === 'none')) break;
@@ -309,9 +319,11 @@ try {
   await sneak.page.waitForTimeout(7500);
   st = await R(sneak.page, (r) => ({ inside: r.querySelector('#gpa-login').style.display === 'none', msg: r.querySelector('#gpa-login-msg').textContent }));
   check('With the server blocked, creating an account (even with an approved name) is refused: “Can’t reach the server”', !st.inside && /Can’t reach the Saints Service server/.test(st.msg), JSON.stringify(st));
-  await sneak.page.click(sr('#gpa-login-btn'));
+  // With the server unreachable, Sign in is switched off (fail closed); if it
+  // isn't off yet, pressing it is refused the same way.
+  await sneak.page.click(sr('#gpa-login-btn'), { timeout: 3000 }).catch(() => {});
   await sneak.page.waitForTimeout(7500);
-  st = await R(sneak.page, (r) => ({ inside: r.querySelector('#gpa-login').style.display === 'none', msg: r.querySelector('#gpa-login-msg').textContent }));
+  st = await R(sneak.page, (r) => ({ inside: r.querySelector('#gpa-login').style.display === 'none', msg: r.querySelector('#gpa-login-msg').textContent, signInOff: r.querySelector('#gpa-login-btn').disabled }));
   check('…and so is signing in', !st.inside && /Can’t reach the Saints Service server/.test(st.msg), JSON.stringify(st));
   await sneak.page.unroute(env.workerUrl + '/**');
   // A faked saved sign-in (browser storage) doesn't open the console on reload.
