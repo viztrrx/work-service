@@ -692,6 +692,28 @@ General\-purpose chat, independent of the page. Answers stream in as they're wri
 
 Voice input via the browser's speech recognition, and optional read\-aloud for responses via speech synthesis — both local, both free, neither needs a key.
 
+### Terminal and slash commands {#terminal}
+
+Type `/` in the Ask AI box and a command menu opens: keep typing to filter it, ↑/↓ to pick, Tab to complete, Enter to run, Esc to close. Anything without a slash still goes to the AI. In the box, ↑ and ↓ bring back earlier commands.
+
+| Command | What it does |
+| --- | --- |
+| `/solve` | The quiz solver on the current page; the answer grid appears in the conversation |
+| `/tutor` | Tutor mode: every question explained step by step |
+| `/scan [question]` | Reads the page; with a question, answers it from the page |
+| `/model [name]` | Shows the models, or switches the base model until the next sign-in (not when the owner set yours) |
+| `/effort low\|medium\|high` | Reasoning effort |
+| `/theme [name]` | Lists themes, or switches to one |
+| `/config [section]` | Opens Settings, e.g. `/config panel` |
+| `/terminal on\|off` | Switches the layout |
+| `/clear` | Starts a new conversation |
+| `/help [command]` | Lists commands, or explains one |
+| `/welcome`, `/insights`, `/chat`, `/messages`, `/music`, `/proxy`, `/games`, `/eaglercraft`, `/study`, `/notes`, `/humanize`, `/grammar`, `/saved`, `/admin` | Open that section |
+
+Commands follow the owner's feature switches (with `quiz` off, `/solve` isn't offered) and only list sections your account can open.
+
+**Terminal layout.** Settings → Panel → **Layout → Terminal** (or `/terminal on`) swaps the sidebar for one prompt: a monospace transcript, a `>` prompt and a status line with your name, model and effort. A command that opens another section shows **← Back to terminal** at the top. In the terminal, an unknown `/word` says so; in the classic panel it's sent to the AI as a normal message. The layout is saved per account.
+
 ### Selection assistant {#selection-assistant}
 
 ![The selection toolbar above highlighted text](docs/screenshots/selection-bubble.png)

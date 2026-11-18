@@ -1371,6 +1371,95 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpx-convo .gpa-chat { flex: 1; }
       .gpx-convo #gpa-chat:empty { flex: 0; min-height: 0; }
       .gpx-convo #gpa-chat:not(:empty) ~ .gpx-empty-ask { display: none; }
+      /* ---- Terminal: the "/" menu (both layouts) and the terminal layout ---- */
+      .gpx-composer.gpa-term-host { position: relative; }
+      /* The console sets a font on every element (* {…}), so nothing inherits
+         one: each terminal piece names the monospace stack itself. */
+      .gpa-term-menu, .gpa-term-menu *, .gpa-term-out .gpa-term-head, .gpa-term-out .gpa-term-line, .gpa-term-out .gpa-term-row, .gpa-term-out .gpa-term-row *,
+      .gpa-term-banner, .gpa-term-banner *, .gpa-term-status, .gpa-term-back,
+      .gpa-panel.gpa-term .gpa-pane[data-pane="ask"] .gpa-chat *:not(math):not(math *):not(svg):not(svg *),
+      .gpa-panel.gpa-term .gpa-pane[data-pane="ask"] .gpx-ask-ta {
+        font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Courier New', monospace;
+      }
+      .gpa-term-menu {
+        position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 6;
+        padding: 4px; max-height: 236px; overflow-y: auto; box-shadow: var(--gps-e2);
+        background: var(--gpa-field); border: 1px solid var(--gpa-border); border-radius: calc(10px * var(--gpa-rs));
+        font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px;
+      }
+      .gpa-term-menu[hidden] { display: none; }
+      .gpa-term-opt { display: flex; gap: 12px; align-items: baseline; padding: 5px 8px; border-radius: 6px; cursor: pointer; color: var(--gpa-sub); }
+      .gpa-term-opt code { flex: 0 0 auto; min-width: 13ch; color: var(--gpa-text); font: inherit; }
+      .gpa-term-opt span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .gpa-term-opt.is-sel { background: color-mix(in srgb, var(--gpa-accent) 18%, transparent); }
+      .gpa-term-opt.is-sel code { color: var(--gpa-accent); }
+      .gpa-term-head { font-weight: 600; margin-bottom: 4px; }
+      .gpa-term-head::before { content: '● '; color: var(--gpa-accent); }
+      .gpa-term-head[data-status]::after { content: '  ' attr(data-status); font-weight: 400; color: var(--gpa-sub); }
+      .gpa-term-body { white-space: normal; }
+      .gpa-term-line { white-space: pre-wrap; }
+      .gpa-term-row { display: flex; gap: 14px; align-items: baseline; padding: 1px 0; }
+      .gpa-term-row code { flex: 0 0 auto; min-width: 18ch; font: inherit; color: var(--gpa-text); }
+      .gpa-term-row span { color: var(--gpa-sub); min-width: 0; }
+      .gpa-term-group { margin-top: 8px; font-weight: 600; color: var(--gpa-sub); text-transform: uppercase; font-size: 0.85em; letter-spacing: 0.04em; }
+      .gpa-term-group:first-child { margin-top: 0; }
+      .gpa-term-dim { color: var(--gpa-sub); }
+      .gpa-term-err { color: #e5453a; }
+      .gpa-term-banner, .gpa-term-status, .gpa-term-back { display: none; }
+      .gpa-panel.gpa-term .gpa-sidebar, .gpa-panel.gpa-term #gpa-sidebar-toggle { display: none; }
+      .gpa-panel.gpa-term .gpa-pane[data-pane="ask"] .gpx-hero,
+      .gpa-panel.gpa-term .gpa-pane[data-pane="ask"] .gpx-empty-ask { display: none; }
+      .gpa-panel.gpa-term .gpa-pane[data-pane="ask"] .gpa-chat,
+      .gpa-panel.gpa-term .gpa-pane[data-pane="ask"] .gpx-ask-ta,
+      .gpa-panel.gpa-term .gpa-term-banner,
+      .gpa-panel.gpa-term .gpa-term-status {
+        font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .gpa-panel.gpa-term #gpa-chat:empty ~ .gpa-term-banner {
+        display: block; margin: 4px 0 12px; padding: 12px 14px; font-size: 12.5px; line-height: 1.6;
+        border: 1px solid color-mix(in srgb, var(--gpa-accent) 55%, var(--gpa-border)); border-radius: calc(10px * var(--gpa-rs));
+      }
+      .gpa-term-mark { color: var(--gpa-accent); }
+      .gpa-panel.gpa-term .gpa-msg.user {
+        align-self: stretch; max-width: 100%; background: transparent; color: var(--gpa-sub);
+        border: none; border-radius: 0; padding: 4px 0; font-family: inherit;
+      }
+      .gpa-panel.gpa-term .gpa-msg.user::before { content: '> '; color: var(--gpa-accent); }
+      .gpa-panel.gpa-term .gpa-msg.user.gpa-term-cmd { color: var(--gpa-text); }
+      .gpa-panel.gpa-term .gpa-msg.ai {
+        align-self: stretch; max-width: 100%; background: transparent; border: none;
+        border-left: 2px solid var(--gpa-border); border-radius: 0; padding: 2px 0 2px 12px;
+      }
+      .gpa-panel.gpa-term .gpa-msg.ai.gpa-term-out { border-left-color: transparent; padding-left: 0; }
+      .gpa-panel.gpa-term .gpa-term-banner * { font-family: inherit; }
+      .gpa-panel.gpa-term .gpx-composer-dock {
+        align-items: center; gap: 2px; padding: 2px 6px 2px 12px; border-radius: calc(8px * var(--gpa-rs));
+        background: transparent; box-shadow: none;
+      }
+      .gpa-panel.gpa-term .gpx-composer-dock::before {
+        content: '>'; color: var(--gpa-accent); font: 600 14px 'Geist Mono', ui-monospace, Menlo, monospace;
+      }
+      .gpa-panel.gpa-term .gpx-composer-dock .gpx-ask-ta,
+      .gpa-panel.gpa-term .gpx-composer-dock .gpx-ask-ta:focus {
+        min-height: 34px; padding-left: 8px; border-color: transparent; background: transparent; box-shadow: none; outline: none;
+      }
+      .gpa-panel.gpa-term .gpx-composer-dock .gpx-ask-ta::placeholder { color: var(--gpa-sub); }
+      .gpa-panel.gpa-term #gpa-ask-btn { display: none; }
+      .gpa-panel.gpa-term .gpx-composer-dock .gpx-icon-btn {
+        width: 30px; min-width: 30px; height: 30px; min-height: 30px; padding: 0; align-self: center;
+        background: transparent; border-color: transparent; box-shadow: none; color: var(--gpa-sub);
+      }
+      .gpa-panel.gpa-term .gpx-composer-dock .gpx-icon-btn:hover { color: var(--gpa-text); }
+      .gpa-panel.gpa-term .gpa-term-status {
+        display: block; margin-top: 4px; padding: 0 2px; font-size: 11px; color: var(--gpa-sub);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .gpa-panel.gpa-term.gpa-term-away .gpa-term-back {
+        display: inline-flex; align-self: flex-start; margin: 0 0 10px; padding: 6px 12px; cursor: pointer;
+        font: 500 12px 'Geist Mono', ui-monospace, Menlo, monospace; color: var(--gpa-text);
+        background: var(--gpa-field); border: 1px solid var(--gpa-border); border-radius: 999px;
+      }
+      .gpa-panel.gpa-term.gpa-term-away .gpa-term-back:hover { border-color: var(--gpa-accent); }
       .gpa-chat-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 32px 12px; font-size: 12.5px; }
       .gpa-chat-empty::before {
         content: ''; width: 48px; height: 48px; border-radius: 14px; transform: perspective(300px) rotateX(14deg) rotateY(-14deg);
@@ -4700,6 +4789,14 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
                     <button class="size-btn" data-size="center"><span class="gps-sil gps-sil-full" style="--w:60px;--h:44px"></span><span>Centered</span></button>
                     <button class="size-btn" data-size="full"><span class="gps-sil gps-sil-full" style="--w:88px;--h:56px"></span><span>Full page</span></button>
                   </div>
+                </div>
+                <div class="gps-item" data-k="panel layout terminal classic sidebar command slash">
+                  <div class="gps-label">Layout</div>
+                  <div class="gps-seg" role="group" aria-label="Layout">
+                    <button class="gps-seg-btn" data-layout="classic">Classic panel</button>
+                    <button class="gps-seg-btn" data-layout="terminal">Terminal</button>
+                  </div>
+                  <p class="gps-hint">Terminal swaps the sidebar for one prompt: type to ask the AI, or / for commands like /solve.</p>
                 </div>
                 <div class="gps-split">
                 <div class="gps-item gps-item-flush gps-split-preview" data-k="panel preview live miniature">
@@ -8550,6 +8647,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   }
 
   function activateWelcomePane() {
+    // The terminal layout lands on its prompt; /welcome still opens Welcome.
+    if (termOn()) { termOpenPane('ask'); return; }
     panel.querySelectorAll('.gpa-dropdown-item').forEach((b) => b.classList.remove('active'));
     panel.querySelectorAll('.gpa-pane').forEach((p) => p.classList.remove('active'));
     const navItem = panel.querySelector('.gpa-dropdown-item[data-tab="welcome"]');
@@ -11672,6 +11771,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   const scanMoreActions = panel.querySelector('#gpa-scan-more-actions');
   const questionRow = panel.querySelector('#gpa-question-row');
   const scanOutput = panel.querySelector('#gpa-scan-output');
+  const scanOutputEl = scanOutput;
   const askEmptyHint = panel.querySelector('#gpa-ask-empty-hint');
 
   function refreshStatus() {
@@ -11736,7 +11836,11 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // returns one answer per question (including multi-part like "2a"/"2b")
   // as the same structured grid used for plain answer-key questions.
   const quizBtn = panel.querySelector('#gpa-quiz-btn');
-  quizBtn.addEventListener('click', async () => {
+  // The solver itself, shared by the button and the terminal's /solve. It
+  // writes into `out` and reports each phase ("Double-checking…") to onPhase.
+  async function runQuizSolver(out, onPhase, scroller) {
+    const phase = onPhase || (() => {});
+    scroller = scroller || out;
     if (!pageText) pageText = extractPageText();
     refreshStatus();
     const choices = extractQuizChoices();
@@ -11744,31 +11848,34 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       ? `${pageText}\n\nFORM CONTROLS ON THIS PAGE (dropdowns / multiple-choice / checkboxes):\n${choices}`
       : pageText;
 
-    const prevLabel = quizBtn.textContent;
-    quizBtn.textContent = 'Solving…';
-    quizBtn.disabled = true;
-    scanOutput.innerHTML = '';
-    scanOutput.textContent = 'Reading the page…';
+    phase('Solving…');
+    out.innerHTML = '';
+    out.textContent = 'Reading the page…';
     try {
       const sys = 'You are analyzing a quiz, exam, or worksheet on this web page, including any dropdown menus and multiple-choice/checkbox options listed under FORM CONTROLS ON THIS PAGE. Identify every question — including multi-part questions like "2a"/"2b" — and give the single best correct answer for each, using the dropdown/multiple-choice options where relevant. Respond with ONLY a JSON array in this exact shape and nothing else: [{"q":"1","a":"B","c":85,"h":"exact verbatim phrase from PAGE TEXT for this question"}] — "q" is the question number/label as a string (use sub-labels for multi-part questions), "a" is the short correct answer, "c" is your confidence (0-100), "h" is a short exact quote (copied verbatim from PAGE TEXT, not paraphrased) that pinpoints where that question appears — so it can be found and highlighted on the page. If you genuinely cannot determine an answer for an item, use "a":"Unclear" and a low "c". Do not include any text outside the JSON array.';
-      const out = await callAI(combinedText, sys, screenshotDataUrl ? [screenshotDataUrl] : null, true);
-      const grid = tryParseAnswerGrid(out);
+      const raw = await callAI(combinedText, sys, screenshotDataUrl ? [screenshotDataUrl] : null, true);
+      const grid = tryParseAnswerGrid(raw);
       if (grid) {
-        quizBtn.textContent = 'Double-checking…';
+        phase('Double-checking…');
         const verified = mergeHighlightField(
           await verifyGridAnswers(combinedText, grid, screenshotDataUrl ? [screenshotDataUrl] : null),
           grid
         );
-        renderAnswerGrid(scanOutput, verified);
-        appendModelBadge(scanOutput);
-        maybeSuggestBetterModel(scanOutput);
+        renderAnswerGrid(out, verified);
+        appendModelBadge(out);
+        maybeSuggestBetterModel(out);
         highlightSnippetsOnPage(verified.map((it) => it.h).filter(Boolean));
       } else {
-        typeText(scanOutput, out, scanOutput, () => appendModelBadge(scanOutput));
+        typeText(out, raw, scroller, () => appendModelBadge(out));
       }
     } catch (e) {
-      showError(scanOutput, e, currentProviderLabel());
-    } finally {
+      showError(out, e, currentProviderLabel());
+    }
+  }
+  quizBtn.addEventListener('click', async () => {
+    const prevLabel = quizBtn.textContent;
+    quizBtn.disabled = true;
+    try { await runQuizSolver(scanOutput, (label) => { quizBtn.textContent = label; }); } finally {
       quizBtn.textContent = prevLabel;
       quizBtn.disabled = false;
     }
@@ -11779,7 +11886,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // explanation right next to itself on the page. You enter/submit all
   // answers yourself — the tutor explains, it doesn't take the quiz.
   const tutorBtn = panel.querySelector('#gpa-tutor-btn');
-  tutorBtn.addEventListener('click', async () => {
+  // Shared by the Tutor mode button and the terminal's /tutor.
+  async function runTutor(out, onPhase, scroller) {
+    const phase = onPhase || (() => {});
+    scroller = scroller || out;
     if (!pageText) pageText = extractPageText();
     refreshStatus();
     const choices = extractQuizChoices();
@@ -11787,11 +11897,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       ? `${pageText}\n\nFORM CONTROLS ON THIS PAGE (dropdowns / multiple-choice / checkboxes):\n${choices}`
       : pageText;
 
-    const prevLabel = tutorBtn.textContent;
-    tutorBtn.textContent = 'Preparing your tutor…';
-    tutorBtn.disabled = true;
-    scanOutput.innerHTML = '';
-    scanOutput.textContent = 'Reading the page and working out the explanations…';
+    phase('Preparing your tutor…');
+    out.innerHTML = '';
+    out.textContent = 'Reading the page and working out the explanations…';
     try {
       const sys = [
         'You are an expert tutor helping a student understand a quiz, exam, or worksheet on this web page, including any dropdown menus and multiple-choice/checkbox options listed under FORM CONTROLS ON THIS PAGE.',
@@ -11808,12 +11916,12 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         'Respond with ONLY a JSON array and nothing else, in exactly this shape: [{"q":"7","a":"B","c":90,"concept":"...","why":"...","sol":"... ; ... ; ...","pitfall":"...","cite":[{"label":"...","url":"..."}],"h":"..."}].',
         'If you genuinely cannot determine an answer, use "a":"Unclear", a low "c", and say what is missing in "why". Do not include any text outside the JSON array.'
       ].join(' ');
-      const out = await callAI(combinedText, sys, screenshotDataUrl ? [screenshotDataUrl] : null, true);
-      const grid = tryParseAnswerGrid(out);
+      const raw = await callAI(combinedText, sys, screenshotDataUrl ? [screenshotDataUrl] : null, true);
+      const grid = tryParseAnswerGrid(raw);
       if (grid) {
-        renderTutorGrid(scanOutput, grid);
-        appendModelBadge(scanOutput);
-        maybeSuggestBetterModel(scanOutput);
+        renderTutorGrid(out, grid);
+        appendModelBadge(out);
+        maybeSuggestBetterModel(out);
         highlightSnippetsOnPage(grid.map((it) => it.h).filter(Boolean));
         startAutoFollow(grid);
         const hint = document.createElement('div');
@@ -11822,13 +11930,18 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         hint.textContent = autoFollowOn()
           ? 'Questions are highlighted on the page, and the explanation for whichever one is on screen floats next to it automatically — it follows along as you press Next. Drag the popup by its header to park it anywhere. 💾 saves an explanation you can switch on later as AI context. You type the answers; the tutor explains.'
           : 'Questions are highlighted on the page. Press 📍 on any card to float its explanation next to the question, or turn Auto-explain on to have it follow the question you are looking at. You type the answers; the tutor explains.';
-        scanOutput.appendChild(hint);
+        out.appendChild(hint);
       } else {
-        typeText(scanOutput, out, scanOutput);
+        typeText(out, raw, scroller);
       }
     } catch (e) {
-      showError(scanOutput, e, currentProviderLabel());
-    } finally {
+      showError(out, e, currentProviderLabel());
+    }
+  }
+  tutorBtn.addEventListener('click', async () => {
+    const prevLabel = tutorBtn.textContent;
+    tutorBtn.disabled = true;
+    try { await runTutor(scanOutput, (label) => { tutorBtn.textContent = label; }); } finally {
       tutorBtn.textContent = prevLabel;
       tutorBtn.disabled = false;
     }
@@ -12160,9 +12273,11 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     if (e.key === 'Enter') askPageQuestion();
   });
 
-  async function askPageQuestion() {
+  // qArg/outArg let the terminal's /scan ask without the Page Insights box.
+  async function askPageQuestion(qArg, outArg) {
     const input = panel.querySelector('#gpa-question');
-    const q = input.value.trim();
+    const q = typeof qArg === 'string' ? qArg.trim() : input.value.trim();
+    const scanOutput = outArg || scanOutputEl;
     if (!q) return;
     if (!pageText && !screenshotDataUrl) { scanOutput.textContent = 'Scan the page or capture the screen first.'; return; }
     scanOutput.innerHTML = SKELETON_HTML;
@@ -15312,6 +15427,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   async function sendChat() {
     const q = askInput.value.trim();
     const imgs = pendingImages.slice();
+    // "/solve", "/help"… run as terminal commands instead of going to the AI.
+    if (!imgs.length && termWants(q)) { termRun(q); return; }
     if (!q && !imgs.length && !askFiles.some((f) => !f.sent)) return;
     const files = askFiles.slice();
     const fresh = files.filter((f) => !f.sent);
@@ -15418,7 +15535,453 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   }
   askBtn.addEventListener('click', sendChat);
   // Enter sends; Shift+Enter is a new line.
-  askInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(); } });
+  askInput.addEventListener('keydown', (e) => { if (termKeydown(e)) return; if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendChat(); } });
+
+  // ---- Terminal: slash commands in the Ask AI box ---------------------------
+  // One registry drives the "/" menu, /help and running a command. A command
+  // runs the same function as the panel button it stands for (runQuizSolver,
+  // runTutor, askPageQuestion…), so the classic panel and the terminal can't
+  // drift apart. Typing without a slash still goes to Ask AI as before.
+  // Commands work in the classic layout too; Settings → Panel → Layout →
+  // Terminal (or /terminal on) also swaps the sidebar for a terminal-style
+  // screen: one transcript, a prompt, and a status line.
+  const TERM_MODE_KEY = 'gpa_terminal_mode';
+  const TERM_HIST_KEY = 'gpa_terminal_history';
+  const TERM_HIST_MAX = 50;
+  const TERM_CONFIG_SECTIONS = ['overview', 'theme', 'colors', 'panel', 'effects', 'type', 'icon', 'ai', 'memory', 'controls', 'account', 'advanced'];
+  const termSafe = (fn, dflt) => { try { return fn(); } catch (e) { return dflt; } };
+  function termOn() { return termSafe(() => localStorage.getItem(TERM_MODE_KEY) === 'on', false); }
+  function termNavItem(tab) { return panel.querySelector(`.gpa-dropdown-item[data-tab="${tab}"]`); }
+  function termPaneShown(tab) { const item = termNavItem(tab); return !!item && item.style.display !== 'none'; }
+  function termOpenPane(tab) { const item = termNavItem(tab); if (!item) return false; item.click(); return true; }
+  function termIsOwner() { return termSafe(() => !!ownerMode, false); }
+  function termUser() { return termSafe(() => currentUser, null); }
+
+  // ---- Output ----
+  // A command's output is an AI-side message: a "● Title" line with a live
+  // status after it, then a body the command fills.
+  function termEcho(line) {
+    const m = addMsg('user', line);
+    m.classList.add('gpa-term-cmd');
+    return m;
+  }
+  function termBlock(title) {
+    const el = addMsg('ai', '');
+    el.classList.add('gpa-term-out');
+    const head = document.createElement('div');
+    head.className = 'gpa-term-head';
+    head.textContent = title;
+    const body = document.createElement('div');
+    body.className = 'gpa-term-body';
+    el.append(head, body);
+    return {
+      el, head, body,
+      status(t) { if (t) head.dataset.status = t; else delete head.dataset.status; },
+      line(text, cls) {
+        const d = document.createElement('div');
+        d.className = 'gpa-term-line' + (cls ? ' ' + cls : '');
+        d.textContent = text;
+        body.appendChild(d);
+        chatEl.scrollTop = chatEl.scrollHeight;
+        return d;
+      },
+      row(left, right, cls) {
+        const d = document.createElement('div');
+        d.className = 'gpa-term-row' + (cls ? ' ' + cls : '');
+        const l = document.createElement('code');
+        l.textContent = left;
+        const r = document.createElement('span');
+        r.textContent = right || '';
+        d.append(l, r);
+        body.appendChild(d);
+        return d;
+      },
+      done() { this.status(''); chatEl.scrollTop = chatEl.scrollHeight; }
+    };
+  }
+
+  // ---- Registry ----
+  // { name, aliases, args, desc, group, flags: feature switches that must be
+  //   on, avail(): extra check, complete(): argument suggestions, run(args) }
+  const TERM_COMMANDS = [
+    { name: 'help', aliases: ['?', 'commands'], args: '[command]', group: 'System', desc: 'List commands, or show how to use one',
+      complete: () => TERM_COMMANDS.map((c) => c.name), run: termHelp },
+    { name: 'clear', aliases: ['new', 'reset'], group: 'System', desc: 'Clear the conversation and start fresh',
+      run: () => { panel.querySelector('#gpa-ask-new').click(); } },
+    { name: 'solve', aliases: ['quiz'], group: 'Page', flags: ['quiz'], desc: 'Solve the quiz on this page (answer grid, double-checked)',
+      run: async () => {
+        const b = termBlock('Solve quiz');
+        await runQuizSolver(b.body, (s) => b.status(s), chatEl);
+        b.done();
+      } },
+    { name: 'tutor', group: 'Page', flags: ['tutor'], desc: 'Explain every question on this page step by step',
+      run: async () => {
+        const b = termBlock('Tutor');
+        await runTutor(b.body, (s) => b.status(s), chatEl);
+        b.done();
+      } },
+    { name: 'scan', aliases: ['page'], args: '[question]', group: 'Page', desc: 'Read this page, or ask a question about it',
+      run: async (args) => {
+        pageText = extractPageText();
+        refreshStatus();
+        if (!args) {
+          const b = termBlock('Scan');
+          const words = pageText ? pageText.split(/\s+/).filter(Boolean).length : 0;
+          b.line(`Read ${pageText.length.toLocaleString()} characters (${words.toLocaleString()} words) from ${location.hostname || 'this page'}.`);
+          b.line('Ask about it with /scan <question>, or solve it with /solve.', 'gpa-term-dim');
+          b.done();
+          return;
+        }
+        const b = termBlock('Page answer');
+        b.status('Reading…');
+        await askPageQuestion(args, b.body);
+        b.done();
+      } },
+    { name: 'model', args: '[model]', group: 'AI', desc: 'Show the AI model, or switch it for this session',
+      complete: () => OPENAI_MODEL_LIST.map((m) => m[0]), run: termModel },
+    { name: 'effort', args: 'low|medium|high', group: 'AI', desc: 'Reasoning effort for models that think',
+      complete: () => ['low', 'medium', 'high'], run: termEffort },
+    { name: 'theme', args: '[name]', group: 'Look', desc: 'List themes, or switch to one',
+      complete: () => Object.keys(THEMES), run: termTheme },
+    { name: 'config', aliases: ['settings'], args: '[section]', group: 'Look', desc: 'Open Settings, optionally at a section',
+      complete: () => TERM_CONFIG_SECTIONS, run: termConfig },
+    { name: 'terminal', aliases: ['layout'], args: 'on|off', group: 'Look', desc: 'Switch between the terminal and the classic panel',
+      complete: () => ['on', 'off'],
+      run: (args) => {
+        const a = args.toLowerCase();
+        const on = a === 'on' ? true : a === 'off' ? false : !termOn();
+        setTerminalMode(on);
+        const b = termBlock('Layout');
+        b.line(on ? 'Terminal layout on. /terminal off brings the sidebar back.' : 'Classic panel layout. Slash commands still work here.');
+        b.done();
+      } }
+  ];
+  // Every other pane opens with a command of its own until it gets real
+  // arguments (/music <song>, /proxy <url>…) in the next phase.
+  [
+    ['welcome', 'welcome', 'Open the Welcome screen'],
+    ['insights', 'scan', 'Open Page Insights'],
+    ['ask', 'ask', 'Back to this conversation'],
+    ['chat', 'chat', 'Open the chat rooms'],
+    ['staff', 'staffchat', 'Open staff chat'],
+    ['messages', 'dms', 'Open direct messages and group chats', ['dm', 'dms']],
+    ['music', 'music', 'Open Music'],
+    ['proxy', 'browser', 'Open the Proxy', ['browser']],
+    ['eaglercraft', 'eaglercraft', 'Open Eaglercraft', ['minecraft']],
+    ['games', 'games', 'Open Games'],
+    ['study', 'study', 'Open Study (flashcards)', ['flashcards']],
+    ['notes', 'notes', 'Open Notes'],
+    ['humanize', 'humanize', 'Open Humanize'],
+    ['grammar', 'grammar', 'Open Grammar'],
+    ['saved', 'saved', 'Open Saved insights, calendar and timer'],
+    ['admin', 'admin', 'Open the Admin console']
+  ].forEach(([name, tab, desc, aliases]) => {
+    TERM_COMMANDS.push({ name, aliases, group: 'Open', desc, pane: tab, avail: () => termPaneShown(tab), run: () => { termOpenPane(tab); } });
+  });
+  const TERM_GROUPS = ['Page', 'AI', 'Open', 'Look', 'System'];
+
+  function termFind(name) {
+    const n = String(name || '').toLowerCase();
+    return TERM_COMMANDS.find((c) => c.name === n || (c.aliases || []).includes(n)) || null;
+  }
+  function termAvailable(cmd) {
+    if (termIsOwner()) return cmd.avail ? cmd.avail() : true;
+    if ((cmd.flags || []).some((f) => !termSafe(() => featureOn(f), true))) return false;
+    return cmd.avail ? !!cmd.avail() : true;
+  }
+
+  // ---- Commands ----
+  function termHelp(args) {
+    const one = args && termFind(args.replace(/^\//, ''));
+    if (one) {
+      const b = termBlock('/' + one.name);
+      b.line(one.desc);
+      b.row('/' + one.name + (one.args ? ' ' + one.args : ''), 'usage');
+      if (one.aliases && one.aliases.length) b.row(one.aliases.map((a) => '/' + a).join('  '), 'also');
+      const opts = one.complete ? one.complete() : [];
+      if (opts.length) b.line('Options: ' + opts.join(', '), 'gpa-term-dim');
+      b.done();
+      return;
+    }
+    const b = termBlock('Commands');
+    TERM_GROUPS.forEach((g) => {
+      const cmds = TERM_COMMANDS.filter((c) => c.group === g && termAvailable(c));
+      if (!cmds.length) return;
+      b.line(g, 'gpa-term-group');
+      cmds.forEach((c) => b.row('/' + c.name + (c.args ? ' ' + c.args : ''), c.desc));
+    });
+    b.line('Type without a slash to ask the AI. Tab completes, ↑ and ↓ bring back earlier commands.', 'gpa-term-dim');
+    b.done();
+  }
+  function termModel(args) {
+    const sm = termSafe(() => srvModels(), null);
+    const base = termSafe(() => effectiveModel(OPENAI_MODEL, false), OPENAI_MODEL);
+    const b = termBlock('Model');
+    if (!args) {
+      b.row('base', base + (sm && sm.base ? '  (set by the owner)' : ''));
+      b.row('hard questions', autoUpgradeOn() ? smartModel() : 'auto-upgrade off, uses the base model');
+      b.line('Switch with /model <name>:', 'gpa-term-dim');
+      OPENAI_MODEL_LIST.forEach(([id, label]) => b.row((id === base ? '● ' : '  ') + id, label.replace(/^★\s*/, '').replace(id, '').replace(/^\s*—\s*/, '') + (label.startsWith('★') ? ' (big model, limited)' : '')));
+      b.done();
+      return;
+    }
+    const id = args.trim();
+    if (sm && sm.base) { b.line(`The owner set your model to ${sm.base}, so it can't be changed here.`, 'gpa-term-err'); b.done(); return; }
+    if (!OPENAI_MODEL_LIST.some((m) => m[0] === id) && !termIsOwner()) {
+      b.line(`Unknown model "${id}". /model lists the ones you can pick.`, 'gpa-term-err'); b.done(); return;
+    }
+    try { localStorage.setItem(ADMIN_KEYS.MODEL, id); } catch (e) { /* storage blocked */ }
+    b.line(`Model set to ${id}. It applies to the next question and goes back to ${OPENAI_MODEL} when you sign in again.`);
+    b.done();
+    termStatus();
+  }
+  function termEffort(args) {
+    const b = termBlock('Reasoning effort');
+    const a = args.toLowerCase();
+    if (!a) { b.line(`Effort is ${reasoningEffort}. Change it with /effort low, medium or high.`); b.done(); return; }
+    const btn = panel.querySelector(`.gpa-reason[data-reason="${a}"]`);
+    if (!btn) { b.line('Use /effort low, /effort medium or /effort high.', 'gpa-term-err'); b.done(); return; }
+    if (btn.disabled) { b.line('Neither of your models uses reasoning effort right now, so this has no effect.', 'gpa-term-err'); b.done(); return; }
+    btn.click();
+    b.line(`Effort set to ${reasoningEffort}.`);
+    b.done();
+    termStatus();
+  }
+  function termTheme(args) {
+    const b = termBlock('Theme');
+    const cur = termSafe(() => localStorage.getItem(THEME_KEY), '') || 'matte';
+    const name = args.toLowerCase().replace(/\s+/g, '');
+    if (!name) {
+      b.line('Themes (switch with /theme <name>):', 'gpa-term-dim');
+      b.line(Object.keys(THEMES).map((k) => (k === cur ? '● ' : '') + k).join('   '));
+      b.done();
+      return;
+    }
+    if (!THEMES[name]) { b.line(`No theme called "${args}". /theme lists them.`, 'gpa-term-err'); b.done(); return; }
+    applyTheme(name);
+    if (typeof saveProgress === 'function') termSafe(() => saveProgress());
+    b.line(`Theme set to ${name}.`);
+    b.done();
+  }
+  function termConfig(args) {
+    const sec = args.toLowerCase();
+    if (sec && !TERM_CONFIG_SECTIONS.includes(sec)) {
+      const b = termBlock('Settings');
+      b.line(`No settings section "${args}". Sections: ${TERM_CONFIG_SECTIONS.join(', ')}.`, 'gpa-term-err');
+      b.done();
+      return;
+    }
+    termOpenPane('theme');
+    if (sec) { const tab = panel.querySelector(`.gps-tab[data-sec="${sec}"]`); if (tab) tab.click(); }
+  }
+
+  // ---- Running ----
+  let termHist = termSafe(() => JSON.parse(localStorage.getItem(TERM_HIST_KEY) || '[]'), []);
+  if (!Array.isArray(termHist)) termHist = [];
+  let termHistIdx = -1;
+  let termHistDraft = '';
+  function termRemember(line) {
+    termHist = termHist.filter((h) => h !== line);
+    termHist.unshift(line);
+    termHist = termHist.slice(0, TERM_HIST_MAX);
+    termHistIdx = -1;
+    termSafe(() => localStorage.setItem(TERM_HIST_KEY, JSON.stringify(termHist)));
+  }
+  // True when `text` should run as a command instead of going to the AI: a
+  // known command anywhere, or anything slash-led in the terminal layout
+  // (there an unknown command says so; in the classic panel it's just sent).
+  function termWants(text) {
+    const m = /^\/(\S+)/.exec(text);
+    return !!m && (!!termFind(m[1]) || termOn());
+  }
+  async function termRun(text) {
+    const line = text.trim();
+    const m = /^\/(\S+)\s*([\s\S]*)$/.exec(line);
+    askInput.value = '';
+    growAsk();
+    termCloseMenu();
+    termRemember(line);
+    termEcho(line);
+    const cmd = m && termFind(m[1]);
+    if (!cmd) {
+      const b = termBlock('Unknown command');
+      b.line(`There's no /${m ? m[1] : ''} command. /help lists them.`, 'gpa-term-err');
+      b.done();
+      return;
+    }
+    if (!termAvailable(cmd)) {
+      const b = termBlock('/' + cmd.name);
+      b.line(cmd.pane ? 'That section isn\'t open to your account.' : 'The owner turned this off.', 'gpa-term-err');
+      b.done();
+      return;
+    }
+    try {
+      await cmd.run((m[2] || '').trim());
+    } catch (e) {
+      const b = termBlock('/' + cmd.name + ' failed');
+      showError(b.body, e, currentProviderLabel());
+      b.done();
+    }
+  }
+
+  // ---- The "/" menu ----
+  // Opens while the box holds "/word" (no space yet). ↑/↓ pick, Tab
+  // completes, Enter runs the picked command, Esc closes.
+  const termMenu = document.createElement('div');
+  termMenu.className = 'gpa-term-menu';
+  termMenu.id = 'gpa-term-menu';
+  termMenu.setAttribute('role', 'listbox');
+  termMenu.setAttribute('aria-label', 'Commands');
+  termMenu.hidden = true;
+  const askComposer = askInput.closest('.gpx-composer');
+  askComposer.classList.add('gpa-term-host');
+  askComposer.appendChild(termMenu);
+  let termMenuItems = [];
+  let termMenuSel = 0;
+  function termMatches(prefix) {
+    const p = prefix.toLowerCase();
+    const avail = TERM_COMMANDS.filter(termAvailable);
+    const starts = avail.filter((c) => c.name.startsWith(p) || (c.aliases || []).some((a) => a.startsWith(p)));
+    const has = p.length > 1 ? avail.filter((c) => !starts.includes(c) && c.name.includes(p)) : [];
+    return starts.concat(has).slice(0, 12);
+  }
+  function termCloseMenu() {
+    termMenu.hidden = true;
+    termMenuItems = [];
+    askInput.removeAttribute('aria-activedescendant');
+  }
+  function termRenderMenu() {
+    termMenu.innerHTML = '';
+    termMenuItems.forEach((c, i) => {
+      const row = document.createElement('div');
+      row.className = 'gpa-term-opt' + (i === termMenuSel ? ' is-sel' : '');
+      row.id = 'gpa-term-opt-' + i;
+      row.setAttribute('role', 'option');
+      row.setAttribute('aria-selected', i === termMenuSel ? 'true' : 'false');
+      const n = document.createElement('code');
+      n.textContent = '/' + c.name + (c.args ? ' ' + c.args : '');
+      const d = document.createElement('span');
+      d.textContent = c.desc;
+      row.append(n, d);
+      row.addEventListener('mousedown', (e) => { e.preventDefault(); termMenuSel = i; termPick(true); });
+      termMenu.appendChild(row);
+    });
+    askInput.setAttribute('aria-activedescendant', 'gpa-term-opt-' + termMenuSel);
+    const sel = termMenu.children[termMenuSel];
+    if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: 'nearest' });
+  }
+  function termUpdateMenu() {
+    const m = /^\/(\S*)$/.exec(askInput.value);
+    if (!m) { termCloseMenu(); return; }
+    termMenuItems = termMatches(m[1]);
+    if (!termMenuItems.length) { termCloseMenu(); return; }
+    termMenuSel = Math.min(termMenuSel, termMenuItems.length - 1);
+    termMenu.hidden = false;
+    termRenderMenu();
+  }
+  // run=false completes "/name " into the box for typing arguments.
+  function termPick(run) {
+    const c = termMenuItems[termMenuSel];
+    if (!c) return;
+    if (run) { termRun('/' + c.name); return; }
+    askInput.value = '/' + c.name + (c.args ? ' ' : '');
+    askInput.setSelectionRange(askInput.value.length, askInput.value.length);
+    termCloseMenu();
+  }
+  askInput.addEventListener('input', () => { termMenuSel = 0; termUpdateMenu(); });
+  askInput.addEventListener('blur', () => setTimeout(termCloseMenu, 120));
+  // Returns true when it handled the key (the box's own Enter-to-send
+  // listener checks this first).
+  function termKeydown(e) {
+    if (e.isComposing) return false;
+    if (!termMenu.hidden && termMenuItems.length) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const n = termMenuItems.length;
+        termMenuSel = (termMenuSel + (e.key === 'ArrowDown' ? 1 : n - 1)) % n;
+        termRenderMenu();
+        return true;
+      }
+      if (e.key === 'Tab') { e.preventDefault(); termPick(false); return true; }
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); termPick(true); return true; }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); termCloseMenu(); return true; }
+    }
+    // Command history: ↑/↓ on a single-line box, like a shell.
+    if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey
+        && !askInput.value.includes('\n') && termHist.length) {
+      const up = e.key === 'ArrowUp';
+      if (!up && termHistIdx < 0) return false;
+      if (up && termHistIdx < 0 && askInput.value && !askInput.value.startsWith('/')) return false;
+      e.preventDefault();
+      if (termHistIdx < 0) termHistDraft = askInput.value;
+      termHistIdx = up ? Math.min(termHistIdx + 1, termHist.length - 1) : termHistIdx - 1;
+      askInput.value = termHistIdx < 0 ? termHistDraft : termHist[termHistIdx];
+      growAsk();
+      askInput.setSelectionRange(askInput.value.length, askInput.value.length);
+      termCloseMenu();
+      return true;
+    }
+    return false;
+  }
+
+  // ---- Terminal layout ----
+  const termBanner = document.createElement('div');
+  termBanner.className = 'gpa-term-banner';
+  termBanner.innerHTML = '<div class="gpa-term-banner-title"><span class="gpa-term-mark">✻</span> <b>Saints Service</b> <span class="gpa-term-dim">terminal</span></div>'
+    + '<div class="gpa-term-dim">/help for commands · /solve to solve this page · /terminal off for the classic panel</div>'
+    + '<div class="gpa-term-dim gpa-term-where"></div>';
+  chatEl.after(termBanner);
+  const termStatusEl = document.createElement('div');
+  termStatusEl.className = 'gpa-term-status';
+  termStatusEl.setAttribute('aria-live', 'off');
+  askComposer.after(termStatusEl);
+  const termBack = document.createElement('button');
+  termBack.type = 'button';
+  termBack.className = 'gpa-term-back';
+  termBack.textContent = '← Back to terminal';
+  termBack.addEventListener('click', () => { termOpenPane('ask'); setTimeout(() => askInput.focus(), 0); });
+  const termMain = panel.querySelector('#gpa-main');
+  if (termMain) termMain.prepend(termBack);
+  function termStatus() {
+    const user = termUser();
+    const model = termSafe(() => effectiveModel(OPENAI_MODEL, false), OPENAI_MODEL);
+    const parts = [user ? user : 'not signed in', model];
+    if (modelSupportsReasoning(model) || termSafe(() => autoUpgradeOn() && modelSupportsReasoning(smartModel()), false)) parts.push(reasoningEffort + ' effort');
+    termStatusEl.textContent = parts.join(' · ') + '   ? /help';
+    const where = termBanner.querySelector('.gpa-term-where');
+    if (where) where.textContent = 'on ' + (location.hostname || 'this page');
+  }
+  function termSyncAway() {
+    panel.classList.toggle('gpa-term-away', termOn() && !!askPane && !askPane.classList.contains('active'));
+  }
+  if (askPane && typeof MutationObserver !== 'undefined') {
+    new MutationObserver(termSyncAway).observe(askPane, { attributes: true, attributeFilter: ['class'] });
+  }
+  function termSyncSettings() {
+    panel.querySelectorAll('.gps-seg-btn[data-layout]').forEach((b) => {
+      b.classList.toggle('primary', (b.dataset.layout === 'terminal') === termOn());
+      b.setAttribute('aria-pressed', (b.dataset.layout === 'terminal') === termOn() ? 'true' : 'false');
+    });
+  }
+  const askPlaceholder = askInput.getAttribute('placeholder') || '';
+  function setTerminalMode(on, opts) {
+    termSafe(() => localStorage.setItem(TERM_MODE_KEY, on ? 'on' : 'off'));
+    panel.classList.toggle('gpa-term', !!on);
+    askInput.setAttribute('placeholder', on ? 'Ask anything, or / for commands' : askPlaceholder);
+    termSyncSettings();
+    termStatus();
+    if (on) {
+      termSafe(() => setSidebarHidden(true));
+      if (!(opts && opts.stay)) termOpenPane('ask');
+    }
+    termSyncAway();
+    if (!(opts && opts.quiet) && typeof saveProgress === 'function') termSafe(() => saveProgress());
+  }
+  panel.querySelectorAll('.gps-seg-btn[data-layout]').forEach((b) => {
+    b.addEventListener('click', () => setTerminalMode(b.dataset.layout === 'terminal', { stay: true }));
+  });
+  askInput.addEventListener('focus', termStatus);
+  setTerminalMode(termOn(), { quiet: true, stay: !termOn() });
 
   // ---- Chat -----------------------------------------------------------------
   // A public room everyone shares, plus private rooms you join with a code the
@@ -19514,6 +20077,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         applyPanelSize(sz);
       }
       if (typeof gpsRefreshAll === 'function') gpsRefreshAll();
+      // Each account keeps its own layout (gpa_terminal_mode is in the snapshot).
+      setTerminalMode(termOn(), { quiet: true });
     } catch (e) { /* a restored-but-odd value shouldn't block sign-in */ }
   }
 
