@@ -42,7 +42,8 @@
     "preview": "wrangler preview",
     "build:eaglercraft": "bash scripts/build-eaglercraft.sh",
     "build:web": "node web/scripts/build.mjs",
-    "test:runtime": "node tests/mobile-runtime.mjs"
+    "test:runtime": "node tests/mobile-runtime.mjs",
+    "build:offline": "node scripts/build-offline.mjs"
   },
   "engines": {
     "node": ">=18"

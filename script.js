@@ -183,10 +183,18 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // fills the screen edge to edge, and there is no page underneath to close
   // or collapse to.
   const APP_MODE = window.__agentConsoleApp === true;
+  // The offline file (npm run build:offline): one .html opened straight from
+  // disk. It looks like the app (full screen, no page underneath) but isn't
+  // the installed app: no service worker, so no push, and none of the app's
+  // staff-only sign-in rules. It talks to the live Worker like a website does.
+  const FILE_MODE = window.__agentConsoleFile === true;
+  const SHELL_MODE = APP_MODE || FILE_MODE;
+  // What sign-in reports as "where": a file has no host name.
+  const consoleSite = () => location.host || (FILE_MODE ? 'local-file' : '');
   // The Saints Service planet (sign-in card): tapping it creates an account,
   // as the ＋ used to. Inlined so it shows on any website.
   const SAINTS_LOGO = 'data:image/png;base64,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';
-  const FULL_MARGIN = APP_MODE ? 0 : 16;
+  const FULL_MARGIN = SHELL_MODE ? 0 : 16;
   // "Centered" (the default whenever the console is injected into a website):
   // a moderate window in the middle of the page, so it isn't obvious from
   // across the room and doesn't cover the whole site. Tracks the viewport.
@@ -198,7 +206,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     };
   }
   function sizeFor(key) {
-    if (APP_MODE) return { w: window.innerWidth, h: window.innerHeight };
+    if (SHELL_MODE) return { w: window.innerWidth, h: window.innerHeight };
     if (key === 'center') return centeredSize();
     if (key === 'full') {
       return {
@@ -3661,7 +3669,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   particleWrap.appendChild(particleCanvas);
 
   const panel = document.createElement('div');
-  panel.className = 'gpa-panel' + (APP_MODE ? ' gpa-app' : ' gpa-injected');
+  panel.className = 'gpa-panel' + (SHELL_MODE ? ' gpa-app' : ' gpa-injected') + (FILE_MODE ? ' gpa-file' : '');
   particleWrap.appendChild(panel);
   // Fold / unfold a tab's top card (see gpxHero).
   panel.addEventListener('click', (e) => {
@@ -7516,7 +7524,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   })();
 
   function toggleAgentConsole() {
-    if (APP_MODE) return; // nothing underneath to collapse to
+    if (SHELL_MODE) return; // nothing underneath to collapse to
     const active = root.activeElement;
     const focusWasInPanel = !!active && active !== minimized && panel.contains(active);
     const focusWasOnMini = active === minimized;
@@ -9241,13 +9249,13 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // moderate-sized (owner's rule: not the whole screen); Full page is still
   // in Settings for the rest of that visit. The smaller presets are kept.
   const storedSize = localStorage.getItem(PANEL_SIZE_KEY);
-  let panelSizeKey = APP_MODE ? 'full' : (PANEL_SIZES[storedSize] ? storedSize : 'center');
+  let panelSizeKey = SHELL_MODE ? 'full' : (PANEL_SIZES[storedSize] ? storedSize : 'center');
   const sizeBtns = panel.querySelectorAll('.size-btn');
   function setSizeUI(s) {
     sizeBtns.forEach((b) => b.classList.toggle('primary', b.dataset.size === s));
   }
   function applyPanelSize(key) {
-    if (APP_MODE) key = 'full';
+    if (SHELL_MODE) key = 'full';
     panelSizeKey = (PANEL_SIZES[key] || key === 'full' || key === 'center') ? key : 'center';
     localStorage.setItem(PANEL_SIZE_KEY, panelSizeKey);
     const { w, h } = sizeFor(panelSizeKey);
@@ -18203,7 +18211,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     dnHint.textContent = perm === 'unsupported'
       ? (deskPhone ? 'For computers (Chrome, Chromebook). On a phone, use Mention alerts below.' : window.isSecureContext === false ? 'This page isn’t secure (http), so it can’t show notifications. Open Saints Service on an https website or in the app.' : 'This browser can’t show notifications here. Use Mention alerts in the Saints Service app.')
       : perm === 'denied' ? blockedHelp()
-        : on ? 'On for this website' + (APP_MODE ? '' : ' (' + location.hostname + ')') + '. Pop-ups show while Saints Service is open in a tab, even in the background; Chrome may hold them back up to a minute in a tab that’s been in the background a while.'
+        : on ? 'On for this website' + (SHELL_MODE ? '' : ' (' + location.hostname + ')') + '. Pop-ups show while Saints Service is open in a tab, even in the background; Chrome may hold them back up to a minute in a tab that’s been in the background a while.'
           : 'A notification on this computer (Chrome, Chromebook) when someone messages you, mentions you or uses @everyone, while Saints Service is open in a tab.' + (APP_MODE ? '' : ' Chrome asks once for each website you open it on.');
     renderDeskChip();
   }
@@ -20154,7 +20162,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // Signed out on a website, the host box must not catch clicks around the
   // sign-in card either (the page underneath stays usable).
   function syncHostHit() {
-    host.style.pointerEvents = !APP_MODE && panel.classList.contains('gpa-locked') && !panel.classList.contains('gpa-minimized') ? 'none' : '';
+    host.style.pointerEvents = !SHELL_MODE && panel.classList.contains('gpa-locked') && !panel.classList.contains('gpa-minimized') ? 'none' : '';
   }
   function setLockedChrome(locked) {
     panel.classList.toggle('gpa-locked', locked);
@@ -20675,7 +20683,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         method: 'POST', headers: { 'Content-Type': 'text/plain', ...(extra || {}) },
         // site: which website this copy of the console is on (shown in the
         // "already signed in on …" warning); takeover: the person confirmed.
-        body: JSON.stringify({ user, verifier, site: location.host, device: consoleDeviceId(), ...(opts && opts.takeover ? { takeover: true } : {}), ...(opts && opts.invite ? { invite: opts.invite } : {}) })
+        body: JSON.stringify({ user, verifier, site: consoleSite(), device: consoleDeviceId(), ...(opts && opts.takeover ? { takeover: true } : {}), ...(opts && opts.invite ? { invite: opts.invite } : {}) })
       }).then(async (r) => ({ status: r.status, data: await r.json().catch(() => ({})) }));
       let r = await post('/auth/login');
       if (r.status === 404 && r.data.missing && !canRegister) {
@@ -20769,7 +20777,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     if (!tok && !code) return { ok: false, error: 'Connect Admin (Admin tab → your admin token) or enter your owner code first.' };
     try {
       const verifier = await serverVerifier(currentUser, pin);
-      const res = await fetch(AUTH_BASE() + '/auth/owner-pin', { method: 'POST', headers: h, body: JSON.stringify({ user: currentUser, verifier, site: location.host }) });
+      const res = await fetch(AUTH_BASE() + '/auth/owner-pin', { method: 'POST', headers: h, body: JSON.stringify({ user: currentUser, verifier, site: consoleSite() }) });
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.ok || !d.token) return { ok: false, error: d.error || ('Couldn’t reset the PIN (HTTP ' + res.status + ').') };
       const profile = readProfile(currentUser);

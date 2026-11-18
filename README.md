@@ -56,6 +56,21 @@ javascript:fetch('https://raw.githubusercontent.com/viztrrx/work-service/main/sc
 
 A DevTools **Snippet** (Sources → Snippets) works too, and survives navigation better than retyping the fetch.
 
+### As a file on your computer (offline file) {#offline-file}
+
+Like an offline Eaglercraft file, the whole console can be one `.html` file you open from disk, with no website underneath:
+
+```bash
+npm run build:offline
+```
+
+That writes `build/saints-service.html` (about 2.6 MB, with `script.js` inside it). Double-click it or drag it into Chrome. It opens full screen and talks to the live Worker over the internet like the injected console does: sign-in, Ask AI, chat, messages, music, games and the rest all work, and so do WebSockets. Sign-ins and settings are kept in the browser's storage for local files, so you stay signed in when you reopen it.
+
+- **Updating:** the file holds the `script.js` it was built from. Rebuild it to get changes, or press the console's reload button, which loads the newest `script.js` the same way the bookmarklet does.
+- **What a file can't do:** phone-style push alerts (they need the installed app at `/console/`), and Page Insights has no website to read (paste the text into Ask AI instead).
+- **If the AI refuses with an origin error:** a page opened from disk sends `Origin: null`. If you filled in the admin access controls' **Allowed Origins** field (it limits `/v1/*`), add `null` to the list; blank allows any.
+- For testing against a local Worker: `node scripts/build-offline.mjs --worker http://127.0.0.1:8787 --out my.html`.
+
 ### On iPhone and iPad (Eruda) {#on-iphone-and-ipad}
 
 iOS **Smart Punctuation** turns the `'` you type into a curly `‘`, which JavaScript can't read. The console then shows `SyntaxError: Invalid character '\u2018'` before `script.js` is even downloaded. Use this version, whose backticks iOS leaves alone:
