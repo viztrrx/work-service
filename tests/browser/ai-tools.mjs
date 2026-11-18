@@ -164,10 +164,10 @@ try {
 
   // ---- 1: smart paste ----
   await R(pg, () => { const s = document.getSelection(); s.removeAllRanges(); const r = document.createRange(); r.selectNodeContents(document.getElementById('q3')); s.addRange(r); });
-  await pg.keyboard.press('Control+C');
+  await pg.keyboard.press('ControlOrMeta+C');
   await pg.waitForTimeout(300);
   await pg.click(sr('#gpa-ask-input'));
-  await pg.keyboard.press('Control+V');
+  await pg.keyboard.press('ControlOrMeta+V');
   const pasted = await waitFor(pg, (r) => r.querySelectorAll('#gpa-ask-images img').length >= 3, null, 15000);
   const p1 = await R(pg, (r) => ({ text: r.querySelector('#gpa-ask-input').value, imgs: [...r.querySelectorAll('#gpa-ask-images img')].map((i) => i.src.slice(0, 40)) }));
   check('Paste: equations come as LaTeX (KaTeX and Canvas’s equation image), pictures as “[Image N]” where they were, hidden text left out',
@@ -220,7 +220,7 @@ try {
   check('Drag and drop: “Drop files…” shows, and the dropped file joins them', dropShown && dropped && names.join(',') === 'DOCX:worksheet.docx,PDF:chapter-5.pdf,TXT:notes.txt', names.join(','));
   // Pictures pasted again for the question (the quiz copy is still the last copy).
   await pg.click(sr('#gpa-ask-input'));
-  await pg.keyboard.press('Control+V');
+  await pg.keyboard.press('ControlOrMeta+V');
   await waitFor(pg, (r) => r.querySelectorAll('#gpa-ask-images img').length >= 3, null, 15000);
   await R(pg, (r) => { const ta = r.querySelector('#gpa-ask-input'); ta.value = 'Make me a study guide from my worksheet and chapter, answer question 3, and draw y = ½x².\n' + ta.value; ta.dispatchEvent(new Event('input', { bubbles: true })); });
   const multi = await R(pg, (r) => { const ta = r.querySelector('#gpa-ask-input'); return { lines: ta.value.split('\n').length, h: ta.getBoundingClientRect().height }; });

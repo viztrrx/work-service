@@ -1853,6 +1853,46 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       /* Typing indicator for AI replies in progress */
       /* Ask AI composer: grows with the message */
       .gpx-ask-ta { resize: none; min-height: 38px; max-height: 180px; line-height: 1.45; padding-top: 9px; padding-bottom: 9px; font: inherit; overflow-y: auto; }
+      .gpx-ask-ta::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      /* Ask composer: buttons keep their size while the box grows. */
+      .gpa-pane[data-pane="ask"] .gpx-composer-dock { flex-wrap: nowrap; align-items: flex-end; gap: 4px; margin-bottom: 0; }
+      .gpa-pane[data-pane="ask"] .gpx-composer-dock .gpx-ask-ta { min-width: 60px; }
+      .gpa-pane[data-pane="ask"] .gpx-composer-dock .gpa-btn { height: 38px; min-height: 38px; flex: none; }
+      .gpa-pane[data-pane="ask"] .gpx-composer-dock .gpx-icon-btn { width: 38px; min-width: 38px; }
+      .gpx-ask-ta { flex: 1 1 auto; }
+      .gpx-ask-more svg { transition: transform var(--gps-t2, 0.2s) var(--gps-ease, ease); }
+      .gpx-ask-more.is-open svg { transform: rotate(45deg); }
+      /* The "+" tray: a row of tools that opens above the message box. */
+      .gpx-ask-tools {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex-shrink: 0;
+        max-height: 0; margin: 0; overflow: hidden; opacity: 0; visibility: hidden;
+        transition: max-height var(--gps-t2, 0.2s) var(--gps-ease, ease), margin var(--gps-t2, 0.2s) ease, opacity var(--gps-t1, 0.15s) ease, visibility 0s linear 0.2s;
+      }
+      .gpx-ask-tools.is-open { max-height: 160px; margin: 0 0 8px; opacity: 1; visibility: visible; transition-delay: 0s; }
+      .gpa-pane[data-pane="ask"] .gpx-ask-tools .gpx-tool {
+        display: inline-flex; align-items: center; gap: 5px; height: 28px; min-height: 28px; padding: 0 10px;
+        border-radius: 999px; font-size: 12px; font-weight: 500;
+      }
+      .gpx-ask-tools .gpx-tool svg { width: 14px; height: 14px; flex: none; }
+      .gpx-ask-tools .gpx-tool.primary { color: var(--gpa-accent-fg); }
+      .gpx-ask-tools .gpx-askmem { height: 28px; font-size: 12px; }
+      /* The dock shows focus; the box inside it doesn't draw a second ring. */
+      .gpa-pane[data-pane="ask"] .gpx-composer-dock .gpx-ask-ta:focus,
+      .gpa-pane[data-pane="ask"] .gpx-composer-dock .gpx-ask-ta:focus-visible { border-color: transparent; box-shadow: none; outline: none; }
+      .gpa-panel.gpa-term .gpa-pane[data-pane="ask"] .gpx-composer-dock { align-items: center; }
+      .gpa-panel.gpa-term .gpx-ask-tools .gpx-tool, .gpa-panel.gpa-term .gpx-ask-tools .gpx-tool *,
+      .gpa-panel.gpa-term .gpx-ask-tools .gpx-askmem, .gpa-panel.gpa-term .gpx-ask-tools .gpx-askmem * {
+        font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      .gpa-panel.gpa-term .gpa-pane[data-pane="ask"] .gpx-ask-tools .gpx-tool,
+      .gpa-panel.gpa-term .gpx-ask-tools .gpx-askmem { border-radius: calc(6px * var(--gpa-rs)); background: transparent; }
+      /* Ask AI is just the conversation and the box: no header card. */
+      .gpa-pane[data-pane="ask"] .gpx-hero { display: none; }
+      .gpa-pane[data-pane="ask"] #gpa-ask-settings { margin-bottom: 8px; max-height: 50vh; overflow-y: auto; flex-shrink: 0; }
+      .gpx-ask-send { gap: 6px; padding-left: 14px; padding-right: 14px; }
+      .gpx-ask-send svg { width: 16px; height: 16px; }
+      .gpa-panel.gpa-narrow .gpx-ask-send { width: 38px; min-width: 38px; padding: 0; justify-content: center; }
+      .gpa-panel.gpa-narrow .gpx-ask-send span { display: none; }
       /* Files in this chat */
       .gpx-files { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 6px; }
       .gpx-files[hidden] { display: none; }
@@ -4026,10 +4066,18 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         <div class="gpx-room gpx-room-convo">
           ${gpxHero({ room: 'ask', title: 'Ask AI', status: 'Ready',
             desc: 'A conversation that remembers context. Paste or attach images, or speak your question.',
-            meta: '<span class="gpx-chip" id="gpx-ask-base">gpt-4.1-mini</span><span class="gpx-chip gpx-chip-accent" id="gpx-ask-smart">gpt-5 for hard questions</span>'
-              + `<span class="gpx-chip gpx-askmem" id="gpx-ask-mem" hidden>${GPS_ICONS.book}<span id="gpx-ask-mem-state">Memory</span><select id="gpx-ask-project" aria-label="Project for memory"></select><button class="gpx-mem-link" data-open-memory>Manage</button></span>`,
-            actions: `<button id="gpa-ask-new" class="gpa-btn" title="Start a fresh conversation (clears memory)">${gpxLbl('plus', 'New chat')}</button>
-              <button id="gpa-ask-settings-btn" class="gpa-btn" title="Study settings">${gpxLbl('settings', 'Study settings')}</button>` })}
+            meta: '<span class="gpx-chip" id="gpx-ask-base">gpt-4.1-mini</span><span class="gpx-chip gpx-chip-accent" id="gpx-ask-smart">gpt-5 for hard questions</span>' })}
+          <div class="gpx-convo">
+            <div id="gpa-chat" class="gpa-chat"></div>
+            ${gpxEmpty({ cls: 'gpx-empty-ask', icon: 'chat', title: 'Start a conversation',
+              desc: 'Ask anything. The AI keeps the whole conversation in mind, and tough questions switch to the smart model automatically.',
+              action: `<button class="gpx-suggest" data-prompt="Explain this step by step: ">Explain step by step</button>
+                <button class="gpx-suggest" data-prompt="Quiz me with 5 questions on ">Quiz me on a topic</button>
+                <button class="gpx-suggest" data-prompt="Check my answer and explain any mistakes: ">Check my answer</button>
+                <button class="gpx-suggest" data-prompt="Summarize this in plain language: ">Summarize something</button>` })}
+          </div>
+          <div id="gpa-ask-images" class="gpa-row" style="flex-wrap:wrap; gap:6px; display:none;"></div>
+          <div id="gpa-ask-files" class="gpx-files" hidden></div>
           <div id="gpa-ask-settings" class="gpa-card gpx-card" style="display:none;">
             <div class="gpa-card-title">Study settings</div>
             <label class="gpa-sub" for="gpa-ask-subject">Subject</label>
@@ -4054,22 +4102,17 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
               <button id="gpa-ask-settings-save" class="gpa-btn primary" style="flex:1;">Save</button>
             </div>
           </div>
-          <div class="gpx-convo">
-            <div id="gpa-chat" class="gpa-chat"></div>
-            ${gpxEmpty({ cls: 'gpx-empty-ask', icon: 'chat', title: 'Start a conversation',
-              desc: 'Ask anything. The AI keeps the whole conversation in mind, and tough questions switch to the smart model automatically.',
-              action: `<button class="gpx-suggest" data-prompt="Explain this step by step: ">Explain step by step</button>
-                <button class="gpx-suggest" data-prompt="Quiz me with 5 questions on ">Quiz me on a topic</button>
-                <button class="gpx-suggest" data-prompt="Check my answer and explain any mistakes: ">Check my answer</button>
-                <button class="gpx-suggest" data-prompt="Summarize this in plain language: ">Summarize something</button>` })}
+          <div id="gpa-ask-tools" class="gpx-ask-tools" role="group" aria-label="Files, voice and chat settings">
+            <button id="gpa-ask-attach" class="gpa-btn gpx-tool" type="button" title="Attach files or images" aria-label="Attach files or images">${GPS_ICONS.attach}<span>Attach</span></button>
+            <button id="gpa-voice-btn" class="gpa-btn gpx-tool" type="button" title="Speak your question" aria-label="Speak your question">${GPS_ICONS.mic}<span>Voice</span></button>
+            <button id="gpa-ask-new" class="gpa-btn gpx-tool" type="button" title="Start a fresh conversation (clears memory)">${GPS_ICONS.plus}<span>New chat</span></button>
+            <button id="gpa-ask-settings-btn" class="gpa-btn gpx-tool" type="button" title="Study settings">${GPS_ICONS.settings}<span>Study settings</span></button>
+            <span class="gpx-chip gpx-askmem" id="gpx-ask-mem" hidden>${GPS_ICONS.book}<span id="gpx-ask-mem-state">Memory</span><select id="gpx-ask-project" aria-label="Project for memory"></select><button class="gpx-mem-link" data-open-memory>Manage</button></span>
           </div>
-          <div id="gpa-ask-images" class="gpa-row" style="flex-wrap:wrap; gap:6px; display:none;"></div>
-          <div id="gpa-ask-files" class="gpx-files" hidden></div>
           <div class="gpa-row gpx-composer gpx-composer-dock">
-            <textarea id="gpa-ask-input" class="gpa-input gpx-ask-ta" rows="1" placeholder="Ask anything, or drop a file… (Shift+Enter for a new line)" aria-label="Message"></textarea>
-            <button id="gpa-ask-attach" class="gpa-btn gpx-icon-btn" title="Attach files or images" aria-label="Attach files or images">${GPS_ICONS.attach}</button>
-            <button id="gpa-voice-btn" class="gpa-btn gpx-icon-btn" title="Speak your question" aria-label="Speak your question">${GPS_ICONS.mic}</button>
-            <button id="gpa-ask-btn" class="gpa-btn primary">Send</button>
+            <button id="gpa-ask-more" class="gpa-btn gpx-icon-btn gpx-ask-more" type="button" title="Files, voice and settings" aria-label="Show files, voice and settings" aria-expanded="false" aria-controls="gpa-ask-tools">${GPS_ICONS.plus}</button>
+            <textarea id="gpa-ask-input" class="gpa-input gpx-ask-ta" rows="1" placeholder="Ask anything…" title="Enter sends · Shift+Enter for a new line · drop files here" aria-label="Message"></textarea>
+            <button id="gpa-ask-btn" class="gpa-btn primary gpx-ask-send" aria-label="Send">${GPS_ICONS.send}<span>Send</span></button>
           </div>
           <input id="gpa-ask-file" type="file" multiple style="display:none;" />
           <div class="gpx-drop" id="gpa-ask-drop" hidden><div>Drop files to add them to the chat<small>PDF, Word, Excel, PowerPoint, images, text and code</small></div></div>
@@ -15189,7 +15232,28 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   panel.querySelector('#gpa-ask-attach').addEventListener('click', () => askFile.click());
   askFile.addEventListener('change', () => { addAskFiles([...askFile.files]); askFile.value = ''; });
   // The message box grows with what's typed (up to a point).
-  const growAsk = () => { askInput.style.height = 'auto'; askInput.style.height = Math.min(askInput.scrollHeight, 180) + 'px'; };
+  const growAsk = () => {
+    askInput.style.height = 'auto';
+    // Chrome counts a wrapped placeholder in scrollHeight, so an empty box
+    // would grow to the placeholder's height on a narrow panel.
+    if (!askInput.value) { askInput.style.height = ''; return; }
+    askInput.style.height = Math.min(askInput.scrollHeight, 180) + 'px';
+  };
+  // Files and voice sit behind a "+" so the box keeps the room; the choice
+  // (open or closed) is remembered.
+  const ASK_TOOLS_KEY = 'gpa_ask_tools_open';
+  const askMore = panel.querySelector('#gpa-ask-more');
+  const askTools = panel.querySelector('#gpa-ask-tools');
+  function setAskTools(open) {
+    askTools.classList.toggle('is-open', open);
+    askMore.classList.toggle('is-open', open);
+    askMore.setAttribute('aria-expanded', open ? 'true' : 'false');
+    askMore.setAttribute('aria-label', open ? 'Hide files, voice and settings' : 'Show files, voice and settings');
+    askTools.querySelectorAll('button, select').forEach((b) => { b.tabIndex = open ? 0 : -1; });
+    try { localStorage.setItem(ASK_TOOLS_KEY, open ? '1' : '0'); } catch (e) { /* storage blocked */ }
+  }
+  askMore.addEventListener('click', () => setAskTools(!askTools.classList.contains('is-open')));
+  setAskTools((() => { try { return localStorage.getItem(ASK_TOOLS_KEY) === '1'; } catch (e) { return false; } })());
   askInput.addEventListener('input', growAsk);
 
   // ---- Ask AI: study settings (per user, saved on this device) ----
@@ -18449,12 +18513,12 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         askInput.value = e.results[0][0].transcript;
         sendChat();
       };
-      const done = () => { listening = false; voiceBtn.classList.remove('primary'); voiceBtn.innerHTML = GPS_ICONS.mic; voiceBtn.setAttribute('aria-label', 'Speak your question'); };
+      const done = () => { listening = false; voiceBtn.classList.remove('primary'); voiceBtn.innerHTML = GPS_ICONS.mic + '<span>Voice</span>'; voiceBtn.setAttribute('aria-label', 'Speak your question'); };
       rec.onend = done;
       rec.onerror = done;
       listening = true;
       voiceBtn.classList.add('primary');
-      voiceBtn.innerHTML = GPS_ICONS.stop;
+      voiceBtn.innerHTML = GPS_ICONS.stop + '<span>Stop</span>';
       voiceBtn.setAttribute('aria-label', 'Stop listening');
       rec.start();
     });

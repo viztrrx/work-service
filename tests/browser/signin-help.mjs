@@ -118,23 +118,38 @@ try {
   const kimAcct = await admin('/admin/signin-help', { action: 'list' });
   check('Saved on her account (shown next to her name for the owner and admins)', (kimAcct.people || []).some((x) => x.user === KIM && x.email === SID_KIM + '@alseducation.onmicrosoft.com'), JSON.stringify(kimAcct.people));
 
-  // The top card of a tab (Ask AI here) folds into a slim bar and stays folded.
+  // Ask AI has no top card: just the conversation and the box, with New chat
+  // and Study settings in the "+" tray.
   await R(kim.page, (r) => { const n = r.querySelector('.gpa-dropdown-item[data-tab="ask"]'); if (n) n.click(); });
   await kim.page.waitForTimeout(500);
-  const hero = () => R(kim.page, (r) => { const h = r.querySelector('.gpa-pane[data-pane="ask"] .gpx-hero'); const b = h.getBoundingClientRect(); const v = h.querySelector('.gpx-visual'); return { folded: h.classList.contains('is-folded'), h: Math.round(b.height), visual: !!v && v.offsetParent !== null, newChat: !!h.querySelector('#gpa-ask-new') && h.querySelector('#gpa-ask-new').offsetParent !== null, settings: !!h.querySelector('#gpa-ask-settings-btn') && h.querySelector('#gpa-ask-settings-btn').offsetParent !== null }; });
+  const askLook = await R(kim.page, async (r) => {
+    const shown = (el) => !!el && el.offsetParent !== null && getComputedStyle(el).visibility !== 'hidden';
+    const h = r.querySelector('.gpa-pane[data-pane="ask"] .gpx-hero');
+    const closed = { newChat: shown(r.querySelector('#gpa-ask-new')), settings: shown(r.querySelector('#gpa-ask-settings-btn')) };
+    if (!r.querySelector('#gpa-ask-tools').classList.contains('is-open')) r.querySelector('#gpa-ask-more').click();
+    await new Promise((res) => setTimeout(res, 350));
+    return { hero: shown(h), closed, open: { newChat: shown(r.querySelector('#gpa-ask-new')), settings: shown(r.querySelector('#gpa-ask-settings-btn')) } };
+  });
+  check('Ask AI: no top card; New chat and Study settings are in the + tray', !askLook.hero && !askLook.closed.newChat && !askLook.closed.settings && askLook.open.newChat && askLook.open.settings, JSON.stringify(askLook));
+  await R(kim.page, (r) => r.querySelector('#gpa-ask-more').click());
+
+  // The top card of a tab (Page Insights here) folds into a slim bar and stays folded.
+  await R(kim.page, (r) => { const n = r.querySelector('.gpa-dropdown-item[data-tab="scan"]'); if (n) n.click(); });
+  await kim.page.waitForTimeout(500);
+  const hero = () => R(kim.page, (r) => { const h = r.querySelector('.gpa-pane[data-pane="scan"] .gpx-hero'); const b = h.getBoundingClientRect(); const v = h.querySelector('.gpx-visual'); return { folded: h.classList.contains('is-folded'), h: Math.round(b.height), visual: !!v && v.offsetParent !== null, scan: !!h.querySelector('#gpa-scan-btn') && h.querySelector('#gpa-scan-btn').offsetParent !== null }; });
   const before = await hero();
-  await kim.page.screenshot({ path: path.join(OUT, '10-ask-card-open.png') });
-  await R(kim.page, (r) => r.querySelector('.gpa-pane[data-pane="ask"] .gpx-hero .gpx-fold').click());
+  await kim.page.screenshot({ path: path.join(OUT, '10-card-open.png') });
+  await R(kim.page, (r) => r.querySelector('.gpa-pane[data-pane="scan"] .gpx-hero .gpx-fold').click());
   await kim.page.waitForTimeout(300);
   const after = await hero();
-  check('Ask AI’s top card collapses to a slim bar; New chat and Study settings stay', !before.folded && after.folded && after.h < before.h / 2 && !after.visual && after.newChat && after.settings, JSON.stringify({ before, after }));
-  await kim.page.screenshot({ path: path.join(OUT, '11-ask-card-folded.png') });
+  check('Page Insights’ top card collapses to a slim bar; its Scan button stays', !before.folded && after.folded && after.h < before.h / 2 && !after.visual && after.scan, JSON.stringify({ before, after }));
+  await kim.page.screenshot({ path: path.join(OUT, '11-card-folded.png') });
   await kim.page.reload();
   await kim.page.evaluate((c) => { (0, eval)(c); }, code);
   await kim.page.waitForFunction(() => !!document.getElementById('gpa-root-host'));
   await waitFor(kim.page, (r) => r.querySelector('#gpa-login').style.display === 'none', null, 15000);
-  check('It stays collapsed after a reload (remembered on this device)', await R(kim.page, (r) => r.querySelector('.gpa-pane[data-pane="ask"] .gpx-hero').classList.contains('is-folded')));
-  await R(kim.page, (r) => { const n = r.querySelector('.gpa-dropdown-item[data-tab="ask"]'); if (n) n.click(); r.querySelector('.gpa-pane[data-pane="ask"] .gpx-hero .gpx-fold').click(); });
+  check('It stays collapsed after a reload (remembered on this device)', await R(kim.page, (r) => r.querySelector('.gpa-pane[data-pane="scan"] .gpx-hero').classList.contains('is-folded')));
+  await R(kim.page, (r) => { const n = r.querySelector('.gpa-dropdown-item[data-tab="scan"]'); if (n) n.click(); r.querySelector('.gpa-pane[data-pane="scan"] .gpx-hero .gpx-fold').click(); });
   check('…and opens again with the same button', !(await hero()).folded);
 
   // 2: kim forgot her PIN.

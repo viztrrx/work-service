@@ -13,14 +13,20 @@ const OUT = process.argv[2] || 'ask-photo-size-out';
 fs.mkdirSync(OUT, { recursive: true });
 const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`); };
-const scriptHost = await serve((rq, rs) => { rs.setHeader('Content-Type', 'text/plain'); rs.end(fs.readFileSync(path.join(ROOT, 'script.js'))); });
+// The console talks to the test Worker, never the live one (a live 401 for
+// this test's session would sign it out).
+let workerUrl = '';
+const scriptHost = await serve((rq, rs) => { rs.setHeader('Content-Type', 'text/plain'); rs.end(fs.readFileSync(path.join(ROOT, 'script.js'), 'utf8').replace("const OPENAI_PROXY = 'https://donnajbe.viztrrx.workers.dev';", `const OPENAI_PROXY = '${workerUrl}';`)); });
 const env = await startEnv({ extraEnv: { ADMIN_TOKEN: 'test-admin-token-0123456789abcdef', CONSOLE_SCRIPT_URL: `http://127.0.0.1:${scriptHost.port}/script.js` } });
+workerUrl = env.workerUrl;
 const browser = await launch();
 const R = (page, fn, arg) => page.evaluate(([f, a]) => (0, eval)(f)(document.getElementById('gpa-root-host').shadowRoot, a), [String(fn), arg]);
 const sr = (sel) => `#gpa-root-host >> ${sel}`;
 const MB = (n) => Math.round(n / 1048576 * 10) / 10 + ' MB';
 
 try {
+  // Sign-up needs the allowed-users list off (it's on by default).
+  await fetch(env.workerUrl + '/admin/config', { method: 'POST', headers: { Authorization: 'Bearer test-admin-token-0123456789abcdef', 'Content-Type': 'application/json' }, body: JSON.stringify({ allowlist: { on: false, users: [] } }) });
   const ctx = await browser.newContext({ viewport: { width: 1100, height: 800 } });
   await ctx.addInitScript((u) => { try { localStorage.setItem('gpa_admin_tele_endpoint', u); localStorage.setItem('gpa_openai_key_skip', '1'); } catch (e) { /* ignore */ } }, env.workerUrl);
   const page = await ctx.newPage();
@@ -29,10 +35,13 @@ try {
   // The console calls the live Worker's AI route, which this sandbox can't
   // reach: answer it here and keep what was sent.
   const sent = [];
-  await ctx.route('https://donnajbe.viztrrx.workers.dev/v1/chat/completions', async (route) => {
+  await ctx.route(env.workerUrl + '/v1/chat/completions', async (route) => {
     sent.push(route.request().postData() || '');
     await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ choices: [{ message: { content: 'That looks like a test photo.' } }] }) });
   });
+  // Ask AI streams through /v1/responses first; refusing it here (as a proxy
+  // without that route would) sends the console to the request measured above.
+  await ctx.route(env.workerUrl + '/v1/responses', (route) => route.fulfill({ status: 404, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: '{"error":{"message":"not here"}}' }));
   await page.goto(env.workerUrl + '/console/');
   await page.waitForFunction(() => !!document.getElementById('gpa-root-host'), null, { timeout: 30000 });
   await page.fill(sr('#gpa-login-user'), 'photo' + Date.now().toString(36).slice(-4));
