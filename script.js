@@ -3820,23 +3820,23 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         <div class="gpa-dropdown-menu" id="gpa-dropdown-menu">
           <button class="gpa-dropdown-item" data-tab="welcome"><span class="gpa-nav-ic">${GPS_ICONS.sun}</span><span class="gpa-nav-label">Welcome</span></button>
           <div class="gpa-nav-group" role="presentation" data-group="Assistant">Assistant</div>
-          <button class="gpa-dropdown-item active" data-tab="scan"><span class="gpa-nav-ic">${GPS_ICONS.scan}</span><span class="gpa-nav-label">Page Insights</span></button>
+          <button class="gpa-dropdown-item active" data-tab="scan" data-nav-hidden><span class="gpa-nav-ic">${GPS_ICONS.scan}</span><span class="gpa-nav-label">Page Insights</span></button>
           <button class="gpa-dropdown-item" data-tab="ask"><span class="gpa-nav-ic">${GPS_ICONS.ai}</span><span class="gpa-nav-label">Ask AI</span></button>
           <button class="gpa-dropdown-item" data-tab="chat"><span class="gpa-nav-ic">${GPS_ICONS.users}</span><span class="gpa-nav-label">Chat</span><span id="gpa-chat-badge" class="gpa-chat-badge" style="display:none;">0</span></button>
           <button class="gpa-dropdown-item" data-tab="staffchat" data-pane="chat" style="display:none;"><span class="gpa-nav-ic">${GPS_ICONS.advanced}</span><span class="gpa-nav-label">Staff chat</span><span id="gpa-staff-badge" class="gpa-chat-badge" style="display:none;">0</span></button>
           <button class="gpa-dropdown-item" data-tab="dms" data-pane="chat"><span class="gpa-nav-ic">${GPS_ICONS.chat}</span><span class="gpa-nav-label">Messages</span><span id="gpa-dm-newpill" class="gpa-new-pill" title="New: direct messages and group chats">NEW</span><span id="gpa-dm-badge" class="gpa-chat-badge" style="display:none;">0</span></button>
           <div class="gpa-nav-group" role="presentation" data-group="Play">Play</div>
-          <button class="gpa-dropdown-item" data-tab="music"><span class="gpa-nav-ic">${GPS_ICONS.music}</span><span class="gpa-nav-label">Music</span></button>
-          <button class="gpa-dropdown-item" data-tab="browser"><span class="gpa-nav-ic">${GPS_ICONS.globe}</span><span class="gpa-nav-label">Proxy</span></button>
-          <button class="gpa-dropdown-item" data-tab="eaglercraft"><span class="gpa-nav-ic">${GPS_ICONS.cube}</span><span class="gpa-nav-label">Eaglercraft</span></button>
+          <button class="gpa-dropdown-item" data-tab="music" data-nav-hidden><span class="gpa-nav-ic">${GPS_ICONS.music}</span><span class="gpa-nav-label">Music</span></button>
+          <button class="gpa-dropdown-item" data-tab="browser" data-nav-hidden><span class="gpa-nav-ic">${GPS_ICONS.globe}</span><span class="gpa-nav-label">Proxy</span></button>
+          <button class="gpa-dropdown-item" data-tab="eaglercraft" data-nav-hidden><span class="gpa-nav-ic">${GPS_ICONS.cube}</span><span class="gpa-nav-label">Eaglercraft</span></button>
           <button class="gpa-dropdown-item" data-tab="games"><span class="gpa-nav-ic">${GPS_ICONS.game}</span><span class="gpa-nav-label">Games</span></button>
           <div class="gpa-nav-group" role="presentation" data-group="Study & write">Study &amp; write</div>
-          <button class="gpa-dropdown-item" data-tab="study"><span class="gpa-nav-ic">${GPS_ICONS.cards}</span><span class="gpa-nav-label">Study</span></button>
-          <button class="gpa-dropdown-item" data-tab="notes"><span class="gpa-nav-ic">${GPS_ICONS.note}</span><span class="gpa-nav-label">Notes</span></button>
-          <button class="gpa-dropdown-item" data-tab="humanize"><span class="gpa-nav-ic">${GPS_ICONS.wand}</span><span class="gpa-nav-label">Humanize</span></button>
-          <button class="gpa-dropdown-item" data-tab="grammar"><span class="gpa-nav-ic">${GPS_ICONS.spell}</span><span class="gpa-nav-label">Grammar</span></button>
+          <button class="gpa-dropdown-item" data-tab="study" data-nav-hidden><span class="gpa-nav-ic">${GPS_ICONS.cards}</span><span class="gpa-nav-label">Study</span></button>
+          <button class="gpa-dropdown-item" data-tab="notes" data-nav-hidden><span class="gpa-nav-ic">${GPS_ICONS.note}</span><span class="gpa-nav-label">Notes</span></button>
+          <button class="gpa-dropdown-item" data-tab="humanize" data-nav-hidden><span class="gpa-nav-ic">${GPS_ICONS.wand}</span><span class="gpa-nav-label">Humanize</span></button>
+          <button class="gpa-dropdown-item" data-tab="grammar" data-nav-hidden><span class="gpa-nav-ic">${GPS_ICONS.spell}</span><span class="gpa-nav-label">Grammar</span></button>
           <div class="gpa-nav-group" role="presentation" data-group="Library">Library</div>
-          <button class="gpa-dropdown-item" data-tab="saved"><span class="gpa-nav-ic">${GPS_ICONS.book}</span><span class="gpa-nav-label">Saved</span></button>
+          <button class="gpa-dropdown-item" data-tab="saved" data-nav-hidden><span class="gpa-nav-ic">${GPS_ICONS.book}</span><span class="gpa-nav-label">Saved</span></button>
           <button class="gpa-dropdown-item" data-tab="theme"><span class="gpa-nav-ic">${GPS_ICONS.settings}</span><span class="gpa-nav-label">Settings</span></button>
           <button class="gpa-dropdown-item" data-tab="admin" style="display:none"><span class="gpa-nav-ic">${GPS_ICONS.advanced}</span><span class="gpa-nav-label">Admin</span></button>
         </div>
@@ -6031,6 +6031,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         pointer-events: none;
       }
       .gpa-pane { display: none; }
+      /* Sections kept out of the sidebar; they still open by slash command
+         (/music, /notes…) and from links elsewhere in the console. */
+      .gpa-dropdown-item[data-nav-hidden] { display: none !important; }
       .gpa-pane.active {
         display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0;
         /* Capped and centered rather than left-anchored and stretched full
@@ -7831,7 +7834,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     panel.querySelectorAll('.gpa-nav-group').forEach((g) => {
       let el = g.nextElementSibling, any = false;
       while (el && !el.classList.contains('gpa-nav-group')) {
-        if (el.classList.contains('gpa-dropdown-item') && el.style.display !== 'none') { any = true; break; }
+        if (el.classList.contains('gpa-dropdown-item') && el.style.display !== 'none' && !el.hasAttribute('data-nav-hidden')) { any = true; break; }
         el = el.nextElementSibling;
       }
       g.hidden = !any;
@@ -25869,11 +25872,11 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       if (item) item.style.display = on ? '' : 'none';
       const pane = panel.querySelector(`.gpa-pane[data-pane="${tab}"]`);
       // If they're sitting on a tab that just got switched off, move them back
-      // to Page Insights rather than leaving a dead pane on screen.
+      // to Ask AI rather than leaving a dead pane on screen.
       if (pane && !on && pane.classList.contains('active')) {
         pane.classList.remove('active');
-        const scan = panel.querySelector('.gpa-pane[data-pane="scan"]');
-        const scanItem = panel.querySelector('.gpa-dropdown-item[data-tab="scan"]');
+        const scan = panel.querySelector('.gpa-pane[data-pane="ask"]');
+        const scanItem = panel.querySelector('.gpa-dropdown-item[data-tab="ask"]');
         if (scan) scan.classList.add('active');
         panel.querySelectorAll('.gpa-dropdown-item').forEach((b) => b.classList.remove('active'));
         if (scanItem) {
