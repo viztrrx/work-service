@@ -88,6 +88,9 @@ try {
   const acct = await (await fetch(env.workerUrl + '/admin/users', { headers: { Authorization: 'Bearer test-admin-token-0123456789abcdef' } }).catch(() => null))?.json().catch(() => null);
   if (acct) check('…and the Worker has the account', JSON.stringify(acct).includes('file' + run));
 
+  const tab = await pg.evaluate(() => ({ title: document.title, icons: [...document.querySelectorAll('link[rel~="icon"]')].map((l) => l.href.slice(0, 22)) }));
+  check('The tab looks blank: title "about:blank" and a transparent icon, also after sign-in', tab.title === 'about:blank' && tab.icons.length === 1 && tab.icons[0] === 'data:image/gif;base64,', JSON.stringify(tab));
+
   // ---- 3: Ask AI and slash commands ----
   await R(pg, (r) => r.querySelector('.gpa-dropdown-item[data-tab="ask"]').click());
   await pg.waitForTimeout(400);

@@ -33,6 +33,7 @@ try {
   check('"/" is a small page that links the download', root.status === 200 && /text\/html/.test(root.headers.get('content-type')) && rootText.includes('/download/saints-service.html') && rootText.length < 5000, root.status + ' ' + rootText.length + ' bytes');
   const opt = await fetch(env.workerUrl + '/', { method: 'OPTIONS' });
   const post = await fetch(env.workerUrl + '/', { method: 'POST', body: '{}' });
+  check('…its tab is blank too (about:blank, transparent icon)', rootText.includes('<title>about:blank</title>') && rootText.includes('href="data:image/gif;base64,'));
   check('…other methods on "/" keep their old answers (preflight 204, POST not found)', opt.status === 204 && post.status === 404, opt.status + ' / ' + post.status);
 
   // ---- 2: the file ----

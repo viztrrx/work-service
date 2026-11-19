@@ -12,6 +12,10 @@
 // runs it with the same global eval the bookmarklet uses.
 
 export const OFFLINE_FILENAME = 'saints-service.html';
+// The browser tab shows a blank page: the title "about:blank" and a
+// transparent 1×1 icon (an empty icon would let Chrome show its default).
+export const TAB_TITLE = 'about:blank';
+export const BLANK_ICON = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 export const OFFLINE_PATH = '/download/' + OFFLINE_FILENAME;
 // The line in script.js that names the Worker; a build for another Worker
 // (a test one, a fork) swaps it.
@@ -42,8 +46,8 @@ export function offlineHtml(code, { iconBase64 = '', built = '' } = {}) {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="generator" content="saints-service offline file${built ? ' (' + built + ')' : ''}">
-<title>Saints Service</title>
-${icon ? `<link rel="icon" type="image/png" href="${icon}">` : ''}
+<title>${TAB_TITLE}</title>
+<link rel="icon" type="image/gif" href="${BLANK_ICON}">
 <style>
   :root { color-scheme: dark; }
   html, body { margin: 0; height: 100%; background: #0b0c0f; color: #e8eaed; overflow: hidden;
@@ -102,7 +106,8 @@ export function downloadPage() {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
-<title>Saints Service · Download</title>
+<title>${TAB_TITLE}</title>
+<link rel="icon" type="image/gif" href="${BLANK_ICON}">
 <style>
   html, body { margin: 0; height: 100%; background: #0b0c0f; color: #e8eaed;
     font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
