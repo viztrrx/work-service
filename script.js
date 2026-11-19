@@ -1535,6 +1535,24 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       .gpx-address svg { width: 16px; height: 16px; }
       .gpx-address .gpa-input { border: none; background: transparent; padding-left: 0; box-shadow: none; }
       .gpx-loadbar { height: 2px; background: transparent; overflow: hidden; position: relative; }
+      /* The console's browser bar over the embedded proxy. */
+      .gpx-pxbar { display: flex; align-items: center; gap: 2px; padding: 6px 8px; background: var(--gpa-panel); border-bottom: 1px solid var(--gpa-border); flex-shrink: 0; }
+      .gpx-pxbtn {
+        flex: none; width: 32px; height: 32px; display: grid; place-items: center; padding: 0; border: none; border-radius: 50%;
+        background: transparent; color: var(--gpa-text); cursor: pointer; transition: background 0.15s ease, opacity 0.15s ease;
+      }
+      .gpx-pxbtn svg { width: 17px; height: 17px; }
+      .gpx-pxbtn:hover:not(:disabled) { background: var(--gpa-field); }
+      .gpx-pxbtn:disabled { opacity: 0.35; cursor: default; }
+      .gpx-pxbtn:focus-visible { outline: 2px solid var(--gpa-accent); outline-offset: 1px; }
+      .gpx-pxbtn[hidden] { display: none; }
+      .gpx-pxaddr { flex: 1; min-width: 0; margin: 0 6px; }
+      .gpx-pxaddr .gpa-input { width: 100%; height: 34px; min-height: 34px; padding: 0 14px; border-radius: 999px; font-size: 13.5px; }
+      .gpx-browser[data-loading="1"] .gpx-loadbar::after {
+        content: ''; position: absolute; top: 0; bottom: 0; width: 35%; background: linear-gradient(90deg, transparent, var(--gpa-accent), transparent);
+        animation: gpx-load 1.1s var(--gps-ease) infinite;
+      }
+      .gpa-panel.gpa-narrow .gpx-pxbtn[data-pxc="games"], .gpa-panel.gpa-narrow .gpx-pxbtn[data-pxc="home"] { display: none; }
       .gpx-room[data-proxy="connecting"] .gpx-loadbar::after {
         content: ''; position: absolute; top: 0; bottom: 0; width: 35%; background: linear-gradient(90deg, transparent, var(--gpa-accent), transparent);
         animation: gpx-load 1.1s var(--gps-ease) infinite;
@@ -4389,10 +4407,22 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
             </div>
           </section>
           <section id="gpa-proxy-stage" class="gpx-browser" style="display:none;">
-            <!-- No bar of the console's own here: Saints Search draws a browser
-                 toolbar (back, forward, reload, address, Close, Fullscreen)
-                 above its page, so nothing sits over the site. The status is
-                 kept for screen readers and the launcher. -->
+            <!-- The console's own browser bar: Saints Search runs embedded
+                 (?embed=1) with its toolbar hidden, takes these buttons as
+                 commands and reports its address and state back. -->
+            <div class="gpx-pxbar" role="toolbar" aria-label="Proxy">
+              <button type="button" class="gpx-pxbtn" data-pxc="back" aria-label="Back" title="Back" disabled>${GPS_ICONS.back}</button>
+              <button type="button" class="gpx-pxbtn" data-pxc="forward" aria-label="Forward" title="Forward" disabled>${GPS_ICONS.forward}</button>
+              <button type="button" class="gpx-pxbtn" data-pxc="reload" aria-label="Reload" title="Reload">${GPS_ICONS.refresh}</button>
+              <button type="button" class="gpx-pxbtn" data-pxc="home" aria-label="Home" title="Home">${GPS_ICONS.home}</button>
+              <form class="gpx-pxaddr" id="gpa-proxy-addr-form" role="search">
+                <input id="gpa-proxy-addr" class="gpa-input" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Search Google or type a web address" aria-label="Address and search" />
+              </form>
+              <button type="button" class="gpx-pxbtn" data-pxc="games" aria-label="Games" title="Games">${GPS_ICONS.game}</button>
+              <button type="button" class="gpx-pxbtn" data-pxc="newtab" aria-label="Open in a new tab" title="Open in a new tab">${GPS_ICONS.external}</button>
+              <button type="button" class="gpx-pxbtn" data-pxc="fullscreen" aria-label="Fullscreen" title="Fullscreen" hidden>${GPS_ICONS.maximize}</button>
+              <button type="button" class="gpx-pxbtn" data-pxc="close" aria-label="Close the proxy" title="Close the proxy">${GPS_ICONS.x}</button>
+            </div>
             <div class="gpx-loadbar" aria-hidden="true"></div>
             <span id="gpa-proxy-status" class="gpa-sr-only" role="status">Not connected</span>
             <div id="gpa-proxy-error" class="gpx-inline-error" style="display:none;"></div>
@@ -13815,8 +13845,11 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     let u;
     try { u = new URL(String(v || '').trim()); } catch (e) { return ''; }
     const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(u.hostname);
-    if (!(u.protocol === 'https:' || (u.protocol === 'http:' && local)) || u.username || u.password || (u.pathname !== '/' && u.pathname !== '') || u.search || u.hash) return '';
-    return u.origin;
+    if (!(u.protocol === 'https:' || (u.protocol === 'http:' && local)) || u.username || u.password || u.search || u.hash) return '';
+    // A path is allowed (the Saints Worker serves the proxy at /px).
+    const path = u.pathname.replace(/\/+$/, '');
+    if (path && !/^(\/[a-z0-9_-]+)+$/i.test(path)) return '';
+    return u.origin + path;
   }
   // Cloudflare quick tunnels (*.trycloudflare.com) get a new random address
   // every time they start, so a saved one has always stopped working. A
@@ -13834,10 +13867,25 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     let v = '';
     try { v = localStorage.getItem(PROXY_SERVER_KEY) || ''; } catch (e) { /* storage unavailable */ }
     if (isStaleProxyServer(v)) v = '';
-    return cleanProxyServer(v) || DEFAULT_PROXY_SERVER;
+    const saved = cleanProxyServer(v);
+    if (saved) return saved;
+    // This Worker's own copy at /px/, once its deploy has built it (/health
+    // says so); until then the separate frontend Worker.
+    try {
+      const info = workerInfo && workerInfo.proxy;
+      if (info && info.ready && /^\/[a-z0-9_-]+$/i.test(info.base || '') && AUTH_BASE()) return AUTH_BASE().replace(/\/+$/, '') + info.base;
+    } catch (e) { /* accounts not set up yet */ }
+    return DEFAULT_PROXY_SERVER;
   }
-  // The Scramjet frontend's own page (it provides the browsing UI itself).
-  const proxyHomeUrl = () => proxyServerUrl() + '/';
+  // The server of the proxy that is open (fixed at launch), else the one a
+  // launch would use now.
+  let proxyServer = '';
+  const proxyBase = () => proxyServer || proxyServerUrl();
+  const proxyOrigin = () => { try { return new URL(proxyBase()).origin; } catch (e) { return ''; } };
+  // The proxy's page in embedded mode: the console draws the bar (below) and
+  // the frame shows only the website. Opened on its own, it has its own bar.
+  const proxyHomeUrl = () => proxyBase() + '/?embed=1';
+  const proxyStandaloneUrl = () => proxyBase() + '/';
   // The launched proxy, or null: { mode:'here'|'blank', child, cleanups, since }.
   let px = null;
   // The site the frame is on now, as the frontend reports it ('' = start page),
@@ -13873,7 +13921,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   }
   const hideProxyError = () => { proxyErrorEl.style.display = 'none'; proxyErrorEl.textContent = ''; };
   const proxyWin = () => proxyFrame.ownerDocument.defaultView || window;
-  const openProxyTab = () => { proxyWin().open(proxyHomeUrl(), '_blank', 'noopener,noreferrer'); };
+  const openProxyTab = () => { proxyWin().open(proxyStandaloneUrl(), '_blank', 'noopener,noreferrer'); };
   const retryProxy = () => proxyLoadHome({ force: true });
 
   // The host page's CSP (frame-src) can forbid framing the frontend; the
@@ -13881,7 +13929,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   function onProxyCsp(e) {
     if (!/^(frame-src|child-src)/.test(String(e.effectiveDirective || e.violatedDirective || ''))) return;
     const blocked = String(e.blockedURI || '');
-    if (blocked && !proxyServerUrl().startsWith(blocked.replace(/\/+$/, ''))) return;
+    if (blocked && !proxyBase().startsWith(blocked.replace(/\/+$/, ''))) return;
     proxyBlocked = true;
     finishProxyLoad();
     stopProxyCsp();
@@ -13929,6 +13977,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     finishProxyLoad();
     if (!proxyCurrentSite) setProxyStatus('Connected');
     proxySendChrome();
+    proxyCommand('state');   // fill the bar right away
   });
   proxyFrame.addEventListener('error', () => {
     if (!proxyPending) return;
@@ -13996,6 +14045,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     // whatever has focus inside the frame once the frame itself has it.
     if (d.type === 'focus') { try { proxyFrame.focus(); } catch (err) { /* frame gone */ } return; }
     if (d.type === 'fullscreen') { if (px.toggleFs) px.toggleFs(); return; }
+    // What the console's bar shows (embedded mode).
+    if (d.type === 'state') { proxyOnState(d); return; }
     if (d.type !== 'nav' || typeof d.url !== 'string') return;
     // Each page of Saints Search is told which window buttons to show.
     if (!d.url) proxySendChrome();
@@ -14024,8 +14075,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     if (!px) return;
     const fs = px.fsState ? px.fsState() : null;
     try {
-      if (proxyFrame.contentWindow) proxyFrame.contentWindow.postMessage({ saintsProxy: 1, type: 'chrome', close: true, fullscreen: !!fs, fullscreenOn: !!(fs && fs.on) }, proxyServerUrl());
+      if (proxyFrame.contentWindow) proxyFrame.contentWindow.postMessage({ saintsProxy: 1, type: 'chrome', close: true, fullscreen: !!fs, fullscreenOn: !!(fs && fs.on) }, proxyOrigin());
     } catch (err) { /* frame gone */ }
+    pxBarSync();
     proxySendAccount();
   }
   // Saints Search lists the signed-in account's saved proxy sessions (sign-ins
@@ -14038,9 +14090,73 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     let token = '';
     try { token = sessionToken(); } catch (err) { /* accounts not ready yet */ }
     try {
-      if (proxyFrame.contentWindow) proxyFrame.contentWindow.postMessage({ saintsProxy: 1, type: 'account', user: token ? String(currentUser || '') : '', token }, proxyServerUrl());
+      if (proxyFrame.contentWindow) proxyFrame.contentWindow.postMessage({ saintsProxy: 1, type: 'account', user: token ? String(currentUser || '') : '', token }, proxyOrigin());
     } catch (err) { /* frame gone */ }
   }
+  // ---- The console's browser bar over the embedded proxy ----
+  // Saints Search runs with ?embed=1: its toolbar is hidden, it takes these
+  // buttons as commands ({type:'command', command}) and the address as
+  // {type:'navigate', query}, and reports {type:'state', url, title, canBack,
+  // canForward, loading, busy} whenever that changes.
+  const pxStageEl = panel.querySelector('#gpa-proxy-stage');
+  const pxBarEl = pxStageEl.querySelector('.gpx-pxbar');
+  const pxAddr = panel.querySelector('#gpa-proxy-addr');
+  const pxAddrForm = panel.querySelector('#gpa-proxy-addr-form');
+  let pxState = null;
+  function proxyPost(msg) {
+    try { if (proxyFrame.contentWindow) proxyFrame.contentWindow.postMessage({ saintsProxy: 1, ...msg }, proxyOrigin()); } catch (e) { /* frame gone */ }
+  }
+  const proxyCommand = (command) => proxyPost({ type: 'command', command });
+  function pxBarSync() {
+    const st = pxState || {};
+    const btn = (c) => pxBarEl.querySelector('[data-pxc="' + c + '"]');
+    btn('back').disabled = !st.canBack;
+    btn('forward').disabled = !st.canForward;
+    const fs = px && px.fsState ? px.fsState() : null;
+    const fsBtn = btn('fullscreen');
+    fsBtn.hidden = !fs;
+    if (fs) {
+      const label = fs.on ? 'Exit fullscreen' : 'Fullscreen';
+      fsBtn.innerHTML = fs.on ? GPS_ICONS.minimize : GPS_ICONS.maximize;
+      fsBtn.title = label;
+      fsBtn.setAttribute('aria-label', label);
+    }
+    pxStageEl.dataset.loading = st.loading || st.busy ? '1' : '';
+    // The address shows the site (empty on the start pages), unless the user
+    // is typing in it.
+    let typing = false;
+    try { typing = pxAddr.getRootNode().activeElement === pxAddr; } catch (e) { /* detached */ }
+    if (!typing) pxAddr.value = !st.url || /^saints:/i.test(st.url) ? '' : st.url;
+  }
+  function proxyOnState(d) {
+    pxState = {
+      url: typeof d.url === 'string' ? d.url.slice(0, 2000) : '',
+      canBack: d.canBack === true,
+      canForward: d.canForward === true,
+      loading: d.loading === true,
+      busy: d.busy === true,
+    };
+    pxBarSync();
+  }
+  pxBarEl.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pxc]');
+    if (!b || b.disabled || !px) return;
+    const c = b.dataset.pxc;
+    if (c === 'close') { closeProxy('The proxy was closed.'); return; }
+    if (c === 'newtab') { openProxyTab(); return; }
+    if (c === 'fullscreen') { if (px.toggleFs) px.toggleFs(); return; }
+    proxyCommand(c);
+  });
+  pxAddrForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const q = pxAddr.value.trim();
+    if (!q || !px) return;
+    proxyPost({ type: 'navigate', query: q.slice(0, 500) });
+    try { pxAddr.blur(); } catch (err) { /* ignore */ }
+  });
+  pxAddr.addEventListener('focus', () => { try { pxAddr.select(); } catch (e) { /* ignore */ } });
+  pxAddr.addEventListener('blur', () => pxBarSync());
+
   // Sign-in, sign-out and token renewals (the account code is set up further
   // down this file, so this registers once the script has finished loading).
   setTimeout(() => { try { onSessionChange(proxySendAccount); } catch (err) { /* accounts unavailable */ } }, 0);
@@ -14051,11 +14167,13 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   let proxyPaneInitialized = false;
   function activateProxyPane() {
     pxSync();
+    // Learn whether this Worker serves the proxy at /px/ before a launch.
+    try { if (!workerInfo || !workerInfo.proxy) workerHealth(true); } catch (e) { /* accounts not set up yet */ }
     if (proxyPaneInitialized) return;
     proxyPaneInitialized = true;
   }
   // A launch: the Scramjet frontend page (it remembers its own last site).
-  function proxyStart() { proxyLoadHome(); }
+  function proxyStart() { proxyServer = proxyServerUrl(); proxyLoadHome(); }
   // Closing: the frame lets go of the page and the tab is back to nothing.
   function proxyUnload() {
     finishProxyLoad();
@@ -14066,6 +14184,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
     proxyBlocked = false;
     proxyLastLogged = '';
     proxyFrame.src = 'about:blank';
+    proxyServer = '';
+    pxState = null;
+    pxBarSync();
     setProxyStatus('Not connected');
   }
 

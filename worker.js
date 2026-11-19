@@ -1142,6 +1142,18 @@ function proxyEnv(env, ctx, origin) {
     AUTH_FETCH: (url, init) => handleRequest(new Request(url, init), env, ctx),
   };
 }
+// Whether this deploy built the proxy (npm run build:proxy). /health reports
+// it so the console only switches to /px/ once it's really there. Checked at
+// most every 5 minutes per isolate.
+let proxyReadyCache = { at: 0, ready: false };
+async function proxyReady(env) {
+  if (!env || !env.PROXY_ASSETS) return false;
+  if (Date.now() - proxyReadyCache.at < 300000) return proxyReadyCache.ready;
+  let ready = false;
+  try { ready = (await env.PROXY_ASSETS.fetch('https://assets.local' + PROXY_BASE + '/sw.js')).ok; } catch (e) { ready = false; }
+  proxyReadyCache = { at: Date.now(), ready };
+  return ready;
+}
 async function proxyRoute(req, env, ctx) {
   const url = new URL(req.url);
   if (url.pathname !== PROXY_BASE && !url.pathname.startsWith(PROXY_BASE + '/')) return null;
@@ -3839,6 +3851,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         sessions: !!sessionKey(),
         maintenance: cfg.maintenance && cfg.maintenance.on ? { on: true, message: cfg.maintenance.message || '' } : null,
         memoryEnabled: cfg.memoryEnabled !== false,
+        // The Scramjet proxy served here (see proxyRoute); ready once built.
+        proxy: { base: PROXY_BASE, ready: await proxyReady(env) },
         routes: [
           '/v1/*', '/read', '/track', '/proxy/log', '/status', '/active-count', '/health',
           '/chat/poll', '/chat/send', '/chat/react', '/chat/unsend', '/chat/report', '/chat/extras', '/games/score', '/games/leaderboard', '/unlock',

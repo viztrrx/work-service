@@ -7,6 +7,9 @@
 //   3. saved sessions: a Saints proxy sign-in is accepted by /px/sessions,
 //      checked by the Worker's own handler (no request back to itself), and
 //      its cookie stays under /px/sessions
+//   4. the console itself: the offline file downloaded from the Worker,
+//      opened from disk, its Proxy tab launched on /px/ (the Worker says it's
+//      built), browsing with the console's own bar (address, Back, Close)
 //
 // Needs the proxy built: npm run build:proxy (or, from a frontend checkout at
 // the pinned commit: node scripts/proxy-frontend.mjs build --from ../frontend).
@@ -51,7 +54,9 @@ await new Promise((r) => wss.listen(0, '127.0.0.1', r));
 const wispUrl = `wss://127.0.0.1:${wss.address().port}/wisp/`;
 
 const ADMIN = 'test-admin-token-0123456789abcdef';
-const env = await startEnv({ extraEnv: { ADMIN_TOKEN: ADMIN } });
+// The offline file is built from this working copy's script.js, not GitHub's.
+const scriptHost = await serve((rq, rs) => { rs.setHeader('Content-Type', 'text/plain'); rs.end(fs.readFileSync(path.join(ROOT, 'script.js'))); });
+const env = await startEnv({ extraEnv: { ADMIN_TOKEN: ADMIN, CONSOLE_SCRIPT_URL: `http://127.0.0.1:${scriptHost.port}/script.js` } });
 const W = env.workerUrl;
 const browser = await launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-certificate-errors'] });
 
@@ -112,10 +117,61 @@ window.send=(d)=>document.getElementById('f').contentWindow.postMessage(Object.a
   check('…its cookie stays under /px/sessions', /; Path=\/px\/sessions;/.test(auth.headers.get('set-cookie') || ''), auth.headers.get('set-cookie'));
   const who = await (await fetch(W + '/px/sessions/whoami', { headers: { Cookie: cookie } })).json().catch(() => ({}));
   check('…and the cookie signs later requests in', who.user === user, JSON.stringify(who));
+
+  // ---- 4: the console's Proxy tab, in the offline file ----
+  const health = await (await fetch(W + '/health')).json();
+  check('/health says this Worker serves the proxy at /px/', health.proxy && health.proxy.base === '/px' && health.proxy.ready === true, JSON.stringify(health.proxy));
+  const dlFile = path.join(OUT, 'saints-service.html');
+  fs.writeFileSync(dlFile, await (await fetch(W + '/download/saints-service.html')).text());
+  const cpage = await ctx.newPage();
+  const cerrors = [];
+  cpage.on('pageerror', (e) => cerrors.push(String(e)));
+  await cpage.goto(pathToFileURL(dlFile).href);
+  await cpage.waitForFunction(() => !!document.getElementById('gpa-root-host') && !document.getElementById('boot'), null, { timeout: 20000 });
+  const R = (fn, arg) => cpage.evaluate(([f, a]) => (0, eval)(f)(document.getElementById('gpa-root-host').shadowRoot, a), [String(fn), arg]);
+  const sr = (sel) => `#gpa-root-host >> ${sel}`;
+  await cpage.fill(sr('#gpa-login-user'), 'c' + user);
+  await cpage.fill(sr('#gpa-login-pin'), '246810');
+  await cpage.click(sr('#gpa-signup-btn'));
+  await cpage.waitForFunction(() => document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-login').style.display === 'none', null, { timeout: 15000 });
+  await R((r) => { const b = r.querySelector('#gpa-langpick .gpa-langpick-opt[data-lang="en"]'); if (b && b.offsetParent) b.click(); });
+  await R((r) => r.querySelector('.gpa-dropdown-item[data-tab="browser"]').click());
+  await cpage.waitForTimeout(800);
+  await cpage.click(sr('#gpa-proxy-fs'));
+  await cpage.waitForTimeout(600);
+  await cpage.click(sr('#gpa-proxy-launch-here'));
+  const frameSrc = await cpage.waitForFunction(() => { const f = document.getElementById('gpa-root-host').shadowRoot.querySelector('#gpa-proxy-frame'); return f && /\/px\/\?embed=1$/.test(f.src) ? f.src : null; }, null, { timeout: 10000 }).then((h) => h.jsonValue(), () => null);
+  check('The console\'s Proxy tab opens this Worker\'s /px/ (embedded), not the separate frontend', frameSrc === W + '/px/?embed=1', String(frameSrc));
+  await cpage.waitForTimeout(1500);
+  await cpage.fill(sr('#gpa-proxy-addr'), target);
+  await cpage.press(sr('#gpa-proxy-addr'), 'Enter');
+  // Signed in from the console, Saints Search first asks for a saved session
+  // (its sessions API, now at /px/sessions on this Worker): start one.
+  const embedFrame = () => cpage.frames().find((f) => f.url().startsWith(W + '/px/?embed=1'));
+  const picker = await (async () => { const t0 = Date.now(); while (Date.now() - t0 < 15000) { const f = embedFrame(); try { if (f && await f.evaluate(() => { const p = document.querySelector('.ss-pick'); return !!p && !p.hidden; })) return f; } catch {} await cpage.waitForTimeout(150); } return null; })();
+  if (picker) {
+    await picker.fill('#ss-pick-name', 'Homework');
+    await picker.press('#ss-pick-name', 'Enter');
+  }
+  check('Signed in from the console, starting a saved session works through /px/sessions', !!picker && await (async () => { const t0 = Date.now(); while (Date.now() - t0 < 15000) { try { if (await picker.evaluate(() => document.querySelector('.ss-pick').hidden)) return true; } catch {} await cpage.waitForTimeout(150); } return false; })());
+  const cshown = await (async () => { const t0 = Date.now(); while (Date.now() - t0 < 45000) { for (const f of cpage.frames()) { try { const t = await f.evaluate(() => document.getElementById('t')?.textContent); if (t) return { t, url: f.url() }; } catch {} } await cpage.waitForTimeout(200); } return null; })();
+  check('Typing an address in the console\'s bar opens the site through /px/', cshown && cshown.t === 'Hello through /px' && cshown.url.startsWith(W + '/px/scramjet/'), JSON.stringify(cshown));
+  const bar = await (async () => { const t0 = Date.now(); while (Date.now() - t0 < 10000) { const b = await R((r) => ({ addr: r.querySelector('#gpa-proxy-addr').value, back: r.querySelector('.gpx-pxbtn[data-pxc="back"]').disabled, toolbar: null })); if (b.addr === target && !b.back) return b; await cpage.waitForTimeout(150); } return R((r) => ({ addr: r.querySelector('#gpa-proxy-addr').value, back: r.querySelector('.gpx-pxbtn[data-pxc="back"]').disabled })); })();
+  const ownBar = await (async () => { for (const f of cpage.frames()) { if (f.url().startsWith(W + '/px/?embed=1')) { try { return await f.evaluate(() => getComputedStyle(document.getElementById('sj-toolbar')).display); } catch {} } } return null; })();
+  check('The bar shows the site and Back is on; Saints Search\'s own toolbar is hidden', bar.addr === target && bar.back === false && ownBar === 'none', JSON.stringify({ bar, ownBar }));
+  await cpage.screenshot({ path: path.join(OUT, '02-console-proxy.png') });
+  await R((r) => r.querySelector('.gpx-pxbtn[data-pxc="back"]').click());
+  const home = await (async () => { const t0 = Date.now(); while (Date.now() - t0 < 10000) { const b = await R((r) => ({ addr: r.querySelector('#gpa-proxy-addr').value, back: r.querySelector('.gpx-pxbtn[data-pxc="back"]').disabled })); if (b.addr === '' && b.back) return b; await cpage.waitForTimeout(150); } return null; })();
+  check('The bar\'s Back returns to the start page (address empty, Back off)', !!home);
+  await R((r) => r.querySelector('.gpx-pxbtn[data-pxc="close"]').click());
+  const closed = await R((r) => ({ src: r.querySelector('#gpa-proxy-frame').getAttribute('src'), stage: r.querySelector('#gpa-proxy-stage').style.display }));
+  check('Close ends the proxy', closed.src === 'about:blank' && closed.stage === 'none', JSON.stringify(closed));
+  check('No page errors in the console', cerrors.length === 0, cerrors.slice(0, 3).join(' | '));
 } finally {
   await browser.close();
   await env.close();
   await site.close();
+  await scriptHost.close();
   wss.close();
   fs.rmSync(certDir, { recursive: true, force: true });
 }
