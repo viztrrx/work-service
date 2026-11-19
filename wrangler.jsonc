@@ -40,8 +40,22 @@
 			"bucket_name": "donnajbe-eaglercraft-client",
 			"binding": "donnajbe_eaglercraft_client",
 			"remote": true
+		},
+		{
+			// The proxy's saved sessions (web/proxy/sessions.js), the same
+			// bucket the separate frontend Worker uses.
+			"bucket_name": "saints-proxy-sessions",
+			"binding": "PROXY_SESSIONS"
 		}
 	],
+	// The Scramjet proxy's static files, served at /px/ (scripts/proxy-frontend.mjs).
+	// The Worker runs first so /px/ gets its headers, sessions API and joined
+	// game files; everything outside /px/ is the Worker's own routes as before.
+	"assets": {
+		"directory": "./proxy-dist",
+		"binding": "PROXY_ASSETS",
+		"run_worker_first": true
+	},
 	// ADMIN_MOBILE: Saints Command state. CHAT_ROOMS: one consistent log per
 	// chat room (chat/room.js), so messages sent at once can't erase each other.
 	"durable_objects": {"bindings": [{"name":"ADMIN_MOBILE","class_name":"AdminMobileState"},{"name":"CHAT_ROOMS","class_name":"ChatRoom"}]},

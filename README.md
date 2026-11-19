@@ -979,6 +979,7 @@ The **Proxy** tab browses through the **Scramjet proxy**, the `viztrrx/frontend`
 - **Activity log:** each launch (in the tab or an about:blank window) and each site opened (origin + path, no query string) is recorded on the user's account for 90 days. The owner sees it in **Admin → Users → the user → Proxy activity** with a **live status** (using the Proxy now, where, and the site they're on; updates every 15 seconds and clears when they close it), and in **Admin → Proxy monitor**: **Live now** (who is on the Proxy, the site they proxied and are on, where, and since when; refreshes every 10 seconds), **Activity** for the day by user with the domains each one proxied (any day with the date picker), and pressing a name shows that person's history for the day. The paired admin app has the same **Proxy monitor** section. **Push alerts** ("Proxy tab: launches and sites opened", on by default, switchable per device) reach the owner's devices and admins with alerts on, for every user including admins, never for your own activity; reloading the same page within a minute doesn't alert twice. The Proxy tab and the privacy policy say this is recorded.
 - **Blocked by the host page:** when the website the console is injected on forbids framing (`frame-src`), the tab says so and offers **Open in a new tab**.
 - **The Scramjet frontend** and its Wisp backend live in separate repos (`viztrrx/frontend`, `viztrrx/scramjet-backend`); the frontend's reporter is in its `public/index.js`. Changing the proxy needs a redeploy of that Worker, not of this repo.
+- **Also served by this Worker at `/px/`:** the same frontend, built for the path `/px` (`BASE=/px`), so the proxy works without the separate frontend Worker (see [the proxy at /px](#proxy-px)). The tab still opens `frontend.viztrrx.workers.dev` until it is switched over.
 
 The tab shows only the launcher (Proxy, with "In this tab" and "In a new window") or, once launched, the browser, filling the page without scrolling at any panel size. Research from the selection assistant now goes to **Notes**, which reads the text, researches it and writes notes.
 
@@ -1143,6 +1144,19 @@ An optional Cloudflare Worker that does two small things the browser can't do on
 - **`/read?url=…`** — fetches a page server\-side and returns its HTML, so Notes' research can read sources the browser isn't allowed to fetch cross\-origin. HTML and plain text only, capped at 3MB.
 - **`/eagler/*`** — the Eaglercraft tab: the game's frame page and loader, your own client build (passed through from `EAGLER_CLIENT`), and a WebSocket proxy for game servers and Shared World relays. Optional; see [eaglercraft/README.md](eaglercraft/README.md) for its variables.
 
+### The proxy at /px {#proxy-px}
+
+This Worker also serves the Scramjet proxy (`viztrrx/frontend`) at `/px/`, so the console and its offline file don't depend on the separate frontend Worker. The Wisp backend on Render is still used for the traffic itself.
+
+- **Code:** `web/proxy/` holds the frontend's Worker code (its files, saved sessions, joined game files), copied from one pinned frontend commit (`web/proxy/frontend.json`). `worker.js` mounts it at `/px` (`proxyRoute`). Saved sessions use the `saints-proxy-sessions` R2 bucket (`PROXY_SESSIONS`), the same one the frontend Worker uses, and check sign-ins with this Worker's own handler.
+- **Files:** the frontend's static files (about 560 MB and 3,400 files, mostly games) are built at deploy into `proxy-dist/px/` and served as this Worker's static assets (`PROXY_ASSETS`). They are never committed; only `proxy-dist/.assetsignore` is, so the folder exists and a deploy without the build still works (then `/px/` answers 404).
+- **Building:** `npm run build:proxy` clones the pinned commit into `build/frontend-src/`, installs it with pnpm and builds it with `BASE=/px`. From a local checkout at that commit: `node scripts/proxy-frontend.mjs build --from ../frontend`.
+- **Updating the proxy:** in the frontend, merge the change; then here run `npm run sync:proxy` (copies its Worker code from `../frontend` and pins its commit) and commit `web/proxy/`. The next deploy builds that commit.
+- **Keep-alive:** the 5-minute cron also wakes the Render Wisp backend (its address comes from the proxy's `config.js`).
+- **Test:** `node tests/browser/proxy-px.mjs` (needs the proxy built, and `@mercuryworkshop/wisp-js`, from `WISP_MODULES=<folder with node_modules>` or this repo). It opens a local website through `/px/` embedded in a `file://` page, and signs in to saved sessions.
+
+**One-time setup in Cloudflare:** Workers & Pages → `donnajbe` → Settings → Build → **Build command**: `npm run build:proxy` (the deploy command stays `npx wrangler deploy`). Without it, deploys keep working and `/px/` is just empty.
+
 ### Deploying it {#deploying-it}
 
 Deploys are automatic. Cloudflare **Workers Builds** is connected to this repository: every push to `main` runs `npx wrangler deploy`, which deploys `worker.js` as the `donnajbe` Worker at `https://donnajbe.viztrrx.workers.dev`. The settings are in [`wrangler.jsonc`](wrangler.jsonc):
@@ -1201,9 +1215,12 @@ eaglercraft/       The Eaglercraft tab's game frame and loader (no game code)
 scripts/           build-eaglercraft.sh: builds the real EaglercraftX client into build/
                    (git-ignored) with the official build tool
                    build-offline.mjs: builds the offline file build/saints-service.html
+                   proxy-frontend.mjs: builds the proxy into proxy-dist/px/ (build:proxy)
+                   and pins its code in web/proxy/ (sync:proxy)
 saints.js          Backup copy of an earlier script.js
 acp.js             Proxy build of the console
 web/               Worker modules: offline.js (the offline file, also served at /),
+                   proxy/ (the Scramjet proxy at /px, copied from viztrrx/frontend),
                    music.js (My music, shared library), playlists.js,
                    mp3.js (YouTube to MP3 link checks), subscribe.js, policies.js,
                    and the /app and /console/ web apps

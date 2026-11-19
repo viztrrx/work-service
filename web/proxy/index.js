@@ -1,0 +1,153 @@
+// Copied from https://github.com/viztrrx/frontend src/index.js at f7656e2aacc7b83c3cfb26deeb6631ec8082dae5
+// by scripts/proxy-frontend.mjs sync. Don't edit here: change the frontend,
+// then sync again.
+// Static frontend Worker; assets are produced by scripts/build.mjs.
+import { handleSessions } from "./sessions.js";
+import GAME_PARTS from "./game-parts.js";
+
+// Only plausible public hostnames, and the value is only ever handed to a
+// favicon service (never fetched directly), so there is no SSRF surface.
+function validIconDomain(d) {
+  return d.length >= 4 && d.length <= 100 && /^[a-z0-9.-]+$/.test(d) &&
+    d.includes(".") && !/^[.-]|[.-]$|\.\.|--/.test(d);
+}
+
+// /icon?d=<domain> — fetch that site's own published favicon live from a
+// favicon service and return it from this origin, so a cross-origin-isolated
+// (COEP) page can show it. No logo artwork is stored here; the home page
+// falls back to a monogram when this 404s.
+async function iconResponse(url) {
+  const d = (url.searchParams.get("d") || "").toLowerCase();
+  if (!validIconDomain(d)) return new Response("bad domain", { status: 400 });
+  const sources = [
+    // Google's faviconV2 returns a clean 64px icon for most sites; the others
+    // are fallbacks if it has none.
+    "https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&size=64&url=https://" + d,
+    "https://icons.duckduckgo.com/ip3/" + d + ".ico",
+    "https://www.google.com/s2/favicons?sz=64&domain=" + d,
+  ];
+  for (const src of sources) {
+    try {
+      const r = await fetch(src, { cf: { cacheTtl: 86400, cacheEverything: true } });
+      const type = r.headers.get("content-type") || "";
+      if (r.ok && type.startsWith("image/")) {
+        const headers = new Headers();
+        headers.set("content-type", type);
+        headers.set("cross-origin-resource-policy", "same-origin");
+        headers.set("cache-control", "public, max-age=86400");
+        return new Response(r.body, { status: 200, headers });
+      }
+    } catch (e) {
+      /* try the next source */
+    }
+  }
+  return new Response("no icon", { status: 404 });
+}
+
+// ---- Keeping the Render backend awake --------------------------------------
+// Render's free plan puts the backend to sleep after 15 idle minutes, and the
+// next visitor waits up to a minute for it. A cron trigger (wrangler.jsonc,
+// every 10 minutes) calls its /health so it never gets there. The address is
+// read from config.js, the file the browser uses, so moving the backend only
+// means changing wispUrl there.
+const FALLBACK_HEALTH_URL = "https://backend-rust-qr67.onrender.com/health";
+export async function backendHealthUrl(env, { base = "" } = {}) {
+  try {
+    const r = await env.ASSETS.fetch("https://assets.local" + base + "/config.js");
+    const m = /wispUrl\s*:\s*["']([^"']+)["']/.exec(await r.text());
+    if (m) {
+      const u = new URL(m[1]);
+      if (u.protocol === "wss:" || u.protocol === "ws:") {
+        u.protocol = u.protocol === "wss:" ? "https:" : "http:";
+        return u.origin + "/health";
+      }
+    }
+  } catch {}
+  return FALLBACK_HEALTH_URL;
+}
+export async function pingBackend(env, { base = "" } = {}) {
+  const url = await backendHealthUrl(env, { base });
+  const started = Date.now();
+  try {
+    // Waking from sleep can take most of a minute.
+    const r = await fetch(url, { headers: { "user-agent": "saints-service-keepalive" }, signal: AbortSignal.timeout(90000) });
+    console.log("Backend " + url + " answered " + r.status + " in " + (Date.now() - started) + " ms");
+    return r.status;
+  } catch (cause) {
+    console.error("Backend " + url + " didn't answer:", cause && cause.message);
+    return 0;
+  }
+}
+
+// ---- Games too big for one static asset ---------------------------------------
+// Cloudflare serves static files up to 25 MiB, but two game data files are
+// bigger (Drift, Duck Life 4). They're stored as <file>.part0, .part1, … and
+// streamed back as the one file the game asks for (game-parts.json lists them).
+async function joinedGameFile(request, env, url, path = url.pathname) {
+  const entry = GAME_PARTS[path];
+  if (request.method !== "GET" && request.method !== "HEAD") return new Response("method not allowed", { status: 405 });
+  const headers = new Headers({
+    "content-type": "application/octet-stream",
+    "content-length": String(entry.size),
+    "cache-control": "public, max-age=86400",
+  });
+  if (request.method === "HEAD") return new Response(null, { status: 200, headers });
+  const { readable, writable } = new TransformStream();
+  (async () => {
+    try {
+      for (let i = 0; i < entry.parts; i++) {
+        const part = await env.ASSETS.fetch(new URL(url.pathname + ".part" + i, url));
+        if (!part.ok || !part.body) throw new Error("missing part " + i + " of " + url.pathname);
+        await part.body.pipeTo(writable, { preventClose: true });
+      }
+      await writable.close();
+    } catch (cause) {
+      await writable.abort(cause);
+    }
+  })();
+  return new Response(readable, { status: 200, headers });
+}
+
+// Files that must never be served stale after a deployment (boot scripts,
+// configuration, service workers), as paths inside the site.
+const NO_STORE = ["/config.js", "/index.js", "/sessions.js", "/blocked.js", "/sitefixes.js", "/youtube.js", "/register-sw.js", "/sw.js", "/version.json", "/spotify.js", "/s2/", "/s2/index.html", "/s2/host.js", "/s2/engine2.js", "/s2/sw.js"];
+
+// The whole site. base: where it is mounted ("" at the root, as this Worker
+// serves it; "/px" when the Saints Worker serves it, with a build made with
+// BASE=/px so the files sit under px/ in its assets). Returns null for a path
+// outside the base, so a host Worker can fall through to its own routes.
+export async function frontendFetch(request, env, { base = "" } = {}) {
+  const url = new URL(request.url);
+  if (base) {
+    if (url.pathname === base) return Response.redirect(url.origin + base + "/" + url.search, 308);
+    if (!url.pathname.startsWith(base + "/")) return null;
+  }
+  const path = url.pathname.slice(base.length);   // the path inside the site
+  if (path === "/icon") return iconResponse(url);
+  if (path === "/sessions" || path.startsWith("/sessions/")) {
+    return handleSessions(request, env, url, base);
+  }
+
+  const response = Object.hasOwn(GAME_PARTS, path)
+    ? await joinedGameFile(request, env, url, path)
+    : await env.ASSETS.fetch(request);
+  const headers = new Headers(response.headers);
+  // Match the isolation headers used by Scramjet-App's original server.
+  headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  headers.set("Cross-Origin-Embedder-Policy", "require-corp");
+  // Avoid stale configuration, boot scripts and service worker code after deployment.
+  if (NO_STORE.includes(path)) {
+    headers.set("Cache-Control", "no-store");
+  }
+  return new Response(response.body, { status: response.status, headers });
+}
+
+export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(pingBackend(env));
+  },
+
+  async fetch(request, env) {
+    return frontendFetch(request, env);
+  },
+};

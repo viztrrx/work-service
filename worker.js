@@ -1,5 +1,6 @@
 import { webApp } from './web/handler.js';
 import { consoleApp, offlineRoute } from './web/console/handler.js';
+import { frontendFetch, pingBackend } from './web/proxy/index.js';
 import { extensionRoute } from './extension/routes.js';
 import { policyPage, POLICY_PAGES } from './web/policies.js';
 import { subscribePage, subscribeReady, priceCents, displayCents, stripe, checkoutParams, contributionParams, CHECKOUT_TTL_S, contribCents, isContribution, periodEndMs, invoiceSubscription, stripeSignatureOk, SUB_NAME_RE, SESSION_RE, ATTEMPT_RE, supportEmail, SCHOOL_DOMAIN, OWNER_CONTRIB_MIN_CENTS, money } from './web/subscribe.js';
@@ -1105,6 +1106,9 @@ export default {
     // Every 5 minutes: only the "who's online" check (see checkPresence).
     // It also sends the owner's daily summary at noon their time.
     if (event.cron === PRESENCE_CRON) {
+      // Keep the proxy's Render Wisp backend awake (its free plan sleeps after
+      // 15 idle minutes); the address comes from the proxy's own config.js.
+      if (env.PROXY_ASSETS) ctx.waitUntil(pingBackend({ ...env, ASSETS: env.PROXY_ASSETS }, { base: PROXY_BASE }).catch(() => {}));
       ctx.waitUntil(checkPresence(env, env.OWNER, null, { force: true }).catch(() => {}));
       ctx.waitUntil(maybeSendDailyDigest(env).catch(() => {}));
       ctx.waitUntil(maybeSendWeeklyReport(env).catch(() => {}));
@@ -1122,7 +1126,32 @@ export default {
   }
 };
 
+// The Scramjet proxy (viztrrx/frontend, web/proxy/), served here at /px/ so
+// the console and its offline file don't depend on the separate frontend
+// Worker. Its files are this Worker's static assets (proxy-dist/px/, built by
+// npm run build:proxy); its saved sessions check sign-ins with this Worker's
+// own handler instead of a request back to its own address.
+const PROXY_BASE = '/px';
+function proxyEnv(env, ctx, origin) {
+  return {
+    ...env,
+    ASSETS: env.PROXY_ASSETS,
+    SESSIONS: env.PROXY_SESSIONS,
+    SESSIONS_LEGACY: env.donnajbe_eaglercraft_client,
+    AUTH_BASE: origin,
+    AUTH_FETCH: (url, init) => handleRequest(new Request(url, init), env, ctx),
+  };
+}
+async function proxyRoute(req, env, ctx) {
+  const url = new URL(req.url);
+  if (url.pathname !== PROXY_BASE && !url.pathname.startsWith(PROXY_BASE + '/')) return null;
+  if (!env.PROXY_ASSETS) return new Response('The proxy is not set up on this Worker.', { status: 404 });
+  return frontendFetch(req, proxyEnv(env, ctx, url.origin), { base: PROXY_BASE });
+}
+
 async function handleRequest(req, env, ctx, operationReserved = false) {
+    const proxy = await proxyRoute(req, env, ctx);
+    if (proxy) return proxy;
     const web = await webApp(req, env, ctx, handleRequest);
     if (web) return web;
     const consoleShell = await consoleApp(req, env);

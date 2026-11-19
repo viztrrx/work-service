@@ -1,0 +1,3 @@
+# Committed so proxy-dist/ always exists (scripts/proxy-frontend.mjs).
+# Files listed here are not uploaded as static assets.
+*.map

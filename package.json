@@ -43,7 +43,9 @@
     "build:eaglercraft": "bash scripts/build-eaglercraft.sh",
     "build:web": "node web/scripts/build.mjs",
     "test:runtime": "node tests/mobile-runtime.mjs",
-    "build:offline": "node scripts/build-offline.mjs"
+    "build:offline": "node scripts/build-offline.mjs",
+    "build:proxy": "node scripts/proxy-frontend.mjs build",
+    "sync:proxy": "node scripts/proxy-frontend.mjs sync --from ../frontend"
   },
   "engines": {
     "node": ">=18"
