@@ -58,15 +58,19 @@ A DevTools **Snippet** (Sources → Snippets) works too, and survives navigation
 
 ### As a file on your computer (offline file) {#offline-file}
 
-Like an offline Eaglercraft file, the whole console can be one `.html` file you open from disk, with no website underneath:
+Like an offline Eaglercraft file, the whole console can be one `.html` file you open from disk, with no website underneath.
+
+**Get it:** open the Worker's address (`https://donnajbe.viztrrx.workers.dev/`). The download of `saints-service.html` starts by itself the moment the page opens (there's a link too, in case the browser holds it back). The Worker builds the file on the spot from the current `script.js` (the same one `/console/` uses, or `CONSOLE_SCRIPT_URL`), so it's always the newest version.
+
+**Or build it yourself:**
 
 ```bash
 npm run build:offline
 ```
 
-That writes `build/saints-service.html` (about 2.6 MB, with `script.js` inside it). Double-click it or drag it into Chrome. It opens full screen and talks to the live Worker over the internet like the injected console does: sign-in, Ask AI, chat, messages, music, games and the rest all work, and so do WebSockets. Sign-ins and settings are kept in the browser's storage for local files, so you stay signed in when you reopen it.
+That writes `build/saints-service.html` (about 2.6 MB, with `script.js` inside it). Either way, double-click it or drag it into Chrome. It opens full screen and talks to the live Worker over the internet like the injected console does: sign-in, Ask AI, chat, messages, music, games and the rest all work, and so do WebSockets. Sign-ins and settings are kept in the browser's storage for local files, so you stay signed in when you reopen it.
 
-- **Updating:** the file holds the `script.js` it was built from. Rebuild it to get changes, or press the console's reload button, which loads the newest `script.js` the same way the bookmarklet does.
+- **Updating:** the file holds the `script.js` it was built from. Download it again (or rebuild it) to get changes, or press the console's reload button, which loads the newest `script.js` the same way the bookmarklet does.
 - **What a file can't do:** phone-style push alerts (they need the installed app at `/console/`), and Page Insights has no website to read (paste the text into Ask AI instead).
 - **If the AI refuses with an origin error:** a page opened from disk sends `Origin: null`. If you filled in the admin access controls' **Allowed Origins** field (it limits `/v1/*`), add `null` to the list; blank allows any.
 - For testing against a local Worker: `node scripts/build-offline.mjs --worker http://127.0.0.1:8787 --out my.html`.
@@ -1196,9 +1200,11 @@ worker.js          Cloudflare Worker: OpenAI proxy, accounts, memory, admin API,
 eaglercraft/       The Eaglercraft tab's game frame and loader (no game code)
 scripts/           build-eaglercraft.sh: builds the real EaglercraftX client into build/
                    (git-ignored) with the official build tool
+                   build-offline.mjs: builds the offline file build/saints-service.html
 saints.js          Backup copy of an earlier script.js
 acp.js             Proxy build of the console
-web/               Worker modules: music.js (My music, shared library), playlists.js,
+web/               Worker modules: offline.js (the offline file, also served at /),
+                   music.js (My music, shared library), playlists.js,
                    mp3.js (YouTube to MP3 link checks), subscribe.js, policies.js,
                    and the /app and /console/ web apps
 tests/             Worker unit tests (npm test); tests/browser/ holds the

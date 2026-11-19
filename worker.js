@@ -1,5 +1,5 @@
 import { webApp } from './web/handler.js';
-import { consoleApp } from './web/console/handler.js';
+import { consoleApp, offlineRoute } from './web/console/handler.js';
 import { extensionRoute } from './extension/routes.js';
 import { policyPage, POLICY_PAGES } from './web/policies.js';
 import { subscribePage, subscribeReady, priceCents, displayCents, stripe, checkoutParams, contributionParams, CHECKOUT_TTL_S, contribCents, isContribution, periodEndMs, invoiceSubscription, stripeSignatureOk, SUB_NAME_RE, SESSION_RE, ATTEMPT_RE, supportEmail, SCHOOL_DOMAIN, OWNER_CONTRIB_MIN_CENTS, money } from './web/subscribe.js';
@@ -1127,6 +1127,8 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     if (web) return web;
     const consoleShell = await consoleApp(req, env);
     if (consoleShell) return consoleShell;
+    const offline = await offlineRoute(req, env);
+    if (offline) return offline;
     const cors = CORS_HEADERS;
     const json = jsonResponse;
 
