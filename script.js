@@ -5099,6 +5099,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
                   <div><div class="gps-label">Connection</div><p class="gps-hint" id="gps-ai-keyhint">Keys are never shown here.</p></div>
                   <span class="gps-badge" id="gps-ai-key">Checking</span>
                 </div>
+                <div class="gps-item gps-item-row" data-k="ai owner account openai key server every device" id="gps-ai-ownerkey-row" style="display:none;">
+                  <div><div class="gps-label">Key on your account</div><p class="gps-hint" id="gps-ai-ownerkey-hint">Owner only. Saved on your worker, locked to your account, and used on every device you sign in on.</p></div>
+                  <span style="display:flex;gap:6px;flex-wrap:wrap;"><button id="gps-ai-ownerkey-save" class="gps-btn">Save key</button><button id="gps-ai-ownerkey-remove" class="gps-btn" style="display:none;">Remove</button></span>
+                </div>
                 <div class="gps-item gps-item-row" data-k="ai clear saved openai key">
                   <div><div class="gps-label">Saved OpenAI key</div><p class="gps-hint">Removes the key stored in this browser. An owner-assigned key keeps working.</p></div>
                   <button id="gpa-clear-openai-key" class="gps-btn">Clear key</button>
@@ -9495,6 +9499,38 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   function effectiveTemp() { const v = parseFloat(admGet(ADMIN_KEYS.TEMP)); return isNaN(v) ? null : Math.max(0, Math.min(2, v)); }
   function adminSysPrefix() { const p = (admGet(ADMIN_KEYS.SYSPREFIX) || '').trim(); return p ? p + '\n\n' : ''; }
 
+  // ---- Owner's own key, kept on the worker (/auth/my-key) -----------------
+  // The owner can park their OpenAI key on the worker, locked to their
+  // account, so every device they sign in on uses it without asking. Only a
+  // verified owner session can do this; the value never comes back down.
+  function ownerKeyAvailable() {
+    return !!(OPENAI_PROXY && typeof sessionRole === 'function' && sessionRole() === 'owner'
+      && typeof workerSupports === 'function' && workerSupports('owner-key'));
+  }
+  async function ownerKeyApi(body) {
+    const res = await fetch(AUTH_BASE() + '/auth/my-key', body
+      ? { method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify(body) }
+      : { headers: authHeaders(), cache: 'no-store' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+    return data;
+  }
+  // Saves the key to the owner's account; on success the copy in this
+  // browser is no longer needed, so it is removed.
+  async function saveKeyToOwnerAccount(key) {
+    const data = await ownerKeyApi({ key });
+    try { localStorage.removeItem(OPENAI_STORAGE_KEY); localStorage.removeItem(OPENAI_KEY_SKIP); } catch (e) { /* storage blocked */ }
+    if (typeof applyAssignedKeys === 'function') applyAssignedKeys({ openai: true });
+    return data;
+  }
+  function offerOwnerKeySave(key) {
+    if (!ownerKeyAvailable()) return;
+    if (!confirm('Save this key to your owner account?\n\nIt stays on your worker, locked to your account, and every device you sign in on uses it — no more pasting it on each device.')) return;
+    saveKeyToOwnerAccount(key)
+      .then((d) => showToast('Key saved to your account (…' + d.hint + '). Every device you sign in on will use it.'))
+      .catch((e) => showToast('Could not save the key to your account: ' + e.message + ' It is still saved in this browser.', { type: 'danger' }));
+  }
+
   // ---- OpenAI API helpers -------------------------------------------------
   function getOpenAiKey() {
     let key = readStoredKey(OPENAI_STORAGE_KEY);
@@ -9515,6 +9551,9 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           showToast('That doesn\'t look like an OpenAI key — they normally start with "sk-". Saving it anyway; double-check if requests fail.', { type: 'danger' });
         }
         localStorage.setItem(OPENAI_STORAGE_KEY, key);
+        // The owner can keep it on the server instead (asked after this
+        // request goes out, which uses the key just pasted).
+        if (ownerKeyAvailable()) setTimeout(() => offerOwnerKeySave(key), 0);
       } else if (OPENAI_PROXY) {
         localStorage.setItem(OPENAI_KEY_SKIP, '1');
       }
@@ -29829,7 +29868,58 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
           ? 'Requests go through your worker at ' + OPENAI_PROXY.replace(/^https?:\/\//, '') + '.'
           : 'Requests go directly to api.openai.com.');
       } catch (e) { /* admin helpers not ready yet */ }
+      refreshOwnerKey();
     }
+
+    // ---- Owner: key kept on the account (see /auth/my-key) ----
+    async function refreshOwnerKey() {
+      const row = $('#gps-ai-ownerkey-row');
+      if (!row) return;
+      if (!ownerKeyAvailable()) { row.style.display = 'none'; return; }
+      row.style.display = '';
+      const save = $('#gps-ai-ownerkey-save');
+      const remove = $('#gps-ai-ownerkey-remove');
+      try {
+        const d = await ownerKeyApi();
+        save.textContent = d.hasKey ? 'Replace' : 'Save key';
+        remove.style.display = d.hasKey ? '' : 'none';
+        setOut('gps-ai-ownerkey-hint', d.hasKey
+          ? 'Saved on your worker (…' + d.hint + '), locked to your account. Every device you sign in on uses it.'
+          : 'Owner only. Save your key on your worker, locked to your account, so you never paste it on another device.');
+      } catch (e) {
+        setOut('gps-ai-ownerkey-hint', 'Could not check the key on your account: ' + e.message);
+      }
+    }
+    $('#gps-ai-ownerkey-save').addEventListener('click', async () => {
+      const local = readStoredKey(OPENAI_STORAGE_KEY);
+      let key = '';
+      if (local && confirm('Save the OpenAI key already in this browser to your account?\n\nOK = use it. Cancel = paste a different key.')) key = local;
+      else key = sanitizeKey(prompt('Paste the OpenAI API key to keep on your account (starts with "sk-"):', '') || '');
+      if (!key) return;
+      const btn = $('#gps-ai-ownerkey-save');
+      btn.disabled = true;
+      setOut('gps-ai-ownerkey-hint', 'Checking the key with OpenAI…');
+      try {
+        const d = await saveKeyToOwnerAccount(key);
+        showToast('Key saved to your account (…' + d.hint + '). Every device you sign in on will use it.');
+      } catch (e) {
+        showToast('Could not save the key: ' + e.message, { type: 'danger' });
+      }
+      btn.disabled = false;
+      refreshAi();
+    });
+    $('#gps-ai-ownerkey-remove').addEventListener('click', async () => {
+      if (!confirm('Remove the OpenAI key saved on your account? Your devices will ask for a key again.')) return;
+      try {
+        await ownerKeyApi({ remove: true });
+        if (typeof applyAssignedKeys === 'function') applyAssignedKeys({ openai: false });
+        showToast('Key removed from your account.');
+      } catch (e) {
+        showToast('Could not remove the key: ' + e.message, { type: 'danger' });
+      }
+      refreshAi();
+    });
+    setTimeout(() => { try { onSessionChange(() => refreshOwnerKey()); } catch (e) { /* accounts not ready */ } }, 0);
 
     // ---- Overview ----
     const ICON_NAMES = { dot: 'Dot', sparkle: 'Sparkle', bolt: 'Bolt', orbit: 'Orbit', chat: 'Chat', letter: 'Letter' };

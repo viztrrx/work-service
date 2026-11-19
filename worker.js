@@ -143,7 +143,7 @@ const jsonResponse = (obj, status) => new Response(JSON.stringify(obj), {
 // handleRequest where it can reuse the existing closures.
 // ============================================================================
 const WORKER_VERSION = '2026.10.12-web-v1';   // Eaglercraft routes, binary WebSocket fix, Wrangler deploys
-const WORKER_FEATURES = ['sessions', 'memory', 'admin-v2', 'reports', 'jobs', 'eaglercraft', 'mobile-admin', 'home-screen-admin', 'one-session', 'chat-live', 'proxy-sessions'];
+const WORKER_FEATURES = ['sessions', 'memory', 'admin-v2', 'reports', 'jobs', 'eaglercraft', 'mobile-admin', 'home-screen-admin', 'one-session', 'chat-live', 'proxy-sessions', 'owner-key'];
 
 // ---- Permissions ------------------------------------------------------------
 // The single source of truth for who may do what. Roles come from a verified
@@ -1837,18 +1837,28 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     // localStorage — which meant anyone could read another user's API key by
     // calling /status?user=<name>, unauthenticated. Keys now never leave the
     // worker: /v1/* is proxied and the key is attached here, in flight.
-    const getAssignedKey = async (kv, provider, user) => {
+    // A record marked `locked` (the owner's own key, see /auth/my-key) is
+    // used only when the caller's identity was verified (a signed session,
+    // the owner token or the owner code) — never for someone who merely
+    // typed that username. It then falls back to the "everyone" key, if any.
+    const getAssignedKey = async (kv, provider, user, opts) => {
       if (!kv || !user) return '';
       const u = String(user).toLowerCase();
-      const specific = await kv.get(`key:${provider}:${u}`, 'json');
+      let specific = await kv.get(`key:${provider}:${u}`, 'json');
+      if (specific && specific.locked && !(opts && opts.verified)) specific = null;
       const rec = specific || await kv.get(`key:${provider}:*`, 'json');
       return (rec && rec.key) ? String(rec.key) : '';
     };
     // What the client is allowed to know: whether a key exists for it, never
     // the key. This is what stops the "paste your API key" prompt for users
     // the owner has already covered.
-    const assignedKeyFlags = async (kv, user) => ({
-      openai: !!(await getAssignedKey(kv, 'openai', user))
+    const assignedKeyFlags = async (kv, user, opts) => ({
+      openai: !!(await getAssignedKey(kv, 'openai', user, opts))
+    });
+    // The owner's own key is always stored locked to the owner's account.
+    const keyRecord = (user, key, by, extra) => ({
+      key, assignedAt: Date.now(), assignedBy: by, hint: key.slice(-4),
+      ...(String(user).toLowerCase() === OWNER ? { locked: true } : {}), ...(extra || {})
     });
     const sha256hex = async (str) => {
       const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
@@ -3308,6 +3318,36 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
         await signinLog({ type: 'sid', user: p.acct.user, email, detail: 'added at sign-in' });
         return json({ ok: true, email });
       }
+      // The owner's own OpenAI key, kept on the worker and locked to the
+      // owner's account so it follows them to every device they sign in on.
+      // Only a verified owner session may read its status or change it; the
+      // value never comes back (only its last 4 characters, as a hint).
+      //   GET               → { ok, hasKey, hint, assignedAt }
+      //   POST {key}        → checks the key with OpenAI, then saves it
+      //   POST {remove:true} → deletes it
+      if (url.pathname === '/auth/my-key') {
+        if (p.role !== 'owner') return json({ ok: false, error: 'Only the owner can keep a key on their account.' }, 403);
+        const rkey = 'key:openai:' + OWNER;
+        if (req.method === 'GET') {
+          const rec = await kv.get(rkey, 'json');
+          return json({ ok: true, hasKey: !!(rec && rec.key), hint: rec && rec.key ? (rec.hint || String(rec.key).slice(-4)) : '', assignedAt: (rec && rec.assignedAt) || 0 });
+        }
+        if (req.method !== 'POST') return json({ ok: false, error: 'not found' }, 404);
+        const body = await readJson();
+        if (body.remove) {
+          await kv.delete(rkey);
+          await logAudit(kv, { route: '/auth/my-key', action: 'remove', target: OWNER, admin: 'owner' });
+          return json({ ok: true, hasKey: false });
+        }
+        const key = String(body.key || '').replace(/[^\x21-\x7E]/g, '');
+        if (!/^sk-[A-Za-z0-9_\-]{16,300}$/.test(key)) return json({ ok: false, error: 'That doesn’t look like an OpenAI key (it starts with sk-).' }, 400);
+        let status = 0;
+        try { status = (await fetch('https://api.openai.com/v1/models', { headers: { Authorization: 'Bearer ' + key } })).status; } catch (e) { status = 0; }
+        if (status === 401 || status === 403) return json({ ok: false, error: 'OpenAI turned that key down (' + status + '). Check it and try again.' }, 400);
+        await kv.put(rkey, JSON.stringify(keyRecord(OWNER, key, 'owner-self', { checked: status >= 200 && status < 300 })));
+        await logAudit(kv, { route: '/auth/my-key', action: 'assign', target: OWNER, admin: 'owner' });
+        return json({ ok: true, hasKey: true, hint: key.slice(-4), checked: status >= 200 && status < 300 });
+      }
       if (url.pathname === '/auth/me' && req.method === 'GET') {
         if (appGateOn(await getConfig(kv)) && fromApp() && !appStaffRole(p.role)) return json({ ok: false, error: String(p.user).toLowerCase() === OWNER ? OWNER_SETUP_MSG : APP_STAFF_ONLY_MSG, appStaffOnly: true, ...(String(p.user).toLowerCase() === OWNER ? { ownerSetup: true } : {}) }, 403);
         // Sliding renewal: past half its life, a fresh token comes back.
@@ -3365,7 +3405,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
     // this user wins, then whatever the client sent (as on /v1/*).
     const memApiKey = async (user, body) => {
       const strip = (v) => (v ? String(v).replace(/[^\x21-\x7E]/g, '') : '');
-      const assigned = kvMain ? await getAssignedKey(kvMain, 'openai', user) : '';
+      const assigned = kvMain ? await getAssignedKey(kvMain, 'openai', user, { verified: true }) : '';
       return strip(assigned) || strip(req.headers.get('X-GPA-Key')) || strip(body && body._gpa_key);
     };
     const openai = async (apiKey, path, payload) => {
@@ -3971,7 +4011,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       // even without the separate /status poll.
       const r = await resolve(kv, user);
       const mod = await getMod(kv, user);
-      const assignedKeys = await assignedKeyFlags(kv, user);
+      const assignedKeys = await assignedKeyFlags(kv, user, { verified: !!trackId.verified });
       // The caller's own all-time rollup — never anyone else's — so the
       // Welcome pane can show "you've opened this N times" without a
       // separate admin-gated call.
@@ -4201,7 +4241,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       const r = await resolve(kv, statusUser);
       const cfg = await getConfig(kv);
       const mod = await getMod(kv, statusUser);
-      const assignedKeys = await assignedKeyFlags(kv, statusUser);
+      const assignedKeys = await assignedKeyFlags(kv, statusUser, { verified: !!statusId.verified });
       let dismissed = null;
       if (kv && statusUser) { try { dismissed = await kv.get('dismiss:' + statusUser.toLowerCase(), 'json'); } catch (e) { /* best-effort */ } }
       return json({
@@ -6890,7 +6930,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
       for (const u of keysTouched) {
         const rkey = `key:${provider}:${u}`;
         if (!key) await kv.delete(rkey);
-        else await kv.put(rkey, JSON.stringify({ key, assignedAt: Date.now(), assignedBy: (principalMemo && principalMemo.actor) || 'owner' }));
+        else await kv.put(rkey, JSON.stringify(keyRecord(u, key, (principalMemo && principalMemo.actor) || 'owner')));
       }
       await logAudit(kv, { route: '/admin/assignkey', action: key ? 'assign' : 'remove', target: all ? '*' : targets.join(','), admin: 'owner' });
       return json({ ok: true, provider, all, users: targets, assigned: !!key });
@@ -7323,7 +7363,7 @@ async function handleRequest(req, env, ctx, operationReserved = false) {
           quotaRecordKey = qKey;
         }
       }
-      try { assignedKey = await getAssignedKey(kv, 'openai', modUser); } catch (e) { /* fall back to what the client sent */ }
+      try { assignedKey = await getAssignedKey(kv, 'openai', modUser, { verified: !!identity.verified }); } catch (e) { /* fall back to what the client sent */ }
     }
 
     // The key can arrive (absent an assigned one) as Authorization, X-GPA-Key,
