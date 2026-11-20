@@ -35,9 +35,13 @@ export function textToBase64(text) {
 }
 
 // code: script.js's text (already pointed at its Worker). iconBase64: the
-// app icon PNG as base64. built: a label for when it was made.
-export function offlineHtml(code, { iconBase64 = '', built = '' } = {}) {
+// app icon PNG as base64. built: a label for when it was made. devtools:
+// Eruda's code (web/devtools.generated.js), the dev tools behind the ⋮ in the
+// console's header; it runs first, so its console sees everything the
+// console logs. Left out, the file has no dev tools (and no ⋮).
+export function offlineHtml(code, { iconBase64 = '', built = '', devtools = '' } = {}) {
   const b64 = textToBase64(code + '\n//# sourceURL=saints-service.js\n');
+  const devB64 = devtools ? textToBase64(devtools + '\n//# sourceURL=eruda.js\n') : '';
   const icon = iconBase64 ? 'data:image/png;base64,' + iconBase64 : '';
   return `<!doctype html>
 <html lang="en">
@@ -67,7 +71,7 @@ export function offlineHtml(code, { iconBase64 = '', built = '' } = {}) {
   <p id="boot-msg">Loading…</p>
 </main>
 <noscript><p class="boot">Saints Service needs JavaScript.</p></noscript>
-<script id="saints-service-code" type="application/octet-stream">${b64}</script>
+${devB64 ? `<script id="saints-devtools-code" type="application/octet-stream">${devB64}</script>\n` : ''}<script id="saints-service-code" type="application/octet-stream">${b64}</script>
 <script>
 (function () {
   'use strict';
@@ -81,12 +85,18 @@ export function offlineHtml(code, { iconBase64 = '', built = '' } = {}) {
     pre.textContent = String(e && (e.stack || e.message) || e);
     boot.appendChild(pre);
   }
-  try {
-    var b64 = document.getElementById('saints-service-code').textContent.trim();
-    var bin = atob(b64), bytes = new Uint8Array(bin.length);
+  function decode(id) {
+    var bin = atob(document.getElementById(id).textContent.trim()), bytes = new Uint8Array(bin.length);
     for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    var code = new TextDecoder('utf-8').decode(bytes);
-    (0, eval)(code);
+    return new TextDecoder('utf-8').decode(bytes);
+  }
+  // The dev tools (Eruda) first; the console sets them up behind its ⋮.
+  // They're extra: if they fail, the console still starts.
+  if (document.getElementById('saints-devtools-code')) {
+    try { (0, eval)(decode('saints-devtools-code')); } catch (e) { try { console.warn('Dev tools failed to load', e); } catch (_) {} }
+  }
+  try {
+    (0, eval)(decode('saints-service-code'));
     if (document.getElementById('gpa-root-host')) boot.remove();
     else fail('script.js ran but did not mount the console.');
   } catch (e) { fail(e); }
