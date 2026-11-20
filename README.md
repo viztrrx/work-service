@@ -68,8 +68,9 @@ Like an offline Eaglercraft file, the whole console can be one `.html` file you 
 npm run build:offline
 ```
 
-That writes `build/saints-service.html` (about 2.6 MB, with `script.js` inside it). Either way, double-click it or drag it into Chrome. It opens full screen and talks to the live Worker over the internet like the injected console does: sign-in, Ask AI, chat, messages, music, games and the rest all work, and so do WebSockets. Sign-ins and settings are kept in the browser's storage for local files, so you stay signed in when you reopen it.
+That writes `build/saints-service.html` (about 3.2 MB, with `script.js` and the dev tools inside it). Either way, double-click it or drag it into Chrome. It opens full screen and talks to the live Worker over the internet like the injected console does: sign-in, Ask AI, chat, messages, music, games and the rest all work, and so do WebSockets. Sign-ins and settings are kept in the browser's storage for local files, so you stay signed in when you reopen it.
 
+- **Dev tools (⋮):** the ⋮ at the top right of the console's header opens [Eruda](https://github.com/liriliri/eruda), browser dev tools like Chrome's: Console (logs from the start, and JavaScript you type, run with Execute), Elements, Network, Resources, Sources, Info and Snippets. Press ⋮ again to close it; it also works while the console is fullscreen. It's bundled in the file (no download from a CDN), only in the offline file. To update it, bump `eruda` in `package.json`, `npm install`, then `npm run build:devtools` (writes `web/devtools.generated.js`).
 - **Updating:** the file holds the `script.js` it was built from. Download it again (or rebuild it) to get changes, or press the console's reload button, which loads the newest `script.js` the same way the bookmarklet does.
 - **What a file can't do:** phone-style push alerts (they need the installed app at `/console/`), and Page Insights has no website to read (paste the text into Ask AI instead).
 - **If the AI refuses with an origin error:** a page opened from disk sends `Origin: null`. If you filled in the admin access controls' **Allowed Origins** field (it limits `/v1/*`), add `null` to the list; blank allows any.
@@ -1217,6 +1218,8 @@ eaglercraft/       The Eaglercraft tab's game frame and loader (no game code)
 scripts/           build-eaglercraft.sh: builds the real EaglercraftX client into build/
                    (git-ignored) with the official build tool
                    build-offline.mjs: builds the offline file build/saints-service.html
+                   build-devtools.mjs: bundles Eruda (the offline file's ⋮ dev tools)
+                   into web/devtools.generated.js (build:devtools)
                    proxy-frontend.mjs: builds the proxy into proxy-dist/px/ (build:proxy)
                    and pins its code in web/proxy/ (sync:proxy)
 saints.js          Backup copy of an earlier script.js

@@ -6,6 +6,7 @@
 // a copy for offline launches.
 import assets from './assets.generated.js';
 import { offlineHtml, pointAtWorker, downloadPage, OFFLINE_PATH, OFFLINE_FILENAME } from '../offline.js';
+import devtools from '../devtools.generated.js';
 
 export const CONSOLE_SCRIPT_SRC = 'https://raw.githubusercontent.com/viztrrx/work-service/main/script.js';
 const MAX_SCRIPT_BYTES = 8 * 1024 * 1024;
@@ -53,7 +54,7 @@ export async function offlineRoute(req, env) {
   let code;
   try { code = pointAtWorker(got.code, url.origin); } catch (e) { return plain('The console script looks wrong.', 502); }
   const icon = assets['/console/icon-192.png'];
-  const html = offlineHtml(code, { iconBase64: icon && icon.base64 ? icon.body : '', built: new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC' });
+  const html = offlineHtml(code, { iconBase64: icon && icon.base64 ? icon.body : '', built: new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC', devtools });
   return new Response(req.method === 'HEAD' ? null : html, { headers: {
     ...baseHeaders, 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache',
     'Content-Disposition': 'attachment; filename="' + OFFLINE_FILENAME + '"'

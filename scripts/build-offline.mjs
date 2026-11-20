@@ -9,6 +9,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { offlineHtml, pointAtWorker, OFFLINE_FILENAME } from '../web/offline.js';
+import devtools from '../web/devtools.generated.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (name) => { const i = process.argv.indexOf('--' + name); return i > 0 ? process.argv[i + 1] : undefined; };
@@ -18,7 +19,7 @@ const worker = arg('worker');
 const code = pointAtWorker(await readFile(path.join(ROOT, 'script.js'), 'utf8'), worker);
 const iconBase64 = (await readFile(path.join(ROOT, 'web/console/public/icon-192.png'))).toString('base64');
 const built = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
-const html = offlineHtml(code, { iconBase64, built });
+const html = offlineHtml(code, { iconBase64, built, devtools });
 
 await mkdir(path.dirname(out), { recursive: true });
 await writeFile(out, html);

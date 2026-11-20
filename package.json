@@ -44,6 +44,7 @@
     "build:web": "node web/scripts/build.mjs",
     "test:runtime": "node tests/mobile-runtime.mjs",
     "build:offline": "node scripts/build-offline.mjs",
+    "build:devtools": "node scripts/build-devtools.mjs",
     "build:proxy": "node scripts/proxy-frontend.mjs build",
     "sync:proxy": "node scripts/proxy-frontend.mjs sync --from ../frontend"
   },
@@ -52,6 +53,7 @@
   },
   "devDependencies": {
     "@ffmpeg/core": "0.12.10",
+    "eruda": "3.4.3",
     "wrangler": "4.149.0"
   }
 }

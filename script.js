@@ -189,6 +189,10 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   // staff-only sign-in rules. It talks to the live Worker like a website does.
   const FILE_MODE = window.__agentConsoleFile === true;
   const SHELL_MODE = APP_MODE || FILE_MODE;
+  // The offline file loads Eruda (web/devtools.generated.js) before this
+  // script: browser dev tools (console, elements, network…) for anyone, behind
+  // the ⋮ in the header. Only there: the injected console and the app have none.
+  const DEVTOOLS = FILE_MODE && !!window.eruda && typeof window.eruda.init === 'function' ? window.eruda : null;
   // What sign-in reports as "where": a file has no host name.
   const consoleSite = () => location.host || (FILE_MODE ? 'local-file' : '');
   // The Saints Service planet (sign-in card): tapping it creates an account,
@@ -972,6 +976,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   let onThemeApplied = null; // set by the settings module once it exists
   const gpsSvg = (body, extra) => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"${extra || ''}>${body}</svg>`;
   const GPS_ICONS = {
+    dotsV: gpsSvg('<circle cx="12" cy="5.5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="18.5" r="1.6"/>', ' fill="currentColor" stroke="none"'),
     search: gpsSvg('<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>'),
     overview: gpsSvg('<rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.8"/>'),
     theme: gpsSvg('<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17M12 3.5a8.5 8.5 0 0 1 0 17" fill="currentColor" stroke="none"/>'),
@@ -2376,8 +2381,8 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         gap: 6px; padding: 9px 12px;
         background: linear-gradient(180deg, color-mix(in srgb, var(--gpa-text) 3%, var(--gpa-panel-t)), var(--gpa-panel-t));
       }
-      #gpa-sidebar-toggle, #gpa-min, #gpa-reload, #gpa-console-fullscreen, #gpa-close { width: 32px; height: 32px; }
-      #gpa-sidebar-toggle svg, #gpa-min svg, #gpa-reload svg, #gpa-console-fullscreen svg, #gpa-close svg { width: 17px; height: 17px; }
+      #gpa-sidebar-toggle, #gpa-min, #gpa-reload, #gpa-console-fullscreen, #gpa-devtools, #gpa-close { width: 32px; height: 32px; }
+      #gpa-sidebar-toggle svg, #gpa-min svg, #gpa-reload svg, #gpa-console-fullscreen svg, #gpa-devtools svg, #gpa-close svg { width: 17px; height: 17px; }
       #gpa-sidebar-toggle.active { background: color-mix(in srgb, var(--gpa-accent) 16%, transparent); color: var(--gpa-text); }
       /* One line always: on a narrow panel (Compact) the name ends in "…"
          instead of wrapping onto a second line. Block, not flex, because an
@@ -2388,7 +2393,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       }
       .gpa-panel.gpa-tiny .gpa-header { gap: 2px; padding-left: 8px; padding-right: 8px; }
       .gpa-panel.gpa-tiny #gpa-sidebar-toggle, .gpa-panel.gpa-tiny #gpa-min, .gpa-panel.gpa-tiny #gpa-reload,
-      .gpa-panel.gpa-tiny #gpa-console-fullscreen, .gpa-panel.gpa-tiny #gpa-close { width: 28px; height: 28px; }
+      .gpa-panel.gpa-tiny #gpa-console-fullscreen, .gpa-panel.gpa-tiny #gpa-devtools, .gpa-panel.gpa-tiny #gpa-close { width: 28px; height: 28px; }
       .gpa-panel.gpa-tiny .gpa-title::before { margin-right: 7px; }
       .gpa-title::before {
         content: ''; display: inline-block; vertical-align: -4px; margin-right: 9px;
@@ -2898,7 +2903,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
 
       /* ---- Touch screens: every tap target at least 44×44 ---- */
       @media (pointer: coarse) {
-        #gpa-sidebar-toggle, #gpa-min, #gpa-reload, #gpa-console-fullscreen, #gpa-close { width: 44px; height: 44px; }
+        #gpa-sidebar-toggle, #gpa-min, #gpa-reload, #gpa-console-fullscreen, #gpa-devtools, #gpa-close { width: 44px; height: 44px; }
         .gpa-header { gap: 2px; padding: 4px 8px; }
         .gpa-dropdown-item { min-height: 44px; }
         .gpa-broadcast-x { width: 44px; height: 44px; }
@@ -3712,6 +3717,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       <span class="gpa-dot"></span>
       <button id="gpa-reload" title="Reload the console — fetches the latest script and restarts it" aria-label="Reload the console">${GPS_ICONS.refresh}</button>
       <button id="gpa-console-fullscreen" title="Fullscreen the whole console" aria-label="Fullscreen the whole console">${GPS_ICONS.maximize}</button>
+      ${DEVTOOLS ? `<button id="gpa-devtools" title="Developer tools (console, elements, network)" aria-label="Developer tools" aria-pressed="false">${GPS_ICONS.dotsV}</button>` : ''}
       <button id="gpa-close" title="Close" aria-label="Close Saints Service">${GPS_ICONS.x}</button>
     </div>
     <div class="gpa-usage" id="gpa-usage" hidden>
@@ -5969,7 +5975,7 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
       }
       .gpa-panel.gpa-fullpage .gpa-header { cursor: default; }
       .gpa-header:active { cursor: grabbing; }
-      #gpa-sidebar-toggle, #gpa-min, #gpa-reload, #gpa-console-fullscreen, #gpa-close {
+      #gpa-sidebar-toggle, #gpa-min, #gpa-reload, #gpa-console-fullscreen, #gpa-devtools, #gpa-close {
         width: 26px; height: 26px; border-radius: calc(8px * var(--gpa-rs));
         border: 1px solid transparent;
         background: transparent;
@@ -5979,9 +5985,11 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
         flex-shrink: 0;
         transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
       }
-      #gpa-sidebar-toggle:hover, #gpa-min:hover, #gpa-reload:hover, #gpa-console-fullscreen:hover { background: var(--gpa-field); color: var(--gpa-text); }
+      #gpa-sidebar-toggle:hover, #gpa-min:hover, #gpa-reload:hover, #gpa-console-fullscreen:hover, #gpa-devtools:hover { background: var(--gpa-field); color: var(--gpa-text); }
+      #gpa-devtools[aria-pressed="true"] { background: var(--gpa-field); color: var(--gpa-text); }
+      .gpa-devtools-host { position: fixed; top: 0; left: 0; width: 0; height: 0; overflow: visible; z-index: 2147483647; }
       #gpa-sidebar-toggle.active { background: var(--gpa-accent); color: var(--gpa-accent-fg); }
-      #gpa-min:active, #gpa-reload:active, #gpa-console-fullscreen:active, #gpa-close:active { transform: scale(0.92); }
+      #gpa-min:active, #gpa-reload:active, #gpa-console-fullscreen:active, #gpa-devtools:active, #gpa-close:active { transform: scale(0.92); }
       #gpa-reload:disabled { opacity: 0.5; cursor: default; }
       #gpa-reload.spinning { animation: gpa-spin 0.8s linear infinite; }
       @keyframes gpa-spin { to { transform: rotate(360deg); } }
@@ -7717,6 +7725,46 @@ function modelSupportsReasoning(id) { return REASONING_MODELS.has((id || '').tri
   }
   onDoc('fullscreenchange', syncConsoleFullscreenLabel);
   onDoc('webkitfullscreenchange', syncConsoleFullscreenLabel);
+
+  // ---- Dev tools (offline file only): Eruda behind the ⋮ ----
+  // Set up now, hidden, so its console has everything logged from here on.
+  // It lives inside the panel: fullscreen shows only the panel, and the dev
+  // tools have to stay usable there. Eruda keeps its own shadow root, so the
+  // console's styles and its don't mix. Its floating gear is hidden: the ⋮
+  // opens and closes it.
+  if (DEVTOOLS) {
+    const devBtn = panel.querySelector('#gpa-devtools');
+    let devOn = false;
+    try {
+      // A reload of the console runs this again: start from a clean Eruda.
+      try { if (DEVTOOLS._isInit) DEVTOOLS.destroy(); } catch (e) { /* not set up */ }
+      const devHost = document.createElement('div');
+      devHost.className = 'gpa-devtools-host';
+      panel.appendChild(devHost);
+      DEVTOOLS.init({
+        container: devHost,
+        tool: ['console', 'elements', 'network', 'resources', 'sources', 'info', 'snippets'],
+        useShadowDom: true,
+        autoScale: true,
+        defaults: { theme: 'Dark', displaySize: 50, transparency: 1 }
+      });
+      try { DEVTOOLS.get('entryBtn').hide(); } catch (e) { /* older Eruda */ }
+      const devTools = DEVTOOLS.get();
+      const syncDev = (on) => {
+        devOn = on;
+        devBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        devBtn.title = on ? 'Close developer tools' : 'Developer tools (console, elements, network)';
+      };
+      // Eruda's own ways of closing (its backdrop) keep the button in step.
+      devTools.on('show', () => syncDev(true));
+      devTools.on('hide', () => syncDev(false));
+      devBtn.addEventListener('click', () => { if (devOn) DEVTOOLS.hide(); else DEVTOOLS.show(); });
+      gpaCleanups.push(() => { try { DEVTOOLS.destroy(); } catch (e) { /* already gone */ } devHost.remove(); });
+    } catch (e) {
+      devBtn.remove();
+      try { console.warn('Dev tools could not start', e); } catch (_) { /* no console */ }
+    }
+  }
 
   let isMin = false;
   function setMinimized(v) {
